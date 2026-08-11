@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AdminLink } from "../components/admin-link";
 import { DataSourceBanner } from "../components/data-source-banner";
 import {
   ADMIN_MODULES,
@@ -66,7 +66,7 @@ export function AdminShell({
               <ul>
                 {ADMIN_MODULES.filter((module) => module.group === group).map((module) => (
                   <li key={module.id}>
-                    <Link
+                    <AdminLink
                       href={getModuleHref(module.id)}
                       aria-current={activeModule === module.id ? "page" : undefined}
                       onClick={() => setNavigationOpen(false)}
@@ -74,7 +74,7 @@ export function AdminShell({
                       <span className="admin-navigation__icon" aria-hidden="true">{module.shortLabel}</span>
                       <span>{module.label}</span>
                       {module.dataState === "pending" ? <span className="admin-navigation__pending" aria-label="Integration pending" /> : null}
-                    </Link>
+                    </AdminLink>
                   </li>
                 ))}
               </ul>
@@ -119,10 +119,10 @@ export function AdminShell({
               <ul className="admin-search__results" aria-label="Search results">
                 {searchResults.map((module) => (
                   <li key={module.id}>
-                    <Link href={getModuleHref(module.id)} onClick={() => setSearch("")}>
+                    <AdminLink href={getModuleHref(module.id)} onClick={() => setSearch("")}>
                       <strong>{module.label}</strong>
                       <span>{module.description}</span>
-                    </Link>
+                    </AdminLink>
                   </li>
                 ))}
               </ul>

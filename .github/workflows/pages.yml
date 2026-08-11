@@ -1,0 +1,68 @@
+name: Deploy dashboard to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out administration portal
+        uses: actions/checkout@v7
+        with:
+          path: learning-platform-admin
+
+      - name: Check out shared platform core
+        uses: actions/checkout@v7
+        with:
+          repository: Acerosa/learning-platform-core
+          path: learning-platform-core
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: learning-platform-admin/package-lock.json
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Install dependencies
+        working-directory: learning-platform-admin
+        run: npm ci
+
+      - name: Build static dashboard
+        working-directory: learning-platform-admin
+        run: npm run build:pages
+
+      - name: Disable Jekyll processing
+        run: touch learning-platform-admin/dist/pages/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: learning-platform-admin/dist/pages
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

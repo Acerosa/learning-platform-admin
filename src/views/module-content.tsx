@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import type { HubRecord } from "../api/admin-api";
+import { AdminLink } from "../components/admin-link";
 import { HubDetailDialog } from "../components/hub-detail-dialog";
 import {
   PendingActionDialog,
@@ -159,7 +159,7 @@ function DashboardPage() {
         <section className="panel panel--span-2" aria-labelledby="hub-readiness-title">
           <div className="panel__header">
             <div><p className="eyebrow">Registry</p><h2 id="hub-readiness-title">Hub readiness</h2></div>
-            <Link className="text-link" href="/hubs">Open registry <span aria-hidden="true">→</span></Link>
+            <AdminLink className="text-link" href="/hubs">Open registry <span aria-hidden="true">→</span></AdminLink>
           </div>
           <div className="table-wrap">
             <table>

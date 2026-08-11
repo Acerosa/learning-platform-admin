@@ -2,16 +2,19 @@
 
 ## Current status
 
-Version 0.1.0 is a local foundation. It has not been committed, pushed, deployed or published.
+Version 0.1.0 is published to GitHub Pages from the `main` branch:
+
+<https://acerosa.github.io/learning-platform-admin/>
 
 ## Build
 
 ```bash
 npm install
 npm run build
+npm run build:pages
 ```
 
-The generated application is Cloudflare Worker-compatible through the retained Sites/vinext build configuration. Hosting is intentionally not configured in this version.
+The normal build retains the vinext application output for local and compatible worker environments. The Pages build performs a full static export under the repository base path. GitHub Actions publishes that static output; GitHub Pages never serves the repository README as the application.
 
 ## Future environments
 

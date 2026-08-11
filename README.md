@@ -2,6 +2,8 @@
 
 Version **0.1.0** — modular foundation for the Learning Platform Central Administration Portal.
 
+[Open the administration dashboard](https://acerosa.github.io/learning-platform-admin/)
+
 This repository is the administration interface for the entire Learning Platform. It is not a learner hub and does not render curriculum activities. It prepares staff workflows for hubs, curriculum, people, delivery, analytics, operations, certification and audit.
 
 ## Current state
@@ -31,6 +33,8 @@ npm test
 ```
 
 `npm test` builds the portal and runs route, architecture, accessibility and responsive-contract tests.
+
+`npm run build:pages` creates the static GitHub Pages build used by the deployment workflow.
 
 ## Repository structure
 
