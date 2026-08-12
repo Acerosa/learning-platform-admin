@@ -13,6 +13,7 @@ const routes = [
   ["/groups", "Groups"],
   ["/enrolments", "Enrolments"],
   ["/assignments", "Assignments"],
+  ["/attempts", "Attempts"],
   ["/analytics", "Analytics"],
   ["/monitoring", "Monitoring"],
   ["/certification", "Certification"],
@@ -27,7 +28,7 @@ for (const [route, heading] of routes) {
     assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
     assert.match(html, new RegExp(`<h1>${heading}<\\/h1>`));
     assert.match(html, /Learning Platform Administration/);
-    assert.match(html, /admin_api 0\.1\.0 · draft/);
+    assert.match(html, /admin_api 0\.2\.0 · draft/);
     assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
   });
 }
@@ -37,11 +38,12 @@ test("unknown module routes return not found", async () => {
   assert.equal(response.status, 404);
 });
 
-test("dashboard reports real foundation boundaries", async () => {
+test("dashboard reports the Phase 2 data snapshot", async () => {
   const { html } = await renderText("/");
-  assert.match(html, /2 active · 1 draft/);
-  assert.match(html, /Administrative writes/);
-  assert.match(html, /No live audit source/);
+  assert.match(html, /Active learners/);
+  assert.match(html, /Recent attempts/);
+  assert.match(html, /Platform health/);
+  assert.match(html, /4(?:<!-- -->)? active/);
 });
 
 test("hub registry exposes safe view and prepared actions", async () => {
@@ -49,5 +51,15 @@ test("hub registry exposes safe view and prepared actions", async () => {
   assert.match(html, /Unit 3 Cyber Security Hub/);
   assert.match(html, /T Level Digital Software Development Hub/);
   assert.match(html, /Register hub/);
-  assert.match(html, /Not certified/);
+  assert.match(html, /not recorded/i);
+});
+
+test("attempt and analytics routes expose summary data without responses", async () => {
+  const attempts = await renderText("/attempts");
+  const analytics = await renderText("/analytics");
+  assert.match(attempts.html, /Summary evidence only/);
+  assert.match(attempts.html, /SYNTH-0001/);
+  assert.doesNotMatch(attempts.html, /response_payload/i);
+  assert.match(analytics.html, /Backend-derived aggregates/);
+  assert.match(analytics.html, /80\.0%/);
 });

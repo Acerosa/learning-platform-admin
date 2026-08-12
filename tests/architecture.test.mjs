@@ -14,32 +14,47 @@ async function sourceFiles(directory) {
   return nested.flat();
 }
 
-test("package is the 0.1.0 administration repository and consumes platform core", async () => {
+test("package is the 0.2.0 administration repository and consumes platform core", async () => {
   const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
   assert.equal(pkg.name, "learning-platform-admin");
-  assert.equal(pkg.version, "0.1.0");
+  assert.equal(pkg.version, "0.2.0");
   assert.equal(pkg.dependencies["@learning-platform/core"], "file:../learning-platform-core");
   assert.equal(pkg.dependencies["react-loading-skeleton"], undefined);
   assert.equal(pkg.dependencies["drizzle-orm"], undefined);
 });
 
-test("module registry has 15 unique hub-agnostic modules", async () => {
+test("module registry has 16 unique hub-agnostic modules", async () => {
   const source = await readFile(new URL("src/router/modules.ts", root), "utf8");
   const ids = [...source.matchAll(/^\s+"([a-z-]+)",$/gm)].map((match) => match[1]);
-  assert.equal(ids.length, 15);
-  assert.equal(new Set(ids).size, 15);
-  assert.deepEqual(ids, ["dashboard", "hubs", "courses", "curriculum", "activities", "learners", "teachers", "groups", "enrolments", "assignments", "analytics", "monitoring", "certification", "configuration", "audit"]);
+  assert.equal(ids.length, 16);
+  assert.equal(new Set(ids).size, 16);
+  assert.deepEqual(ids, ["dashboard", "hubs", "courses", "curriculum", "activities", "learners", "teachers", "groups", "enrolments", "assignments", "attempts", "analytics", "monitoring", "certification", "configuration", "audit"]);
 });
 
 test("admin API names match the documented read-only backend surface", async () => {
   const source = await readFile(new URL("src/api/admin-api.ts", root), "utf8");
-  for (const view of ["hubs", "hub_course_links", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts"]) {
+  for (const view of ["current_staff_context", "hubs", "hub_course_links", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "dashboard_summary", "activity_performance"]) {
     assert.match(source, new RegExp(`admin_api\\.${view}`));
   }
   assert.match(source, /status: "draft"/);
   assert.match(source, /mode: "read-only"/);
   assert.match(source, /pending-backend-contract/);
   assert.doesNotMatch(source, /\/rest\/v1|supabase\.co|service_role/i);
+});
+
+test("live integration uses Supabase Auth and the admin_api schema only", async () => {
+  const [service, portal] = await Promise.all([
+    readFile(new URL("src/services/supabase-admin-service.ts", root), "utf8"),
+    readFile(new URL("src/stores/admin-portal.tsx", root), "utf8"),
+  ]);
+  assert.match(service, /schema\("admin_api"\)/);
+  assert.match(service, /current_staff_context/);
+  assert.doesNotMatch(service, /schema\("(?:learning|platform)"\)/);
+  assert.doesNotMatch(service, /response_payload|diagnostics/);
+  assert.match(portal, /signInWithPassword/);
+  assert.match(portal, /signInWithOtp/);
+  assert.match(portal, /onAuthStateChange/);
+  assert.match(portal, /No demo data has been substituted/);
 });
 
 test("source contains no email-based role or permission checks", async () => {

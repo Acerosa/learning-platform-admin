@@ -1,0 +1,303 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import type { AdminDataSnapshot } from "../api/admin-api";
+import {
+  DEMO_ADMIN_DATA,
+  DEMO_DATA_NOTICE,
+} from "../services/demo-admin-service";
+import {
+  getAdminRuntimeConfig,
+  type AdminRuntimeConfig,
+} from "../services/admin-runtime-config";
+import {
+  AdminReadError,
+  createSupabaseAdminClient,
+  createSupabaseAdminReadService,
+  loadAdminData,
+  type AdminSupabaseClient,
+} from "../services/supabase-admin-service";
+import {
+  DEMO_ADMIN_SESSION,
+  SIGNED_OUT_ADMIN_SESSION,
+  sessionFromStaffContext,
+  type AdminSessionSnapshot,
+} from "./admin-session";
+
+export type AdminPortalStatus =
+  | "loading"
+  | "ready"
+  | "signed-out"
+  | "access-denied"
+  | "error";
+
+export interface AdminDataSourceStatus {
+  mode: "demo" | "live";
+  state: "ready" | "loading" | "unavailable";
+  title: string;
+  message: string;
+}
+
+interface AdminPortalContextValue {
+  config: AdminRuntimeConfig;
+  status: AdminPortalStatus;
+  session: AdminSessionSnapshot;
+  data: AdminDataSnapshot | null;
+  dataSource: AdminDataSourceStatus;
+  authMessage: string | null;
+  signIn(email: string, password: string): Promise<void>;
+  requestMagicLink(email: string): Promise<void>;
+  signOut(): Promise<void>;
+  retry(): Promise<void>;
+}
+
+interface PortalState {
+  status: AdminPortalStatus;
+  session: AdminSessionSnapshot;
+  data: AdminDataSnapshot | null;
+  message: string | null;
+}
+
+const AdminPortalContext = createContext<AdminPortalContextValue | null>(null);
+
+function unavailableSession(): AdminSessionSnapshot {
+  return {
+    state: "error",
+    displayName: "Administration unavailable",
+    staffReference: null,
+    roleLabels: [],
+    grantedActions: [],
+    source: "unavailable",
+  };
+}
+
+function redirectUrl() {
+  if (typeof window === "undefined") return undefined;
+  const usesHashRouting = document.querySelector(
+    'meta[name="learning-platform-admin-router"][content="hash"]',
+  );
+  const path = usesHashRouting ? window.location.pathname : "/";
+  return new URL(path, window.location.origin).toString();
+}
+
+export function AdminPortalProvider({ children }: { children: React.ReactNode }) {
+  const config = useMemo(() => getAdminRuntimeConfig(), []);
+  const [client] = useState<AdminSupabaseClient | null>(() =>
+    config.mode === "live" && config.valid
+      ? createSupabaseAdminClient(config)
+      : null,
+  );
+  const [state, setState] = useState<PortalState>(() => {
+    if (config.mode === "demo" && config.valid) {
+      return {
+        status: "ready",
+        session: DEMO_ADMIN_SESSION,
+        data: DEMO_ADMIN_DATA,
+        message: null,
+      };
+    }
+    if (!config.valid) {
+      return {
+        status: "error",
+        session: unavailableSession(),
+        data: null,
+        message: config.message,
+      };
+    }
+    return {
+      status: "loading",
+      session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
+      data: null,
+      message: null,
+    };
+  });
+
+  const refresh = useCallback(async () => {
+    if (!client) return;
+    setState((current) => ({
+      ...current,
+      status: "loading",
+      data: null,
+      message: null,
+    }));
+
+    const { data: authData, error: authError } = await client.auth.getSession();
+    if (authError) {
+      setState({
+        status: "error",
+        session: unavailableSession(),
+        data: null,
+        message: "The authentication service is currently unavailable.",
+      });
+      return;
+    }
+
+    if (!authData.session) {
+      setState({
+        status: "signed-out",
+        session: SIGNED_OUT_ADMIN_SESSION,
+        data: null,
+        message: null,
+      });
+      return;
+    }
+
+    const service = createSupabaseAdminReadService(client);
+    try {
+      const staffContext = await service.getCurrentStaffContext();
+      const session = sessionFromStaffContext(staffContext);
+      if (session.state !== "authenticated") {
+        setState({
+          status: "access-denied",
+          session,
+          data: null,
+          message:
+            "This authenticated account does not have an active platform administrator role.",
+        });
+        return;
+      }
+
+      const data = await loadAdminData(service);
+      setState({ status: "ready", session, data, message: null });
+    } catch (error) {
+      const denied = error instanceof AdminReadError && error.code === "access-denied";
+      setState({
+        status: denied ? "access-denied" : "error",
+        session: denied
+          ? { ...SIGNED_OUT_ADMIN_SESSION, state: "access-denied" }
+          : unavailableSession(),
+        data: null,
+        message: denied
+          ? "The backend denied access to administrative data."
+          : "Live administrative data is currently unavailable. No demo data has been substituted.",
+      });
+    }
+  }, [client]);
+
+  useEffect(() => {
+    if (!client) return;
+    const initialRefresh = window.setTimeout(() => void refresh(), 0);
+    const { data } = client.auth.onAuthStateChange(() => {
+      window.setTimeout(() => void refresh(), 0);
+    });
+    return () => {
+      window.clearTimeout(initialRefresh);
+      data.subscription.unsubscribe();
+    };
+  }, [client, refresh]);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    if (!client) return;
+    setState((current) => ({ ...current, status: "loading", message: null }));
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    if (error) {
+      setState({
+        status: "signed-out",
+        session: SIGNED_OUT_ADMIN_SESSION,
+        data: null,
+        message: "Sign-in failed. Check the account details and try again.",
+      });
+      return;
+    }
+    await refresh();
+  }, [client, refresh]);
+
+  const requestMagicLink = useCallback(async (email: string) => {
+    if (!client) return;
+    setState((current) => ({ ...current, status: "loading", message: null }));
+    const { error } = await client.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: redirectUrl(),
+      },
+    });
+    setState({
+      status: "signed-out",
+      session: SIGNED_OUT_ADMIN_SESSION,
+      data: null,
+      message: error
+        ? "A sign-in link could not be sent. Check the staff email and try again."
+        : "Check the staff inbox for a time-limited sign-in link.",
+    });
+  }, [client]);
+
+  const signOut = useCallback(async () => {
+    if (!client) return;
+    await client.auth.signOut();
+    setState({
+      status: "signed-out",
+      session: SIGNED_OUT_ADMIN_SESSION,
+      data: null,
+      message: null,
+    });
+  }, [client]);
+
+  const dataSource = useMemo<AdminDataSourceStatus>(() => {
+    if (config.mode === "demo") {
+      return {
+        mode: "demo",
+        state: "ready",
+        title: DEMO_DATA_NOTICE.title,
+        message: DEMO_DATA_NOTICE.message,
+      };
+    }
+    if (state.status === "ready") {
+      return {
+        mode: "live",
+        state: "ready",
+        title: "Live backend",
+        message: "Authenticated, RLS-protected reads from the admin_api schema.",
+      };
+    }
+    if (state.status === "loading") {
+      return {
+        mode: "live",
+        state: "loading",
+        title: "Connecting to live backend",
+        message: "Restoring the staff session and loading authorised admin_api data.",
+      };
+    }
+    return {
+      mode: "live",
+      state: "unavailable",
+      title: "Live backend unavailable",
+      message:
+        state.message ?? "Administrative data could not be loaded safely.",
+    };
+  }, [config.mode, state.message, state.status]);
+
+  const value = useMemo<AdminPortalContextValue>(() => ({
+    config,
+    status: state.status,
+    session: state.session,
+    data: state.data,
+    dataSource,
+    authMessage: state.message,
+    signIn,
+    requestMagicLink,
+    signOut,
+    retry: refresh,
+  }), [config, dataSource, refresh, requestMagicLink, signIn, signOut, state]);
+
+  return (
+    <AdminPortalContext.Provider value={value}>
+      {children}
+    </AdminPortalContext.Provider>
+  );
+}
+
+export function useAdminPortal() {
+  const context = useContext(AdminPortalContext);
+  if (!context) {
+    throw new Error("useAdminPortal must be used inside AdminPortalProvider.");
+  }
+  return context;
+}

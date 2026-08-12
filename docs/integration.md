@@ -15,10 +15,11 @@ It deliberately does not reuse learner header, learner account, learner onboardi
 
 ## learning-platform-backend
 
-The documented administrative boundary is `admin_api` version 0.1.0.
+The documented administrative boundary is `admin_api` version 0.2.0.
 
 | Portal service | Backend view |
 | --- | --- |
+| Current staff authority | `admin_api.current_staff_context` |
 | Hubs | `admin_api.hubs` |
 | Hub/course associations | `admin_api.hub_course_links` |
 | Contracts | `admin_api.platform_contracts` |
@@ -30,24 +31,36 @@ The documented administrative boundary is `admin_api` version 0.1.0.
 | Enrolments | `admin_api.enrolments` |
 | Assignments | `admin_api.assignments` |
 | Attempts | `admin_api.attempts` |
+| Dashboard counts | `admin_api.dashboard_summary` |
+| Activity analytics | `admin_api.activity_performance` |
 
 All views rely on backend RLS. The portal must use an authenticated staff session and the public browser credential only. A service-role key must never be placed in this application.
 
-## Live client integration sequence
+## Live client integration
 
-1. Add an environment-driven Supabase URL and public browser credential.
-2. Reuse the platform authentication/session component when a staff-ready contract exists.
-3. Create an `AdminReadService` adapter that selects only from documented `admin_api` views.
-4. Map backend errors to stable administrative error categories.
-5. Retain the explicit demo/live data-source state.
-6. Add hosted API and RLS integration tests before enabling a live mode.
+The environment contract is:
+
+```text
+NEXT_PUBLIC_ADMIN_DATA_MODE=demo|live
+NEXT_PUBLIC_SUPABASE_URL=https://...
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
+The local legacy anon key is also browser-safe. Live mode rejects missing or
+non-public keys. It restores the Auth session, reads current staff context,
+checks the active backend role, and loads all MVP views through the extended
+`AdminReadService`. Errors become safe access-denied or unavailable states;
+raw backend errors are not rendered.
+
+For local demonstration, reset/start the sibling backend, use its reported URL
+and publishable key, then request an email sign-in link for
+`platform.admin@local.invalid` and open it in local Mailpit. Hosted Auth must
+separately allow the deployed portal callback URL before live deployment.
 
 ## Pending backend dependencies
 
-- Staff authentication/account surface suitable for the admin portal.
 - Narrow mutation RPCs for hubs, groups, enrolments, assignments, curriculum lifecycle and staff roles.
 - Course and curriculum administration read models.
 - Teacher administration read model.
-- Aggregated administrative analytics views.
 - Certification and review-history model.
 - External monitoring/event ingestion and deployment-status contracts.

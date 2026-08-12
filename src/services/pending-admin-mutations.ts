@@ -2,7 +2,7 @@ import type { AdminMutationService } from "../api/admin-api";
 
 function pending(): Promise<never> {
   return Promise.reject(
-    new Error("Administrative mutation contract is pending in backend 0.1.0."),
+    new Error("Administrative mutation contract is pending in backend 0.2.0."),
   );
 }
 

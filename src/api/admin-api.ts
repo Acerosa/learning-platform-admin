@@ -1,11 +1,12 @@
 export const ADMIN_API_CONTRACT = Object.freeze({
   schema: "admin_api",
-  version: "0.1.0",
+  version: "0.2.0",
   status: "draft",
   mode: "read-only",
 });
 
 export const ADMIN_API_VIEWS = Object.freeze({
+  currentStaffContext: "admin_api.current_staff_context",
   hubs: "admin_api.hubs",
   hubCourseLinks: "admin_api.hub_course_links",
   platformContracts: "admin_api.platform_contracts",
@@ -17,22 +18,56 @@ export const ADMIN_API_VIEWS = Object.freeze({
   enrolments: "admin_api.enrolments",
   assignments: "admin_api.assignments",
   attempts: "admin_api.attempts",
+  dashboardSummary: "admin_api.dashboard_summary",
+  activityPerformance: "admin_api.activity_performance",
 });
+
+export type HubLifecycle =
+  | "planned"
+  | "development"
+  | "testing"
+  | "production"
+  | "maintenance"
+  | "deprecated"
+  | "archived";
+
+export interface CurrentStaffContextRecord {
+  teacherId: string;
+  staffReference: string;
+  displayName: string;
+  active: boolean;
+  activeRoles: readonly string[];
+}
 
 export interface HubRecord {
   hubCode: string;
   hubName: string;
+  description: string;
   hubVersion: string;
+  manifestVersion: string;
+  coreVersion: string;
+  learnerApiVersion: string;
+  submissionContractVersion: string;
   platformVersion: string;
-  subject: string;
+  subject: string | null;
   repositoryUrl: string;
   deploymentUrl: string | null;
-  curriculumModel: string;
+  curriculumModel: string | null;
   activityTypes: readonly string[];
+  evidenceCapabilities: readonly string[];
   features: Readonly<Record<string, boolean>>;
-  status: "planned" | "development" | "testing" | "production" | "maintenance" | "deprecated" | "archived";
+  compatibility: Readonly<Record<string, unknown>>;
+  status: HubLifecycle;
   active: boolean;
-  certified: boolean;
+  certificationState: string | null;
+}
+
+export interface HubCourseLinkRecord {
+  hubCode: string;
+  courseKey: string;
+  courseTitle: string;
+  active: boolean;
+  linkedAt: string;
 }
 
 export interface PlatformContractRecord {
@@ -40,6 +75,7 @@ export interface PlatformContractRecord {
   version: string;
   status: "draft" | "active" | "deprecated" | "retired";
   boundary: string;
+  compatibility: Readonly<Record<string, unknown>>;
 }
 
 export interface HealthRecord {
@@ -47,6 +83,7 @@ export interface HealthRecord {
   label: string;
   status: "healthy" | "degraded" | "unavailable" | "unknown";
   checkedAt: string | null;
+  validUntil: string | null;
   message: string;
   source: "fixture" | "live" | "pending";
 }
@@ -55,16 +92,14 @@ export interface LearnerRecord {
   studentNumber: string;
   displayName: string;
   active: boolean;
-  groupCode: string;
-  enrolmentCount: number;
+  groupCodes: readonly string[];
+  activeEnrolmentCount: number;
 }
 
 export interface TeacherRecord {
   staffReference: string;
   displayName: string;
   active: boolean;
-  groupCount: number;
-  courseAccess: string;
   roleLabel: string;
 }
 
@@ -73,11 +108,11 @@ export interface GroupRecord {
   groupName: string;
   academicYear: string;
   yearGroup: string;
+  courseKey: string;
   courseTitle: string;
-  hubName: string;
-  capacity: number | null;
   registrationOpen: boolean;
   active: boolean;
+  activeLearnerCount: number;
 }
 
 export interface EnrolmentRecord {
@@ -96,7 +131,50 @@ export interface AssignmentRecord {
   dueAt: string | null;
   required: boolean;
   active: boolean;
-  completionState: string;
+}
+
+export interface AttemptRecord {
+  attemptId: string;
+  learnerNumber: string;
+  groupCode: string;
+  activityKey: string;
+  activityVersion: string;
+  attemptNumber: number;
+  status: string;
+  score: number;
+  maxScore: number;
+  markingSource: string;
+  evidenceLevel: string;
+  receivedAt: string;
+  completedAt: string;
+}
+
+export interface ActivityPerformanceRecord {
+  groupCode: string;
+  activityKey: string;
+  activityVersion: string;
+  completedAttempts: number;
+  learnerCount: number;
+  averageScorePercentage: number | null;
+  bestScorePercentage: number | null;
+  firstCompletedAt: string;
+  latestCompletedAt: string;
+}
+
+export interface DashboardSummaryRecord {
+  registeredHubs: number;
+  activeHubs: number;
+  activeLearners: number;
+  activeGroups: number;
+  activeEnrolments: number;
+  assignments: number;
+  recentAttempts: number;
+  completedAttempts: number;
+  averageScorePercentage: number | null;
+  healthyServices: number;
+  serviceCount: number;
+  activeContracts: number;
+  contractCount: number;
 }
 
 export interface AuditEventRecord {
@@ -108,15 +186,36 @@ export interface AuditEventRecord {
   occurredAt: string;
 }
 
+export interface AdminDataSnapshot {
+  hubs: readonly HubRecord[];
+  hubCourseLinks: readonly HubCourseLinkRecord[];
+  contracts: readonly PlatformContractRecord[];
+  health: readonly HealthRecord[];
+  learners: readonly LearnerRecord[];
+  teachers: readonly TeacherRecord[];
+  groups: readonly GroupRecord[];
+  enrolments: readonly EnrolmentRecord[];
+  assignments: readonly AssignmentRecord[];
+  attempts: readonly AttemptRecord[];
+  activityPerformance: readonly ActivityPerformanceRecord[];
+  dashboardSummary: DashboardSummaryRecord;
+  auditEvents: readonly AuditEventRecord[];
+}
+
 export interface AdminReadService {
+  getCurrentStaffContext(): Promise<CurrentStaffContextRecord | null>;
   listHubs(): Promise<readonly HubRecord[]>;
+  listHubCourseLinks(): Promise<readonly HubCourseLinkRecord[]>;
   listContracts(): Promise<readonly PlatformContractRecord[]>;
   listHealth(): Promise<readonly HealthRecord[]>;
-  listLearners(): Promise<readonly LearnerRecord[]>;
   listTeachers(): Promise<readonly TeacherRecord[]>;
+  listLearners(): Promise<readonly LearnerRecord[]>;
   listGroups(): Promise<readonly GroupRecord[]>;
   listEnrolments(): Promise<readonly EnrolmentRecord[]>;
   listAssignments(): Promise<readonly AssignmentRecord[]>;
+  listAttempts(): Promise<readonly AttemptRecord[]>;
+  listActivityPerformance(): Promise<readonly ActivityPerformanceRecord[]>;
+  getDashboardSummary(): Promise<DashboardSummaryRecord>;
   listAuditEvents(): Promise<readonly AuditEventRecord[]>;
 }
 
@@ -136,7 +235,7 @@ export interface AdminMutationService {
 export const ADMIN_MUTATION_STATUS = Object.freeze({
   status: "pending-backend-contract" as const,
   reason:
-    "Backend version 0.1.0 intentionally exposes no administrative mutation RPCs.",
+    "Backend version 0.2.0 intentionally exposes no administrative mutation RPCs.",
   requiredBeforeEnablement: [
     "role and permission requirement",
     "validated transactional RPC",

@@ -29,19 +29,34 @@ The learner-safe `api` schema and staff-only `admin_api` schema remain separate.
 - `src/stores/` represents backend-derived staff context without email-based checks.
 - `src/theme/` adapts the shared platform theme service for React.
 
+## Authentication and authority
+
+Live mode creates one browser Supabase client with the public publishable (or
+legacy anon) key. Supabase Auth owns session persistence and refresh. After a
+session is restored, the existing session store reads
+`admin_api.current_staff_context`; the shell mounts only for an active staff
+profile with an active `platform_admin` role. Routes, browser storage and
+frontend flags do not grant authority, and every data read remains protected by
+backend RLS.
+
+The shared core theme service remains in use. The core learner platform facade
+is intentionally not used for staff authentication because it is constrained
+to learner `api` services and learner onboarding state.
+
 ## Data modes
 
-The foundation supports three explicit concepts:
+The portal supports three explicit modes:
 
-1. **Reviewed registry data** from backend source manifests.
-2. **Synthetic fixture data** from the local backend seed.
-3. **Pending integrations** where an API or operational contract does not exist.
+1. **Live** — authenticated, RLS-protected reads from `admin_api`.
+2. **Demo** — explicit development mode using synthetic fixtures.
+3. **Unavailable** — live configuration, authentication or reads failed.
 
-The interface labels these states. It does not present demo data as live production data and does not fabricate analytics.
+The interface labels these states. A failed live read never substitutes demo
+data. Analytics are supplied by backend aggregate views.
 
 ## Administrative writes
 
-Backend 0.1.0 intentionally excludes staff mutation RPCs. All visible write journeys route through a pending mutation service. The interface explains the required backend work instead of constructing speculative endpoints.
+Backend 0.2.0 intentionally excludes staff mutation RPCs. All visible write journeys route through a pending mutation service. The interface explains the required backend work instead of constructing speculative endpoints.
 
 A mutation becomes eligible only after the backend defines its role requirement, validation and conflicts, transaction, stable errors, audit event, idempotency where relevant, RLS and integration tests.
 

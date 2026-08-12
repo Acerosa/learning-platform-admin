@@ -1,6 +1,6 @@
 # Learning Platform Administration
 
-Version **0.1.0** — modular foundation for the Learning Platform Central Administration Portal.
+Version **0.2.0** — Platform Integration MVP for the Learning Platform Central Administration Portal.
 
 [Open the administration dashboard](https://acerosa.github.io/learning-platform-admin/)
 
@@ -9,8 +9,10 @@ This repository is the administration interface for the entire Learning Platform
 ## Current state
 
 - The portal consumes the shared theme service and semantic tokens from `@learning-platform/core`.
-- The backend `admin_api` contract is version `0.1.0`, draft and read-only.
-- Read surfaces reflect the documented backend views, reviewed hub manifests and synthetic local fixtures.
+- The backend `admin_api` contract is version `0.2.0`, draft and read-only.
+- Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.
+- Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
+- Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
 - Write journeys are visible but safe: they explain the missing backend contract and never invent an endpoint.
 - No hosted credentials, database migrations or learner-hub code live here.
 
@@ -23,12 +25,24 @@ npm install
 npm run dev
 ```
 
-The development server prints the local URL. The app does not require a live backend for its foundation/demo state.
+The development server prints the local URL. With no environment file, the app starts in clearly labelled demo mode.
+
+For live local mode, copy `.env.example` to an ignored `.env.local`, set
+`NEXT_PUBLIC_ADMIN_DATA_MODE=live`, and use the local values reported by
+`supabase status` for the URL and **publishable** key. Never use the secret or
+service-role key.
+
+After resetting the sibling backend, sign in as the synthetic local staff
+account `platform.admin@local.invalid`. It has no committed password; use the
+portal’s email-link action and open the message in local Mailpit. This fixture
+exists only in the backend local seed.
 
 ## Quality checks
 
 ```bash
 npm run lint
+npm run typecheck
+npm run test:integration
 npm test
 ```
 
@@ -66,16 +80,22 @@ learning-platform-admin/
 - [Permissions](docs/permissions.md)
 - [Deployment](docs/deployment.md)
 - [Testing](docs/testing.md)
+- [Changelog](CHANGELOG.md)
 
 ## Known limitations
 
-- Live Supabase authentication and `admin_api` reads are not connected in 0.1.0.
-- The backend has no administrative mutation RPCs in 0.1.0.
-- Analytics aggregation, certification records, external monitoring and deployment integrations do not yet have approved contracts.
-- Demonstration people, group, enrolment and assignment records are synthetic local fixtures.
-- Both registered hubs remain uncertified and in testing.
+- The backend has no administrative mutation RPCs in 0.2.0.
+- Curriculum/activity authoring, certification workflows, external monitoring ingestion and deployment integrations remain deferred.
+- Demo-mode people, group, enrolment, assignment and attempt records are synthetic fixtures.
+- A hosted live release still requires approved environment configuration, Auth redirect URLs and hosted RLS integration validation.
 
 ## Version history
+
+### 0.2.0 — 11 August 2026
+
+Authenticated live `admin_api` integration, backend-derived dashboard and
+analytics, registered hub contracts/course links, safe operational lists,
+explicit data-source/error states and a dedicated Attempts module.
 
 ### 0.1.0 — 11 August 2026
 

@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { HubRecord } from "../api/admin-api";
+import type {
+  AdminDataSnapshot,
+  HubCourseLinkRecord,
+  HubRecord,
+} from "../api/admin-api";
 import { AdminLink } from "../components/admin-link";
 import { HubDetailDialog } from "../components/hub-detail-dialog";
 import {
@@ -10,67 +14,14 @@ import {
 } from "../components/pending-action-dialog";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import { getAdminModule, type AdminModuleId } from "../router/modules";
-import {
-  ASSIGNMENTS,
-  CONTRACTS,
-  ENROLMENTS,
-  GROUPS,
-  HEALTH,
-  HUBS,
-  LEARNERS,
-  TEACHERS,
-} from "../services/demo-admin-service";
+import { useAdminPortal } from "../stores/admin-portal";
 import { formatDate } from "../utils/format";
 
-const COURSES = [
-  {
-    key: "ocr-level-3-it",
-    title: "OCR Level 3 IT",
-    hub: "Unit 3 Cyber Security Hub",
-    curriculum: "76 reviewed activity definitions",
-    state: "migration review",
-  },
-  {
-    key: "t-level-digital-software-development",
-    title: "T Level Digital Software Development",
-    hub: "T Level Digital Software Development Hub",
-    curriculum: "5 foundation activity definitions",
-    state: "foundation",
-  },
-] as const;
-
-const ATTENTION_ITEMS = [
-  { priority: "P0", title: "Administrative writes are not yet defined", detail: "The admin API 0.1.0 contract is deliberately read-only.", owner: "Backend platform" },
-  { priority: "P1", title: "Hosted migration handoff remains pending", detail: "The backend foundation is not yet reconciled with hosted migration history.", owner: "Platform operations" },
-  { priority: "P3", title: "Two active hubs remain uncertified", detail: "Both registered hubs are in testing and have open LHDS conformance work.", owner: "Quality review" },
-  { priority: "P5", title: "Monitoring collectors are not configured", detail: "Health and audit foundations exist, but no external pipeline is connected.", owner: "Platform operations" },
-] as const;
-
-const ANALYTIC_LENSES = [
-  ["Learner progress", "Completion, attempts and outcome coverage"],
-  ["Group progress", "Cohort comparison and completion distribution"],
-  ["Question performance", "Response-level success and misconception patterns"],
-  ["Topic performance", "Topic and skill aggregation"],
-  ["Learning outcomes", "Coverage and achievement by outcome"],
-  ["Submission trends", "Timing, success and retry behaviour"],
-  ["Completion", "Required and optional activity completion"],
-  ["Intervention indicators", "Reviewed signals for staff follow-up"],
-] as const;
-
-const CERTIFICATION_AREAS = [
-  "Accessibility",
-  "Testing",
-  "Performance",
-  "Security",
-  "Documentation",
-  "Compatibility",
-] as const;
-
 function toneForStatus(status: string): BadgeTone {
-  if (["active", "healthy", "certified", "open", "production"].includes(status)) return "positive";
-  if (["testing", "partial", "draft", "not certified", "degraded"].includes(status)) return "warning";
-  if (["unavailable", "failed", "inactive"].includes(status)) return "danger";
-  if (["pending", "unknown"].includes(status)) return "neutral";
+  if (["active", "healthy", "certified", "open", "production", "completed", "succeeded"].includes(status)) return "positive";
+  if (["testing", "partial", "draft", "degraded", "maintenance"].includes(status)) return "warning";
+  if (["unavailable", "failed", "inactive", "denied"].includes(status)) return "danger";
+  if (["pending", "unknown", "retired", "archived"].includes(status)) return "neutral";
   return "info";
 }
 
@@ -130,30 +81,27 @@ function EmptyState({ title, body }: { title: string; body: string }) {
   );
 }
 
-function DashboardPage() {
+function scoreLabel(score: number, maxScore: number) {
+  return `${score} / ${maxScore}`;
+}
+
+function percentageLabel(value: number | null) {
+  return value === null ? "No completed attempts" : `${value.toFixed(1)}%`;
+}
+
+function DashboardPage({ data }: { data: AdminDataSnapshot }) {
+  const summary = data.dashboardSummary;
+  const recentAttempts = data.attempts.slice(0, 5);
   return (
     <>
       <PageHeader moduleId="dashboard" />
-      <section className="metrics-grid" aria-label="Platform summary">
-        <MetricCard label="Registered hubs" value="2" detail="Both active in testing" tone="info" />
-        <MetricCard label="Platform contracts" value="3" detail="2 active · 1 draft" tone="positive" />
-        <MetricCard label="Hub certification" value="0 / 2" detail="Evidence review required" tone="warning" />
-        <MetricCard label="Administrative writes" value="Pending" detail="Read-only foundation" tone="neutral" />
-      </section>
-      <section className="panel platform-coverage-panel" aria-labelledby="coverage-overview-title">
-        <div className="panel__header"><div><p className="eyebrow">Dashboard coverage</p><h2 id="coverage-overview-title">Operational overview</h2></div><span className="count-chip">Foundation state</span></div>
-        <div className="platform-coverage">
-          {[
-            ["Learners", "2 synthetic"],
-            ["Teachers", "2 synthetic"],
-            ["Assignments", "2 preview rows"],
-            ["Submissions", "Data pending"],
-            ["Activity completion", "Analytics pending"],
-            ["API health", "Live check pending"],
-            ["Deployment", "Integration pending"],
-            ["Certification", "0 of 2"],
-          ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
-        </div>
+      <section className="metrics-grid" aria-label="Live platform summary">
+        <MetricCard label="Registered hubs" value={String(summary.registeredHubs)} detail={`${summary.activeHubs} active`} tone="info" />
+        <MetricCard label="Active learners" value={String(summary.activeLearners)} detail="Backend learner registry" tone="positive" />
+        <MetricCard label="Active groups" value={String(summary.activeGroups)} detail={`${summary.activeEnrolments} active enrolments`} tone="info" />
+        <MetricCard label="Assignments" value={String(summary.assignments)} detail="Current and historical records" tone="neutral" />
+        <MetricCard label="Recent attempts" value={String(summary.recentAttempts)} detail="Received in the last seven days" tone="positive" />
+        <MetricCard label="Average score" value={percentageLabel(summary.averageScorePercentage)} detail={`${summary.completedAttempts} completed attempts`} tone="info" />
       </section>
       <div className="dashboard-grid">
         <section className="panel panel--span-2" aria-labelledby="hub-readiness-title">
@@ -163,305 +111,164 @@ function DashboardPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th scope="col">Hub</th><th scope="col">Compatibility</th><th scope="col">Lifecycle</th><th scope="col">Certification</th></tr></thead>
-              <tbody>
-                {HUBS.map((hub) => (
-                  <tr key={hub.hubCode}>
-                    <th scope="row"><span className="table-primary">{hub.hubName}</span><code>{hub.hubCode}</code></th>
-                    <td>Platform {hub.platformVersion}</td>
-                    <td><StatusBadge label={hub.status} tone={toneForStatus(hub.status)} /></td>
-                    <td><StatusBadge label="not certified" tone="warning" /></td>
-                  </tr>
-                ))}
-              </tbody>
+              <thead><tr><th scope="col">Hub</th><th scope="col">Core</th><th scope="col">Manifest</th><th scope="col">Lifecycle</th><th scope="col">Certification</th></tr></thead>
+              <tbody>{data.hubs.map((hub) => (
+                <tr key={hub.hubCode}>
+                  <th scope="row"><span className="table-primary">{hub.hubName}</span><code>{hub.hubCode}</code></th>
+                  <td>{hub.coreVersion}</td>
+                  <td>{hub.manifestVersion}</td>
+                  <td><StatusBadge label={hub.status} tone={toneForStatus(hub.status)} /></td>
+                  <td><StatusBadge label={hub.certificationState ?? "not recorded"} tone={hub.certificationState === "certified" ? "positive" : "neutral"} /></td>
+                </tr>
+              ))}</tbody>
             </table>
           </div>
         </section>
         <section className="panel" aria-labelledby="health-title">
-          <div className="panel__header"><div><p className="eyebrow">Operations</p><h2 id="health-title">Platform health</h2></div></div>
-          <ul className="health-list">
-            {HEALTH.map((health) => (
-              <li key={health.serviceKey}>
-                <span className={`health-dot health-dot--${health.status}`} aria-hidden="true" />
-                <span><strong>{health.label}</strong><small>{health.message}</small></span>
-                <StatusBadge label={health.status} tone={toneForStatus(health.status)} />
-              </li>
-            ))}
-          </ul>
+          <div className="panel__header"><div><p className="eyebrow">Operations</p><h2 id="health-title">Platform health</h2></div><span className="count-chip">{summary.healthyServices} / {summary.serviceCount}</span></div>
+          {data.health.length ? <ul className="health-list">{data.health.map((health) => (
+            <li key={health.serviceKey}>
+              <span className={`health-dot health-dot--${health.status}`} aria-hidden="true" />
+              <span><strong>{health.label}</strong><small>{health.message}</small></span>
+              <StatusBadge label={health.status} tone={toneForStatus(health.status)} />
+            </li>
+          ))}</ul> : <EmptyState title="No health signals" body="No safe operational status rows are available." />}
         </section>
-        <section className="panel panel--span-2" aria-labelledby="attention-title">
-          <div className="panel__header"><div><p className="eyebrow">Priorities</p><h2 id="attention-title">Attention queue</h2></div><span className="count-chip">4 open</span></div>
-          <div className="attention-list">
-            {ATTENTION_ITEMS.map((item) => (
-              <article key={item.title}>
-                <span className="priority-chip">{item.priority}</span>
-                <div><h3>{item.title}</h3><p>{item.detail}</p></div>
-                <small>{item.owner}</small>
-              </article>
-            ))}
-          </div>
+        <section className="panel panel--span-2" aria-labelledby="recent-attempts-title">
+          <div className="panel__header"><div><p className="eyebrow">Evidence</p><h2 id="recent-attempts-title">Recent attempts</h2></div><AdminLink className="text-link" href="/attempts">View attempts <span aria-hidden="true">→</span></AdminLink></div>
+          {recentAttempts.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Learner</th><th scope="col">Activity</th><th scope="col">Score</th><th scope="col">Status</th><th scope="col">Completed</th></tr></thead><tbody>{recentAttempts.map((attempt) => <tr key={attempt.attemptId}><th scope="row"><code>{attempt.learnerNumber}</code></th><td><span className="table-primary">{attempt.activityKey}</span><small>{attempt.activityVersion}</small></td><td>{scoreLabel(attempt.score, attempt.maxScore)}</td><td><StatusBadge label={attempt.status} tone={toneForStatus(attempt.status)} /></td><td>{formatDate(attempt.completedAt)}</td></tr>)}</tbody></table></div> : <EmptyState title="No attempts yet" body="Completed attempt summaries will appear here." />}
         </section>
-        <section className="panel" aria-labelledby="activity-title">
-          <div className="panel__header"><div><p className="eyebrow">Audit</p><h2 id="activity-title">Recent activity</h2></div></div>
-          <EmptyState title="No live audit source" body="Connect an authenticated admin_api client to display safe platform events." />
+        <section className="panel" aria-labelledby="contracts-title">
+          <div className="panel__header"><div><p className="eyebrow">Compatibility</p><h2 id="contracts-title">Platform contracts</h2></div><span className="count-chip">{summary.activeContracts} active</span></div>
+          <ul className="contract-list">{data.contracts.filter((contract) => contract.status !== "retired").map((contract) => <li key={`${contract.contractKey}-${contract.version}`}><span><strong>{contract.contractKey}</strong><small>{contract.version}</small></span><StatusBadge label={contract.status} tone={toneForStatus(contract.status)} /></li>)}</ul>
         </section>
       </div>
     </>
   );
 }
 
-function HubRegistryPage({ openPending }: { openPending: (action: PendingAction) => void }) {
+function HubRegistryPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [selectedHub, setSelectedHub] = useState<HubRecord | null>(null);
   const visibleHubs = useMemo(() => {
     const normalised = query.trim().toLowerCase();
-    return HUBS.filter((hub) => {
-      const matchesQuery = !normalised || `${hub.hubName} ${hub.hubCode} ${hub.subject}`.toLowerCase().includes(normalised);
+    return data.hubs.filter((hub) => {
+      const matchesQuery = !normalised || `${hub.hubName} ${hub.hubCode} ${hub.description}`.toLowerCase().includes(normalised);
       return matchesQuery && (status === "all" || hub.status === status);
     });
-  }, [query, status]);
+  }, [data.hubs, query, status]);
+  const selectedLinks = selectedHub
+    ? data.hubCourseLinks.filter((link) => link.hubCode === selectedHub.hubCode)
+    : [];
 
   return (
     <>
       <PageHeader moduleId="hubs" actionLabel="Register hub" onAction={() => openPending({ title: "Register a hub" })} />
       <section className="panel">
         <div className="toolbar">
-          <div className="toolbar__search"><label htmlFor="hub-search">Search hubs</label><input id="hub-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, code or subject" /></div>
-          <div><label htmlFor="hub-status">Lifecycle</label><select id="hub-status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All states</option><option value="testing">Testing</option><option value="production">Production</option><option value="archived">Archived</option></select></div>
-          <span className="toolbar__count" role="status">{visibleHubs.length} of {HUBS.length} hubs</span>
+          <div className="toolbar__search"><label htmlFor="hub-search">Search hubs</label><input id="hub-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, code or description" /></div>
+          <div><label htmlFor="hub-status">Lifecycle</label><select id="hub-status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All states</option><option value="testing">Testing</option><option value="production">Production</option><option value="maintenance">Maintenance</option><option value="archived">Archived</option></select></div>
+          <span className="toolbar__count" role="status">{visibleHubs.length} of {data.hubs.length} hubs</span>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th scope="col">Hub</th><th scope="col">Version</th><th scope="col">Platform</th><th scope="col">Status</th><th scope="col">Certification</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>
-              {visibleHubs.map((hub) => (
-                <tr key={hub.hubCode}>
-                  <th scope="row"><span className="hub-cell"><span className="hub-cell__mark" aria-hidden="true">{hub.hubName.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><span><span className="table-primary">{hub.hubName}</span><code>{hub.hubCode}</code></span></span></th>
-                  <td>{hub.hubVersion}</td><td>{hub.platformVersion}</td>
-                  <td><StatusBadge label={hub.status} tone="info" /></td>
-                  <td><StatusBadge label={hub.certified ? "certified" : "not certified"} tone={hub.certified ? "positive" : "warning"} /></td>
-                  <td><div className="table-actions"><button className="button button--small button--secondary" type="button" onClick={() => setSelectedHub(hub)}>View</button><button className="icon-button" type="button" aria-label={`Edit ${hub.hubName}`} onClick={() => openPending({ title: "Edit hub", subject: hub.hubName })}>•••</button></div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {!visibleHubs.length ? <EmptyState title="No hubs match" body="Change the search or lifecycle filter." /> : null}
+        {visibleHubs.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Hub</th><th scope="col">Version</th><th scope="col">Contracts</th><th scope="col">Courses</th><th scope="col">Status</th><th scope="col">Certification</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{visibleHubs.map((hub) => {
+          const links = data.hubCourseLinks.filter((link) => link.hubCode === hub.hubCode && link.active);
+          return <tr key={hub.hubCode}><th scope="row"><span className="hub-cell"><span className="hub-cell__mark" aria-hidden="true">{hub.hubName.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><span><span className="table-primary">{hub.hubName}</span><code>{hub.hubCode}</code></span></span></th><td>{hub.hubVersion}</td><td><span className="table-primary">Core {hub.coreVersion}</span><small>API {hub.learnerApiVersion} · Submission {hub.submissionContractVersion}</small></td><td>{links.map((link) => link.courseTitle).join(", ") || "No active link"}</td><td><StatusBadge label={hub.status} tone={toneForStatus(hub.status)} /></td><td><StatusBadge label={hub.certificationState ?? "not recorded"} tone={hub.certificationState === "certified" ? "positive" : "neutral"} /></td><td><button className="button button--small button--secondary" type="button" onClick={() => setSelectedHub(hub)}>View</button></td></tr>;
+        })}</tbody></table></div> : <EmptyState title="No hubs match" body="Change the search or lifecycle filter." />}
       </section>
-      <HubDetailDialog
-        hub={selectedHub}
-        onClose={() => setSelectedHub(null)}
-        onEdit={(hub) => { setSelectedHub(null); openPending({ title: "Edit hub", subject: hub.hubName }); }}
-        onDeactivate={(hub) => { setSelectedHub(null); openPending({ title: "Deactivate hub", subject: hub.hubName }); }}
-      />
+      <HubDetailDialog hub={selectedHub} courseLinks={selectedLinks} onClose={() => setSelectedHub(null)} onEdit={(hub) => { setSelectedHub(null); openPending({ title: "Edit hub", subject: hub.hubName }); }} onDeactivate={(hub) => { setSelectedHub(null); openPending({ title: "Deactivate hub", subject: hub.hubName }); }} />
     </>
   );
 }
 
-function CoursesPage({ openPending }: { openPending: (action: PendingAction) => void }) {
+function CoursesPage({ links, openPending }: { links: readonly HubCourseLinkRecord[]; openPending: (action: PendingAction) => void }) {
   return (
     <>
       <PageHeader moduleId="courses" actionLabel="Create course" onAction={() => openPending({ title: "Create a course" })} />
-      <div className="card-grid card-grid--2">
-        {COURSES.map((course) => (
-          <article className="record-card" key={course.key}>
-            <div className="record-card__header"><span className="record-card__mark" aria-hidden="true">CR</span><StatusBadge label={course.state} tone="info" /></div>
-            <h2>{course.title}</h2><code>{course.key}</code>
-            <dl><div><dt>Registered hub</dt><dd>{course.hub}</dd></div><div><dt>Reviewed catalogue</dt><dd>{course.curriculum}</dd></div></dl>
-            <div className="record-card__actions"><button className="button button--secondary" type="button" onClick={() => openPending({ title: "Edit course", subject: course.title })}>Review course</button></div>
-          </article>
-        ))}
-      </div>
-      <section className="notice-card notice-card--info"><strong>Administrative read gap</strong><p>The current admin API exposes course links through <code>admin_api.hub_course_links</code>, but not a dedicated course catalogue view or mutation RPC.</p></section>
+      {links.length ? <div className="card-grid card-grid--2">{links.map((link) => <article className="record-card" key={`${link.hubCode}-${link.courseKey}`}><div className="record-card__header"><span className="record-card__mark" aria-hidden="true">CR</span><StatusBadge label={link.active ? "active" : "inactive"} tone={link.active ? "positive" : "neutral"} /></div><h2>{link.courseTitle}</h2><code>{link.courseKey}</code><dl><div><dt>Registered hub</dt><dd>{link.hubCode}</dd></div><div><dt>Linked</dt><dd>{formatDate(link.linkedAt)}</dd></div></dl></article>)}</div> : <EmptyState title="No course links" body="No hub-to-course relationships are registered." />}
+      <section className="notice-card notice-card--info"><strong>Read-only course projection</strong><p>The MVP displays authoritative <code>admin_api.hub_course_links</code>. A dedicated course mutation contract remains deferred.</p></section>
     </>
   );
 }
 
-function CurriculumPage({ openPending }: { openPending: (action: PendingAction) => void }) {
-  const hierarchy = ["Course", "Unit", "Week", "Session", "Activity", "Learning outcome"];
-  return (
-    <>
-      <PageHeader moduleId="curriculum" actionLabel="Add curriculum item" onAction={() => openPending({ title: "Add a curriculum item" })} />
-      <section className="panel" aria-labelledby="hierarchy-title">
-        <div className="panel__header"><div><p className="eyebrow">LHDS hierarchy</p><h2 id="hierarchy-title">Curriculum structure</h2></div><StatusBadge label="contract pending" tone="warning" /></div>
-        <ol className="hierarchy-flow">
-          {hierarchy.map((level, index) => <li key={level}><span>{index + 1}</span><strong>{level}</strong>{index < hierarchy.length - 1 ? <span className="hierarchy-flow__arrow" aria-hidden="true">→</span> : null}</li>)}
-        </ol>
-      </section>
-      <div className="dashboard-grid">
-        <section className="panel panel--span-2" aria-labelledby="curriculum-readiness-title">
-          <div className="panel__header"><div><p className="eyebrow">Reviewed manifests</p><h2 id="curriculum-readiness-title">Metadata readiness</h2></div></div>
-          <div className="table-wrap"><table><thead><tr><th scope="col">Hub curriculum</th><th scope="col">Structure</th><th scope="col">Activity catalogue</th><th scope="col">Lifecycle</th><th scope="col">Outcomes</th></tr></thead><tbody><tr><th scope="row">Unit 3 Cyber Security</th><td><StatusBadge label="partial" tone="warning" /></td><td>76 definitions</td><td><StatusBadge label="pending" tone="neutral" /></td><td><StatusBadge label="partial" tone="warning" /></td></tr><tr><th scope="row">Software Development Foundations</th><td><StatusBadge label="partial" tone="warning" /></td><td>5 definitions</td><td><StatusBadge label="pending" tone="neutral" /></td><td><StatusBadge label="partial" tone="warning" /></td></tr></tbody></table></div>
-        </section>
-        <section className="panel" aria-labelledby="lifecycle-title"><div className="panel__header"><div><p className="eyebrow">Publication workflow</p><h2 id="lifecycle-title">Activity lifecycle</h2></div></div><ol className="vertical-steps">{["Draft", "Review", "Approved", "Published", "Retired", "Archived"].map((step, index) => <li key={step}><span>{index + 1}</span><strong>{step}</strong><small>{index < 2 ? "UI prepared" : "Backend contract pending"}</small></li>)}</ol></section>
-      </div>
-    </>
-  );
+function DeferredLearningPage({ moduleId, openPending }: { moduleId: "curriculum" | "activities"; openPending: (action: PendingAction) => void }) {
+  const noun = moduleId === "curriculum" ? "curriculum item" : "activity";
+  return <><PageHeader moduleId={moduleId} actionLabel={`Create ${noun}`} onAction={() => openPending({ title: `Create ${noun}` })} /><section className="panel"><EmptyState title="Administration contract deferred" body={`The Phase 2 MVP does not add ${moduleId} authoring or protected-schema reads. Existing portal workflow boundaries remain prepared for a reviewed backend contract.`} /></section></>;
 }
 
-function ActivitiesPage({ openPending }: { openPending: (action: PendingAction) => void }) {
-  const activities = [
-    ["Unit 3 Cyber Security", "76", "retrieval, classification, matching, reflection", "1.0 migration review"],
-    ["Software Development Foundations", "5", "diagnostic, classification, scenario, knowledge check", "1.0.0–2.0.0"],
-  ] as const;
-  return (
-    <>
-      <PageHeader moduleId="activities" actionLabel="Create activity" onAction={() => openPending({ title: "Create an activity" })} />
-      <section className="panel">
-        <div className="panel__header"><div><p className="eyebrow">Reviewed source artefacts</p><h2>Activity catalogue</h2></div><span className="count-chip">81 known definitions</span></div>
-        <div className="table-wrap"><table><thead><tr><th scope="col">Curriculum</th><th scope="col">Definitions</th><th scope="col">Interaction types</th><th scope="col">Version state</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{activities.map(([name, count, types, versions]) => <tr key={name}><th scope="row">{name}</th><td>{count}</td><td>{types}</td><td>{versions}</td><td><button className="button button--small button--secondary" type="button" onClick={() => openPending({ title: "Review activity catalogue", subject: name })}>Review</button></td></tr>)}</tbody></table></div>
-      </section>
-      <div className="card-grid card-grid--3">
-        {[ ["Evidence", "Structured evidence is present, but schema-version coverage remains incomplete."], ["Versioning", "Software Development uses semantic versions; Unit 3 still has 1.0 source versions to migrate."], ["Lifecycle", "Draft-to-archive administration needs new backend workflow and audit contracts."] ].map(([title, detail]) => <article className="insight-card" key={title}><span aria-hidden="true">◇</span><h2>{title}</h2><p>{detail}</p></article>)}
-      </div>
-    </>
-  );
+function LearnersPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
+  return <><PageHeader moduleId="learners" actionLabel="Add learner" onAction={() => openPending({ title: "Add a learner" })} /><section className="panel"><div className="panel__header"><div><p className="eyebrow">Minimised directory</p><h2>Learners</h2></div><span className="count-chip">{data.learners.length} records</span></div>{data.learners.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Learner</th><th scope="col">Student number</th><th scope="col">Active groups</th><th scope="col">Active enrolments</th><th scope="col">Status</th></tr></thead><tbody>{data.learners.map((learner) => <tr key={learner.studentNumber}><th scope="row">{learner.displayName}</th><td><code>{learner.studentNumber}</code></td><td>{learner.groupCodes.join(", ") || "None"}</td><td>{learner.activeEnrolmentCount}</td><td><StatusBadge label={learner.active ? "active" : "inactive"} tone={learner.active ? "positive" : "neutral"} /></td></tr>)}</tbody></table></div> : <EmptyState title="No learners" body="No learner records are visible to this authorised session." />}</section><section className="notice-card notice-card--info"><strong>Privacy by design</strong><p>The list omits contact details, internal UUIDs and response payloads.</p></section></>;
 }
 
-function LearnersPage({ openPending }: { openPending: (action: PendingAction) => void }) {
-  return (
-    <>
-      <PageHeader moduleId="learners" actionLabel="Add learner" onAction={() => openPending({ title: "Add a learner" })} />
-      <section className="panel"><div className="panel__header"><div><p className="eyebrow">Synthetic local fixtures</p><h2>Learner directory preview</h2></div><span className="count-chip">2 records</span></div><div className="table-wrap"><table><thead><tr><th scope="col">Learner</th><th scope="col">Student number</th><th scope="col">Group</th><th scope="col">Enrolments</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{LEARNERS.map((learner) => <tr key={learner.studentNumber}><th scope="row"><span className="table-primary">{learner.displayName}</span></th><td><code>{learner.studentNumber}</code></td><td>{learner.groupCode}</td><td>{learner.enrolmentCount}</td><td><StatusBadge label={learner.active ? "active" : "inactive"} tone={learner.active ? "positive" : "neutral"} /></td><td><button className="button button--small button--secondary" type="button" onClick={() => openPending({ title: "Manage learner", subject: learner.displayName })}>View</button></td></tr>)}</tbody></table></div></section>
-      <section className="notice-card notice-card--info"><strong>Privacy by design</strong><p>The preview uses synthetic fixture records and does not expose internal UUIDs. Responses and detailed evidence are intentionally absent from the general learner view.</p></section>
-    </>
-  );
+function TeachersPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
+  return <><PageHeader moduleId="teachers" actionLabel="Invite teacher" onAction={() => openPending({ title: "Invite a teacher" })} /><section className="panel"><div className="panel__header"><div><p className="eyebrow">Active platform roles</p><h2>Staff administration context</h2></div></div>{data.teachers.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Staff</th><th scope="col">Reference</th><th scope="col">Backend role</th><th scope="col">Role state</th></tr></thead><tbody>{data.teachers.map((teacher) => <tr key={`${teacher.staffReference}-${teacher.roleLabel}`}><th scope="row">{teacher.displayName}</th><td><code>{teacher.staffReference}</code></td><td>{teacher.roleLabel}</td><td><StatusBadge label={teacher.active ? "active" : "revoked"} tone={teacher.active ? "positive" : "neutral"} /></td></tr>)}</tbody></table></div> : <EmptyState title="No platform roles" body="No staff-role records are visible." />}</section><section className="notice-card notice-card--warning"><strong>Backend-authoritative roles</strong><p>A teacher profile alone does not grant portal authority. Active roles are read from the backend and every data request remains protected by RLS.</p></section></>;
 }
 
-function TeachersPage({ openPending }: { openPending: (action: PendingAction) => void }) {
-  return (
-    <>
-      <PageHeader moduleId="teachers" actionLabel="Invite teacher" onAction={() => openPending({ title: "Invite a teacher" })} />
-      <section className="panel"><div className="panel__header"><div><p className="eyebrow">Synthetic local fixtures</p><h2>Teacher profiles</h2></div></div><div className="table-wrap"><table><thead><tr><th scope="col">Teacher</th><th scope="col">Staff reference</th><th scope="col">Assigned groups</th><th scope="col">Course access</th><th scope="col">Administration context</th><th scope="col">Status</th></tr></thead><tbody>{TEACHERS.map((teacher) => <tr key={teacher.staffReference}><th scope="row">{teacher.displayName}</th><td><code>{teacher.staffReference}</code></td><td>{teacher.groupCount}</td><td>{teacher.courseAccess}</td><td>{teacher.roleLabel}</td><td><StatusBadge label={teacher.active ? "active" : "inactive"} tone={teacher.active ? "positive" : "neutral"} /></td></tr>)}</tbody></table></div></section>
-      <section className="notice-card notice-card--warning"><strong>Backend-authoritative roles</strong><p>A teacher profile does not automatically grant platform administration. Access must continue through active <code>platform.staff_roles</code> records and backend RLS.</p></section>
-    </>
-  );
+function GroupsPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
+  return <><PageHeader moduleId="groups" actionLabel="Create group" onAction={() => openPending({ title: "Create a group" })} /><section className="panel"><div className="panel__header"><div><p className="eyebrow">Cohorts</p><h2>Academic groups</h2></div><span className="count-chip">{data.groups.length} groups</span></div>{data.groups.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Group</th><th scope="col">Academic year</th><th scope="col">Year</th><th scope="col">Course</th><th scope="col">Learners</th><th scope="col">Registration</th><th scope="col">Status</th></tr></thead><tbody>{data.groups.map((group) => <tr key={group.groupCode}><th scope="row"><span className="table-primary">{group.groupName}</span><code>{group.groupCode}</code></th><td>{group.academicYear}</td><td>{group.yearGroup}</td><td><span className="table-primary">{group.courseTitle}</span><code>{group.courseKey}</code></td><td>{group.activeLearnerCount}</td><td><StatusBadge label={group.registrationOpen ? "open" : "closed"} tone={group.registrationOpen ? "positive" : "neutral"} /></td><td><StatusBadge label={group.active ? "active" : "inactive"} tone={group.active ? "positive" : "neutral"} /></td></tr>)}</tbody></table></div> : <EmptyState title="No groups" body="No group records are visible." />}</section><section className="notice-card notice-card--info"><strong>Registration keys stay protected</strong><p>The administration list shows registration state and never returns registration-key values.</p></section></>;
 }
 
-function GroupsPage({ openPending }: { openPending: (action: PendingAction) => void }) {
-  return (
-    <>
-      <PageHeader moduleId="groups" actionLabel="Create group" onAction={() => openPending({ title: "Create a group" })} />
-      <section className="panel"><div className="panel__header"><div><p className="eyebrow">Synthetic local fixtures</p><h2>Academic groups</h2></div></div><div className="table-wrap"><table><thead><tr><th scope="col">Group</th><th scope="col">Academic year</th><th scope="col">Year</th><th scope="col">Course and hub</th><th scope="col">Capacity</th><th scope="col">Registration</th><th scope="col">Status</th></tr></thead><tbody>{GROUPS.map((group) => <tr key={group.groupCode}><th scope="row"><span className="table-primary">{group.groupName}</span><code>{group.groupCode}</code></th><td>{group.academicYear}</td><td>{group.yearGroup}</td><td><span className="table-primary">{group.courseTitle}</span><small>{group.hubName}</small></td><td>{group.capacity ?? "Not exposed"}</td><td><StatusBadge label={group.registrationOpen ? "open" : "closed"} tone={group.registrationOpen ? "positive" : "neutral"} /></td><td><StatusBadge label={group.active ? "active" : "inactive"} tone={group.active ? "positive" : "neutral"} /></td></tr>)}</tbody></table></div></section>
-      <section className="notice-card notice-card--info"><strong>Registration keys stay protected</strong><p>This administration surface displays registration state but does not reveal registration-key values in general tables.</p></section>
-    </>
-  );
+function EnrolmentsPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
+  return <><PageHeader moduleId="enrolments" actionLabel="Create enrolment" onAction={() => openPending({ title: "Create an enrolment" })} /><section className="panel"><div className="panel__header"><div><p className="eyebrow">Current and historical relationships</p><h2>Enrolments</h2></div><span className="count-chip">{data.enrolments.length} records</span></div>{data.enrolments.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Learner</th><th scope="col">Group</th><th scope="col">Joined</th><th scope="col">Left</th><th scope="col">Status</th></tr></thead><tbody>{data.enrolments.map((enrolment, index) => <tr key={`${enrolment.learnerNumber}-${enrolment.groupCode}-${index}`}><th scope="row"><code>{enrolment.learnerNumber}</code></th><td>{enrolment.groupCode}</td><td>{formatDate(enrolment.joinedOn)}</td><td>{formatDate(enrolment.leftOn)}</td><td><StatusBadge label={enrolment.status} tone={toneForStatus(enrolment.status)} /></td></tr>)}</tbody></table></div> : <EmptyState title="No enrolments" body="No current or historical enrolments are visible." />}</section></>;
 }
 
-function EnrolmentsPage({ openPending }: { openPending: (action: PendingAction) => void }) {
-  return (
-    <>
-      <PageHeader moduleId="enrolments" actionLabel="Create enrolment" onAction={() => openPending({ title: "Create an enrolment" })} />
-      <section className="panel"><div className="panel__header"><div><p className="eyebrow">Multi-course ready</p><h2>Enrolment history</h2></div></div><div className="table-wrap"><table><thead><tr><th scope="col">Learner</th><th scope="col">Group</th><th scope="col">Joined</th><th scope="col">Left</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{ENROLMENTS.map((enrolment) => <tr key={`${enrolment.learnerNumber}-${enrolment.groupCode}`}><th scope="row"><code>{enrolment.learnerNumber}</code></th><td>{enrolment.groupCode}</td><td>{formatDate(enrolment.joinedOn)}</td><td>{formatDate(enrolment.leftOn)}</td><td><StatusBadge label={enrolment.status} tone="positive" /></td><td><button className="button button--small button--secondary" type="button" onClick={() => openPending({ title: "Transfer enrolment", subject: enrolment.learnerNumber })}>Manage</button></td></tr>)}</tbody></table></div></section>
-    </>
-  );
+function AssignmentsPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
+  return <><PageHeader moduleId="assignments" actionLabel="Create assignment" onAction={() => openPending({ title: "Create an assignment" })} /><section className="panel"><div className="panel__header"><div><p className="eyebrow">Learning delivery</p><h2>Assignments</h2></div><span className="count-chip">{data.assignments.length} records</span></div>{data.assignments.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Activity</th><th scope="col">Version</th><th scope="col">Group</th><th scope="col">Opens</th><th scope="col">Due</th><th scope="col">Required</th><th scope="col">Status</th></tr></thead><tbody>{data.assignments.map((assignment, index) => <tr key={`${assignment.groupCode}-${assignment.activityKey}-${index}`}><th scope="row"><code>{assignment.activityKey}</code></th><td>{assignment.activityVersion}</td><td>{assignment.groupCode}</td><td>{assignment.opensAt ? formatDate(assignment.opensAt) : "Always available"}</td><td>{formatDate(assignment.dueAt)}</td><td>{assignment.required ? "Yes" : "No"}</td><td><StatusBadge label={assignment.active ? "active" : "inactive"} tone={assignment.active ? "positive" : "neutral"} /></td></tr>)}</tbody></table></div> : <EmptyState title="No assignments" body="No assignment records are visible." />}</section><section className="notice-card notice-card--warning"><strong>Mutation workflow pending</strong><p>Assignment creation remains disabled until an audited, idempotent backend RPC is approved.</p></section></>;
 }
 
-function AssignmentsPage({ openPending }: { openPending: (action: PendingAction) => void }) {
-  return (
-    <>
-      <PageHeader moduleId="assignments" actionLabel="Create assignment" onAction={() => openPending({ title: "Create an assignment" })} />
-      <section className="panel"><div className="panel__header"><div><p className="eyebrow">Synthetic local fixtures</p><h2>Assignment delivery</h2></div></div><div className="table-wrap"><table><thead><tr><th scope="col">Activity</th><th scope="col">Version</th><th scope="col">Group</th><th scope="col">Window</th><th scope="col">Required</th><th scope="col">Completion</th><th scope="col">Status</th></tr></thead><tbody>{ASSIGNMENTS.map((assignment) => <tr key={`${assignment.groupCode}-${assignment.activityKey}`}><th scope="row"><code>{assignment.activityKey}</code></th><td>{assignment.activityVersion}</td><td>{assignment.groupCode}</td><td>{assignment.opensAt ? `${formatDate(assignment.opensAt)} – ${formatDate(assignment.dueAt)}` : "Always available fixture"}</td><td>{assignment.required ? "Yes" : "No"}</td><td>{assignment.completionState}</td><td><StatusBadge label={assignment.active ? "active" : "inactive"} tone={assignment.active ? "positive" : "neutral"} /></td></tr>)}</tbody></table></div></section>
-      <section className="notice-card notice-card--warning"><strong>Mutation workflow pending</strong><p>Assignment creation needs an audited, idempotent backend RPC with availability, version and group validation before this UI can submit changes.</p></section>
-    </>
-  );
+function AttemptsPage({ data }: { data: AdminDataSnapshot }) {
+  return <><PageHeader moduleId="attempts" /><section className="panel"><div className="panel__header"><div><p className="eyebrow">Summary evidence only</p><h2>Attempt history</h2></div><span className="count-chip">{data.attempts.length} records</span></div>{data.attempts.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Learner</th><th scope="col">Group</th><th scope="col">Activity</th><th scope="col">Attempt</th><th scope="col">Score</th><th scope="col">Marking</th><th scope="col">Evidence</th><th scope="col">Completed</th><th scope="col">Status</th></tr></thead><tbody>{data.attempts.map((attempt) => <tr key={attempt.attemptId}><th scope="row"><code>{attempt.learnerNumber}</code></th><td>{attempt.groupCode}</td><td><span className="table-primary">{attempt.activityKey}</span><small>{attempt.activityVersion}</small></td><td>{attempt.attemptNumber}</td><td>{scoreLabel(attempt.score, attempt.maxScore)}</td><td>{attempt.markingSource}</td><td>{attempt.evidenceLevel.replaceAll("_", " ")}</td><td>{formatDate(attempt.completedAt)}</td><td><StatusBadge label={attempt.status} tone={toneForStatus(attempt.status)} /></td></tr>)}</tbody></table></div> : <EmptyState title="No attempts" body="No summary-level attempt records are available." />}</section><section className="notice-card notice-card--info"><strong>Response payloads excluded</strong><p>This general list intentionally reads no learner response content.</p></section></>;
 }
 
-function AnalyticsPage() {
-  return (
-    <>
-      <PageHeader moduleId="analytics" />
-      <section className="notice-card notice-card--info"><strong>No fabricated analytics</strong><p>The backend has attempt and progress foundations, but no approved administrative analytics contract. These panels define the intended questions and remain empty until real aggregated data is available.</p></section>
-      <div className="card-grid card-grid--4">
-        {ANALYTIC_LENSES.map(([title, detail]) => <article className="analytics-placeholder" key={title}><div className="analytics-placeholder__header"><span aria-hidden="true">∿</span><StatusBadge label="contract pending" tone="neutral" /></div><h2>{title}</h2><p>{detail}</p><div className="analytics-placeholder__chart" aria-hidden="true"><span /><span /><span /><span /></div><small>Awaiting approved analytics view</small></article>)}
-      </div>
-    </>
-  );
+function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
+  return <><PageHeader moduleId="analytics" /><section className="metrics-grid" aria-label="Backend analytics summary"><MetricCard label="Completed attempts" value={String(data.dashboardSummary.completedAttempts)} detail="Backend aggregate" tone="positive" /><MetricCard label="Average score" value={percentageLabel(data.dashboardSummary.averageScorePercentage)} detail="Across completed attempts" tone="info" /><MetricCard label="Activity groups" value={String(data.activityPerformance.length)} detail="Grouped performance rows" tone="neutral" /></section><section className="panel"><div className="panel__header"><div><p className="eyebrow">Backend-derived aggregates</p><h2>Activity performance</h2></div></div>{data.activityPerformance.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Activity</th><th scope="col">Group</th><th scope="col">Learners</th><th scope="col">Completed</th><th scope="col">Average</th><th scope="col">Best</th><th scope="col">Latest</th></tr></thead><tbody>{data.activityPerformance.map((row) => <tr key={`${row.groupCode}-${row.activityKey}-${row.activityVersion}`}><th scope="row"><span className="table-primary">{row.activityKey}</span><small>{row.activityVersion}</small></th><td>{row.groupCode}</td><td>{row.learnerCount}</td><td>{row.completedAttempts}</td><td>{percentageLabel(row.averageScorePercentage)}</td><td>{percentageLabel(row.bestScorePercentage)}</td><td>{formatDate(row.latestCompletedAt)}</td></tr>)}</tbody></table></div> : <EmptyState title="No completed attempts" body="The backend analytics view has no aggregate rows yet." />}</section></>;
 }
 
-function MonitoringPage() {
-  return (
-    <>
-      <PageHeader moduleId="monitoring" />
-      <div className="card-grid card-grid--4">{HEALTH.map((health) => <article className="health-card" key={health.serviceKey}><div><span className={`health-dot health-dot--${health.status}`} aria-hidden="true" /><StatusBadge label={health.status} tone={toneForStatus(health.status)} /></div><h2>{health.label}</h2><p>{health.message}</p><small>{health.checkedAt ? `Checked ${formatDate(health.checkedAt)} · ${health.source}` : `No check available · ${health.source}`}</small></article>)}</div>
-      <section className="panel" aria-labelledby="monitoring-coverage-title"><div className="panel__header"><div><p className="eyebrow">Planned coverage</p><h2 id="monitoring-coverage-title">Operational signals</h2></div></div><div className="coverage-grid">{["API availability", "Submission failures", "Authentication failures", "Migration version", "Hub compatibility", "System health"].map((item, index) => <div key={item}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item}</strong><StatusBadge label={index === 5 ? "partial" : "pending"} tone={index === 5 ? "warning" : "neutral"} /></div>)}</div></section>
-    </>
-  );
+function MonitoringPage({ data }: { data: AdminDataSnapshot }) {
+  return <><PageHeader moduleId="monitoring" />{data.health.length ? <div className="card-grid card-grid--4">{data.health.map((health) => <article className="health-card" key={health.serviceKey}><div><span className={`health-dot health-dot--${health.status}`} aria-hidden="true" /><StatusBadge label={health.status} tone={toneForStatus(health.status)} /></div><h2>{health.label}</h2><p>{health.message}</p><small>{health.checkedAt ? `Checked ${formatDate(health.checkedAt)} · ${health.source}` : `No check available · ${health.source}`}</small></article>)}</div> : <section className="panel"><EmptyState title="No health signals" body="No safe health rows are available." /></section>}<section className="notice-card notice-card--info"><strong>Safe operational surface</strong><p>Only public status messages and validity timestamps are selected. Diagnostics, connection details and stack traces are excluded.</p></section></>;
 }
 
-function CertificationPage() {
-  return (
-    <>
-      <PageHeader moduleId="certification" />
-      <section className="certification-summary"><div><p className="eyebrow">Platform assurance</p><strong>0</strong><span>certified hubs</span></div><p>Both registered hubs have strong foundations and remain in testing. Certification should only follow complete functional, accessibility, security, compatibility, documentation and testing review.</p></section>
-      <div className="card-grid card-grid--2">{HUBS.map((hub) => <article className="certification-card" key={hub.hubCode}><div className="certification-card__header"><div><p className="eyebrow">{hub.hubCode}</p><h2>{hub.hubName}</h2></div><StatusBadge label="not certified" tone="warning" /></div><ul>{CERTIFICATION_AREAS.map((area, index) => <li key={area}><span>{area}</span><StatusBadge label={index < 2 ? "partial" : "review required"} tone={index < 2 ? "warning" : "neutral"} /></li>)}</ul><div className="certification-card__footer"><small>Review history will appear after the audit API is connected.</small></div></article>)}</div>
-    </>
-  );
+function CertificationPage({ data }: { data: AdminDataSnapshot }) {
+  const certified = data.hubs.filter((hub) => hub.certificationState === "certified").length;
+  return <><PageHeader moduleId="certification" /><section className="certification-summary"><div><p className="eyebrow">Platform assurance</p><strong>{certified}</strong><span>certified hubs</span></div><p>Certification metadata is shown only when it exists in the reviewed backend manifest. Missing metadata is not inferred.</p></section><div className="card-grid card-grid--2">{data.hubs.map((hub) => <article className="certification-card" key={hub.hubCode}><div className="certification-card__header"><div><p className="eyebrow">{hub.hubCode}</p><h2>{hub.hubName}</h2></div><StatusBadge label={hub.certificationState ?? "not recorded"} tone={hub.certificationState === "certified" ? "positive" : "neutral"} /></div></article>)}</div></>;
 }
 
-function ConfigurationPage({ openPending }: { openPending: (action: PendingAction) => void }) {
-  return (
-    <>
-      <PageHeader moduleId="configuration" actionLabel="Propose change" onAction={() => openPending({ title: "Propose a platform configuration change" })} />
-      <div className="dashboard-grid">
-        <section className="panel panel--span-2"><div className="panel__header"><div><p className="eyebrow">Version governance</p><h2>Platform contracts</h2></div></div><div className="table-wrap"><table><thead><tr><th scope="col">Contract</th><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Boundary</th></tr></thead><tbody>{CONTRACTS.map((contract) => <tr key={contract.contractKey}><th scope="row"><code>{contract.contractKey}</code></th><td>{contract.version}</td><td><StatusBadge label={contract.status} tone={toneForStatus(contract.status)} /></td><td>{contract.boundary}</td></tr>)}</tbody></table></div></section>
-        <section className="panel"><div className="panel__header"><div><p className="eyebrow">Administration</p><h2>Permission model</h2></div></div><div className="permission-stack">{["Platform Administrator", "Curriculum Administrator", "Teacher", "Course Administrator", "Quality Reviewer", "Read-only Auditor"].map((role, index) => <div key={role}><span className="record-card__mark" aria-hidden="true">{index + 1}</span><strong>{role}</strong><small>{index < 2 || index === 5 ? "Backend role foundation" : "Future role mapping"}</small></div>)}</div></section>
-      </div>
-      <section className="notice-card notice-card--warning"><strong>No frontend role rules</strong><p>The portal consumes backend-granted actions. It does not infer permissions from email addresses or treat displayed roles as authorisation.</p></section>
-    </>
-  );
+function ConfigurationPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
+  return <><PageHeader moduleId="configuration" actionLabel="Propose change" onAction={() => openPending({ title: "Propose a platform configuration change" })} /><section className="panel"><div className="panel__header"><div><p className="eyebrow">Version governance</p><h2>Platform contracts</h2></div><span className="count-chip">{data.contracts.length} versions</span></div>{data.contracts.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Contract</th><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Boundary</th></tr></thead><tbody>{data.contracts.map((contract) => <tr key={`${contract.contractKey}-${contract.version}`}><th scope="row"><code>{contract.contractKey}</code></th><td>{contract.version}</td><td><StatusBadge label={contract.status} tone={toneForStatus(contract.status)} /></td><td>{contract.boundary}</td></tr>)}</tbody></table></div> : <EmptyState title="No contracts" body="No platform contract versions are visible." />}</section><section className="notice-card notice-card--warning"><strong>No frontend role rules</strong><p>The portal uses backend staff context and does not infer permissions from email addresses, routes or feature flags.</p></section></>;
 }
 
-function AuditPage() {
-  const [searched, setSearched] = useState(false);
-  return (
-    <>
-      <PageHeader moduleId="audit" />
-      <section className="panel">
-        <h2 className="sr-only">Audit events</h2>
-        <form className="audit-filters" onSubmit={(event) => { event.preventDefault(); setSearched(true); }}>
-          <div><label htmlFor="audit-query">Search</label><input id="audit-query" type="search" placeholder="Action or safe target key" /></div>
-          <div><label htmlFor="audit-actor">Actor</label><select id="audit-actor"><option>All actors</option><option>Staff</option><option>Learner</option><option>Service</option><option>System</option></select></div>
-          <div><label htmlFor="audit-outcome">Outcome</label><select id="audit-outcome"><option>All outcomes</option><option>Succeeded</option><option>Failed</option><option>Denied</option></select></div>
-          <div><label htmlFor="audit-from">From</label><input id="audit-from" type="date" /></div>
-          <button className="button button--primary" type="submit">Apply filters</button>
-        </form>
-        <EmptyState title={searched ? "No matching demo events" : "No live audit events"} body="The read view is prepared. Connect an authorised admin_api client to search actor, action, target, timestamp and safe context." />
-      </section>
-      <section className="notice-card notice-card--info"><strong>Sensitive context stays protected</strong><p>Audit results must minimise context and never expose tokens, passwords, arbitrary learner PII or sensitive backend responses.</p></section>
-    </>
-  );
+function AuditPage({ data }: { data: AdminDataSnapshot }) {
+  const [query, setQuery] = useState("");
+  const visibleEvents = data.auditEvents.filter((event) => `${event.eventKey} ${event.entityType} ${event.entityKey ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()));
+  return <><PageHeader moduleId="audit" /><section className="panel"><h2 className="sr-only">Audit events</h2><div className="toolbar"><div className="toolbar__search"><label htmlFor="audit-query">Search safe audit fields</label><input id="audit-query" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Action or target key" /></div><span className="toolbar__count" role="status">{visibleEvents.length} events</span></div>{visibleEvents.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Event</th><th scope="col">Actor</th><th scope="col">Entity</th><th scope="col">Target</th><th scope="col">Outcome</th><th scope="col">Occurred</th></tr></thead><tbody>{visibleEvents.map((event, index) => <tr key={`${event.eventKey}-${event.occurredAt}-${index}`}><th scope="row"><code>{event.eventKey}</code></th><td>{event.actorType}</td><td>{event.entityType}</td><td>{event.entityKey ?? "—"}</td><td><StatusBadge label={event.outcome} tone={toneForStatus(event.outcome)} /></td><td>{formatDate(event.occurredAt)}</td></tr>)}</tbody></table></div> : <EmptyState title={query ? "No matching audit events" : "No audit events"} body="No safe event summaries are available for this query." />}</section><section className="notice-card notice-card--info"><strong>Sensitive context stays protected</strong><p>The portal does not select audit context, tokens, credentials or arbitrary learner PII.</p></section></>;
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
+  const { data } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  if (!data) return null;
   const openPending = (action: PendingAction) => setPendingAction(action);
   let content: React.ReactNode;
 
   switch (moduleId) {
-    case "dashboard": content = <DashboardPage />; break;
-    case "hubs": content = <HubRegistryPage openPending={openPending} />; break;
-    case "courses": content = <CoursesPage openPending={openPending} />; break;
-    case "curriculum": content = <CurriculumPage openPending={openPending} />; break;
-    case "activities": content = <ActivitiesPage openPending={openPending} />; break;
-    case "learners": content = <LearnersPage openPending={openPending} />; break;
-    case "teachers": content = <TeachersPage openPending={openPending} />; break;
-    case "groups": content = <GroupsPage openPending={openPending} />; break;
-    case "enrolments": content = <EnrolmentsPage openPending={openPending} />; break;
-    case "assignments": content = <AssignmentsPage openPending={openPending} />; break;
-    case "analytics": content = <AnalyticsPage />; break;
-    case "monitoring": content = <MonitoringPage />; break;
-    case "certification": content = <CertificationPage />; break;
-    case "configuration": content = <ConfigurationPage openPending={openPending} />; break;
-    case "audit": content = <AuditPage />; break;
-    default: content = <DashboardPage />;
+    case "dashboard": content = <DashboardPage data={data} />; break;
+    case "hubs": content = <HubRegistryPage data={data} openPending={openPending} />; break;
+    case "courses": content = <CoursesPage links={data.hubCourseLinks} openPending={openPending} />; break;
+    case "curriculum": content = <DeferredLearningPage moduleId="curriculum" openPending={openPending} />; break;
+    case "activities": content = <DeferredLearningPage moduleId="activities" openPending={openPending} />; break;
+    case "learners": content = <LearnersPage data={data} openPending={openPending} />; break;
+    case "teachers": content = <TeachersPage data={data} openPending={openPending} />; break;
+    case "groups": content = <GroupsPage data={data} openPending={openPending} />; break;
+    case "enrolments": content = <EnrolmentsPage data={data} openPending={openPending} />; break;
+    case "assignments": content = <AssignmentsPage data={data} openPending={openPending} />; break;
+    case "attempts": content = <AttemptsPage data={data} />; break;
+    case "analytics": content = <AnalyticsPage data={data} />; break;
+    case "monitoring": content = <MonitoringPage data={data} />; break;
+    case "certification": content = <CertificationPage data={data} />; break;
+    case "configuration": content = <ConfigurationPage data={data} openPending={openPending} />; break;
+    case "audit": content = <AuditPage data={data} />; break;
+    default: content = <DashboardPage data={data} />;
   }
 
-  return (
-    <>
-      {content}
-      <PendingActionDialog action={pendingAction} onClose={() => setPendingAction(null)} />
-    </>
-  );
+  return <>{content}<PendingActionDialog action={pendingAction} onClose={() => setPendingAction(null)} /></>;
 }

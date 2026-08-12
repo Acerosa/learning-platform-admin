@@ -19,7 +19,15 @@ Teacher status does not automatically confer platform administration.
 
 The interface is designed for future contexts including Platform Administrator, Curriculum Administrator, Teacher, Course Administrator, Quality Reviewer and Read-only Auditor.
 
-Backend 0.1.0 currently defines `platform_admin`, `curriculum_admin`, `operations`, `auditor` and `support`. The portal does not invent a permanent role-to-permission map for the additional product roles.
+Backend 0.2.0 currently defines `platform_admin`, `curriculum_admin`, `operations`, `auditor` and `support`. The MVP portal requires `platform_admin`; it does not invent a permanent role-to-permission map for future product roles.
+
+## Portal access states
+
+- No Auth session: staff sign-in surface.
+- Auth session without an active teacher mapping: access denied.
+- Active teacher without `platform_admin`: access denied.
+- Active teacher with active `platform_admin`: shell and live reads enabled.
+- Live read/configuration failure: unavailable state with no demo substitution.
 
 ## UI policy
 
@@ -29,6 +37,7 @@ Backend 0.1.0 currently defines `platform_admin`, `curriculum_admin`, `operation
 - Mutation controls must remain pending until the backend documents the required role/action.
 - Access denial must be safe and must not reveal protected data.
 - Demo mode receives an explicit demonstration action snapshot and is never treated as an authenticated session.
+- The browser credential must be a publishable or legacy anon key; service-role and secret keys are rejected.
 
 ## Review requirements
 

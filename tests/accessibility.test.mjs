@@ -19,7 +19,7 @@ async function audit(pathname) {
   });
 }
 
-for (const route of ["/", "/hubs", "/learners", "/analytics", "/audit"]) {
+for (const route of ["/", "/hubs", "/learners", "/attempts", "/analytics", "/audit"]) {
   test(`${route} has no automated WCAG A/AA structural violations`, async () => {
     const results = await audit(route);
     assert.equal(

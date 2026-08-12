@@ -1,10 +1,16 @@
 import type {
+  ActivityPerformanceRecord,
+  AdminDataSnapshot,
   AdminReadService,
   AssignmentRecord,
+  AttemptRecord,
   AuditEventRecord,
+  CurrentStaffContextRecord,
+  DashboardSummaryRecord,
   EnrolmentRecord,
   GroupRecord,
   HealthRecord,
+  HubCourseLinkRecord,
   HubRecord,
   LearnerRecord,
   PlatformContractRecord,
@@ -15,66 +21,109 @@ export const HUBS: readonly HubRecord[] = Object.freeze([
   {
     hubCode: "unit-3-cyber-security",
     hubName: "Unit 3 Cyber Security Hub",
+    description: "Learner hub for OCR Level 3 IT Unit 3 Cyber Security.",
     hubVersion: "0.1.0",
+    manifestVersion: "1.0.0",
+    coreVersion: "0.1.0",
+    learnerApiVersion: "0.1.0",
+    submissionContractVersion: "0.1.0",
     platformVersion: "0.1.0",
     subject: "OCR Level 3 IT Unit 3 Cyber Security",
     repositoryUrl: "https://github.com/Acerosa/unit-3-Cyber-Security-Hub",
     deploymentUrl: "https://acerosa.github.io/unit-3-Cyber-Security-Hub/",
     curriculumModel: "course/unit/week/session/activity/learning-outcome",
     activityTypes: ["retrieval-quiz", "classification", "matching", "reflection"],
+    evidenceCapabilities: ["question-level"],
     features: { authentication: true, onboarding: true, progress: true, codingExercises: false },
+    compatibility: {
+      required: {
+        coreVersion: "0.1.0",
+        learnerApiContractVersion: "0.1.0",
+        submissionContractVersion: "0.1.0",
+      },
+    },
     status: "testing",
     active: true,
-    certified: false,
+    certificationState: null,
   },
   {
     hubCode: "tlevel-software-development",
     hubName: "T Level Digital Software Development Hub",
+    description: "Learner hub for T Level Digital Software Development.",
     hubVersion: "0.1.0",
+    manifestVersion: "1.0.0",
+    coreVersion: "0.1.0",
+    learnerApiVersion: "0.1.0",
+    submissionContractVersion: "0.1.0",
     platformVersion: "0.1.0",
     subject: "T Level Digital Software Development",
     repositoryUrl: "https://github.com/Acerosa/tlevel-software-development-hub",
     deploymentUrl: "https://acerosa.github.io/tlevel-software-development-hub/",
     curriculumModel: "course/unit/week/session/activity/learning-outcome",
     activityTypes: ["diagnostic", "classification", "coding-exercise"],
+    evidenceCapabilities: ["question-level"],
     features: {
       authentication: true,
       onboarding: true,
       progress: true,
       codingExercises: true,
     },
+    compatibility: {
+      required: {
+        coreVersion: "0.1.0",
+        learnerApiContractVersion: "0.1.0",
+        submissionContractVersion: "0.1.0",
+      },
+    },
     status: "testing",
     active: true,
-    certified: false,
+    certificationState: null,
+  },
+]);
+
+export const HUB_COURSE_LINKS: readonly HubCourseLinkRecord[] = Object.freeze([
+  {
+    hubCode: "unit-3-cyber-security",
+    courseKey: "ocr-level-3-it",
+    courseTitle: "OCR Level 3 IT",
+    active: true,
+    linkedAt: "2026-08-11T00:00:00Z",
+  },
+  {
+    hubCode: "tlevel-software-development",
+    courseKey: "t-level-digital-software-development",
+    courseTitle: "T Level Digital Software Development",
+    active: true,
+    linkedAt: "2026-08-11T00:00:00Z",
   },
 ]);
 
 export const CONTRACTS: readonly PlatformContractRecord[] = Object.freeze([
-  { contractKey: "learner-api", version: "0.1.0", status: "active", boundary: "Approved api schema views and RPCs only" },
-  { contractKey: "submission", version: "0.1.0", status: "active", boundary: "api.submit_attempt · identity derived from auth.uid()" },
-  { contractKey: "admin-api", version: "0.1.0", status: "draft", boundary: "Read-only admin_api views" },
+  { contractKey: "hub-manifest", version: "1.0.0", status: "active", boundary: "LHDS learning-platform-hub.json", compatibility: {} },
+  { contractKey: "learning-platform-core", version: "0.1.0", status: "active", boundary: "Shared frontend platform", compatibility: {} },
+  { contractKey: "learner-api", version: "0.1.0", status: "active", boundary: "Approved api schema views and RPCs only", compatibility: {} },
+  { contractKey: "submission", version: "0.1.0", status: "active", boundary: "api.submit_attempt · identity derived from auth.uid()", compatibility: {} },
+  { contractKey: "admin-api", version: "0.1.0", status: "retired", boundary: "Read-only foundation", compatibility: {} },
+  { contractKey: "admin-api", version: "0.2.0", status: "draft", boundary: "Authenticated staff read models", compatibility: { previousVersion: "0.1.0" } },
 ]);
 
 export const HEALTH: readonly HealthRecord[] = Object.freeze([
-  { serviceKey: "local-database", label: "Local database fixture", status: "healthy", checkedAt: "2026-08-11T09:00:00Z", message: "Synthetic backend fixtures are available for local validation.", source: "fixture" },
-  { serviceKey: "hosted-admin-api", label: "Hosted admin API", status: "unknown", checkedAt: null, message: "Live authenticated connectivity has not been configured.", source: "pending" },
-  { serviceKey: "authentication-monitoring", label: "Authentication monitoring", status: "unknown", checkedAt: null, message: "No external monitoring collector is configured.", source: "pending" },
-  { serviceKey: "deployment-status", label: "Deployment status", status: "unknown", checkedAt: null, message: "No deployment integration contract exists yet.", source: "pending" },
+  { serviceKey: "local-database", label: "Local Database", status: "healthy", checkedAt: "2026-08-11T09:00:00Z", validUntil: "2026-08-12T09:00:00Z", message: "Synthetic backend fixtures are available for local validation.", source: "fixture" },
+  { serviceKey: "hosted-admin-api", label: "Hosted Admin API", status: "unknown", checkedAt: null, validUntil: null, message: "Live authenticated connectivity is not configured in demo mode.", source: "pending" },
 ]);
 
 export const LEARNERS: readonly LearnerRecord[] = Object.freeze([
-  { studentNumber: "SYNTH-0001", displayName: "Synthetic Student A", active: true, groupCode: "TEST-GROUP-A", enrolmentCount: 1 },
-  { studentNumber: "SYNTH-0002", displayName: "Synthetic Student B", active: true, groupCode: "TEST-GROUP-B", enrolmentCount: 1 },
+  { studentNumber: "SYNTH-0001", displayName: "Synthetic Student A", active: true, groupCodes: ["TEST-GROUP-A"], activeEnrolmentCount: 1 },
+  { studentNumber: "SYNTH-0002", displayName: "Synthetic Student B", active: true, groupCodes: ["TEST-GROUP-B"], activeEnrolmentCount: 1 },
 ]);
 
 export const TEACHERS: readonly TeacherRecord[] = Object.freeze([
-  { staffReference: "SYNTH-TEACHER-A", displayName: "Synthetic Teacher A", active: true, groupCount: 1, courseAccess: "1 via group access", roleLabel: "No fixture platform role" },
-  { staffReference: "SYNTH-TEACHER-B", displayName: "Synthetic Teacher B", active: true, groupCount: 1, courseAccess: "1 via group access", roleLabel: "No fixture platform role" },
+  { staffReference: "SYNTH-TEACHER-A", displayName: "Synthetic Teacher A", active: true, roleLabel: "platform admin" },
 ]);
 
 export const GROUPS: readonly GroupRecord[] = Object.freeze([
-  { groupCode: "TEST-GROUP-A", groupName: "Synthetic Test Group A", academicYear: "2026–27", yearGroup: "Year 1", courseTitle: "T Level Digital Software Development", hubName: "T Level Digital Software Development Hub", capacity: null, registrationOpen: true, active: true },
-  { groupCode: "TEST-GROUP-B", groupName: "Synthetic Test Group B", academicYear: "2026–27", yearGroup: "Year 2", courseTitle: "T Level Digital Software Development", hubName: "T Level Digital Software Development Hub", capacity: null, registrationOpen: false, active: true },
+  { groupCode: "TEST-GROUP-A", groupName: "Synthetic Test Group A", academicYear: "2026-27", yearGroup: "Year 1", courseKey: "t-level-digital-software-development", courseTitle: "T Level Digital Software Development", registrationOpen: true, active: true, activeLearnerCount: 1 },
+  { groupCode: "TEST-GROUP-B", groupName: "Synthetic Test Group B", academicYear: "2026-27", yearGroup: "Year 2", courseKey: "t-level-digital-software-development", courseTitle: "T Level Digital Software Development", registrationOpen: false, active: true, activeLearnerCount: 1 },
 ]);
 
 export const ENROLMENTS: readonly EnrolmentRecord[] = Object.freeze([
@@ -83,14 +132,50 @@ export const ENROLMENTS: readonly EnrolmentRecord[] = Object.freeze([
 ]);
 
 export const ASSIGNMENTS: readonly AssignmentRecord[] = Object.freeze([
-  { groupCode: "TEST-GROUP-A", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", opensAt: null, dueAt: null, required: true, active: true, completionState: "Analytics pending" },
-  { groupCode: "TEST-GROUP-B", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", opensAt: null, dueAt: null, required: true, active: true, completionState: "Analytics pending" },
+  { groupCode: "TEST-GROUP-A", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", opensAt: null, dueAt: null, required: true, active: true },
+  { groupCode: "TEST-GROUP-B", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", opensAt: null, dueAt: null, required: true, active: true },
 ]);
+
+export const ATTEMPTS: readonly AttemptRecord[] = Object.freeze([
+  { attemptId: "demo-attempt-a", learnerNumber: "SYNTH-0001", groupCode: "TEST-GROUP-A", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", attemptNumber: 1, status: "completed", score: 8, maxScore: 10, markingSource: "server", evidenceLevel: "question_level", receivedAt: "2026-08-11T08:50:00Z", completedAt: "2026-08-11T09:00:00Z" },
+  { attemptId: "demo-attempt-b", learnerNumber: "SYNTH-0002", groupCode: "TEST-GROUP-B", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", attemptNumber: 1, status: "completed", score: 6, maxScore: 10, markingSource: "server", evidenceLevel: "question_level", receivedAt: "2026-08-11T09:10:00Z", completedAt: "2026-08-11T09:20:00Z" },
+]);
+
+export const ACTIVITY_PERFORMANCE: readonly ActivityPerformanceRecord[] = Object.freeze([
+  { groupCode: "TEST-GROUP-A", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", completedAttempts: 1, learnerCount: 1, averageScorePercentage: 80, bestScorePercentage: 80, firstCompletedAt: "2026-08-11T09:00:00Z", latestCompletedAt: "2026-08-11T09:00:00Z" },
+  { groupCode: "TEST-GROUP-B", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", completedAttempts: 1, learnerCount: 1, averageScorePercentage: 60, bestScorePercentage: 60, firstCompletedAt: "2026-08-11T09:20:00Z", latestCompletedAt: "2026-08-11T09:20:00Z" },
+]);
+
+export const DASHBOARD_SUMMARY: DashboardSummaryRecord = Object.freeze({
+  registeredHubs: 2,
+  activeHubs: 2,
+  activeLearners: 2,
+  activeGroups: 2,
+  activeEnrolments: 2,
+  assignments: 2,
+  recentAttempts: 2,
+  completedAttempts: 2,
+  averageScorePercentage: 70,
+  healthyServices: 1,
+  serviceCount: 2,
+  activeContracts: 4,
+  contractCount: 6,
+});
 
 export const AUDIT_EVENTS: readonly AuditEventRecord[] = Object.freeze([]);
 
+const DEMO_STAFF_CONTEXT: CurrentStaffContextRecord = Object.freeze({
+  teacherId: "demo-platform-admin",
+  staffReference: "DEMO-ADMIN",
+  displayName: "Platform Administrator",
+  active: true,
+  activeRoles: ["platform_admin"],
+});
+
 export const demoAdminService: AdminReadService = Object.freeze({
+  async getCurrentStaffContext() { return DEMO_STAFF_CONTEXT; },
   async listHubs() { return HUBS; },
+  async listHubCourseLinks() { return HUB_COURSE_LINKS; },
   async listContracts() { return CONTRACTS; },
   async listHealth() { return HEALTH; },
   async listLearners() { return LEARNERS; },
@@ -98,11 +183,30 @@ export const demoAdminService: AdminReadService = Object.freeze({
   async listGroups() { return GROUPS; },
   async listEnrolments() { return ENROLMENTS; },
   async listAssignments() { return ASSIGNMENTS; },
+  async listAttempts() { return ATTEMPTS; },
+  async listActivityPerformance() { return ACTIVITY_PERFORMANCE; },
+  async getDashboardSummary() { return DASHBOARD_SUMMARY; },
   async listAuditEvents() { return AUDIT_EVENTS; },
 });
 
+export const DEMO_ADMIN_DATA: AdminDataSnapshot = Object.freeze({
+  hubs: HUBS,
+  hubCourseLinks: HUB_COURSE_LINKS,
+  contracts: CONTRACTS,
+  health: HEALTH,
+  learners: LEARNERS,
+  teachers: TEACHERS,
+  groups: GROUPS,
+  enrolments: ENROLMENTS,
+  assignments: ASSIGNMENTS,
+  attempts: ATTEMPTS,
+  activityPerformance: ACTIVITY_PERFORMANCE,
+  dashboardSummary: DASHBOARD_SUMMARY,
+  auditEvents: AUDIT_EVENTS,
+});
+
 export const DEMO_DATA_NOTICE = Object.freeze({
-  title: "Foundation data",
+  title: "Demo data",
   message:
-    "Showing reviewed registry manifests and synthetic local fixtures. Live admin API connectivity is not configured.",
+    "Showing reviewed registry metadata and synthetic local fixtures. Set the explicit live environment mode to authenticate against admin_api.",
 });

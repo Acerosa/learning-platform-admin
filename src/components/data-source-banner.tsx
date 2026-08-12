@@ -1,14 +1,14 @@
-import { DEMO_DATA_NOTICE } from "../services/demo-admin-service";
+import type { AdminDataSourceStatus } from "../stores/admin-portal";
 
-export function DataSourceBanner() {
+export function DataSourceBanner({ status }: { status: AdminDataSourceStatus }) {
   return (
-    <section className="data-source-banner" aria-label="Data source status">
-      <span className="data-source-banner__mark" aria-hidden="true">i</span>
+    <section className={`data-source-banner data-source-banner--${status.state}`} aria-label="Data source status">
+      <span className="data-source-banner__mark" aria-hidden="true">{status.mode === "live" ? "●" : "i"}</span>
       <div>
-        <strong>{DEMO_DATA_NOTICE.title}</strong>
-        <span>{DEMO_DATA_NOTICE.message}</span>
+        <strong>{status.title}</strong>
+        <span>{status.message}</span>
       </div>
-      <span className="data-source-banner__version">admin_api 0.1.0 · draft</span>
+      <span className="data-source-banner__version">admin_api 0.2.0 · draft</span>
     </section>
   );
 }

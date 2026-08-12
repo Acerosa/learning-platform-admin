@@ -10,14 +10,21 @@ import {
   getModuleHref,
   type AdminModuleId,
 } from "../router/modules";
-import { DEMO_ADMIN_SESSION } from "../stores/admin-session";
+import type { AdminDataSourceStatus } from "../stores/admin-portal";
+import type { AdminSessionSnapshot } from "../stores/admin-session";
 import { usePlatformTheme } from "../theme/use-platform-theme";
 
 export function AdminShell({
   activeModule,
+  session,
+  dataSource,
+  onSignOut,
   children,
 }: {
   activeModule: AdminModuleId;
+  session: AdminSessionSnapshot;
+  dataSource: AdminDataSourceStatus;
+  onSignOut?: () => Promise<void>;
   children: React.ReactNode;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -82,8 +89,8 @@ export function AdminShell({
           ))}
         </nav>
         <div className="admin-sidebar__footer">
-          <span className="environment-pill"><span aria-hidden="true" /> Foundation</span>
-          <small>Portal 0.1.0</small>
+          <span className="environment-pill"><span aria-hidden="true" /> {dataSource.mode === "live" ? "Live" : "Demo"}</span>
+          <small>Portal 0.2.0</small>
         </div>
       </aside>
       {navigationOpen ? <button className="navigation-backdrop" type="button" onClick={() => setNavigationOpen(false)} aria-label="Close navigation" /> : null}
@@ -132,11 +139,12 @@ export function AdminShell({
             <span aria-hidden="true">{resolvedTheme === "dark" ? "☀" : "◐"}</span>
           </button>
           <div className="admin-profile" aria-label="Current administration context">
-            <span className="admin-profile__avatar" aria-hidden="true">PA</span>
-            <span><strong>{DEMO_ADMIN_SESSION.displayName}</strong><small>Demonstration context</small></span>
+            <span className="admin-profile__avatar" aria-hidden="true">{session.displayName.split(" ").slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span>
+            <span><strong>{session.displayName}</strong><small>{session.source === "backend" ? session.roleLabels.join(", ") : "Demonstration context"}</small></span>
           </div>
+          {onSignOut ? <button className="button button--small button--secondary admin-sign-out" type="button" onClick={() => void onSignOut()}>Sign out</button> : null}
         </header>
-        <DataSourceBanner />
+        <DataSourceBanner status={dataSource} />
         <main id="admin-main" className="admin-main" tabIndex={-1}>
           {children}
         </main>
