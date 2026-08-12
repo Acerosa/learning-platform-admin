@@ -32,6 +32,27 @@ export class AdminReadError extends Error {
   }
 }
 
+export class AdminAuthError extends Error {
+  readonly code: "registration-failed" | "bootstrap-failed";
+
+  constructor(code: AdminAuthError["code"]) {
+    super(
+      code === "registration-failed"
+        ? "The administrator account could not be created."
+        : "Initial administrator setup could not be completed.",
+    );
+    this.name = "AdminAuthError";
+    this.code = code;
+  }
+}
+
+export function registrationValidationMessage(
+  password: string,
+  confirmPassword: string,
+) {
+  return password === confirmPassword ? null : "Passwords must match.";
+}
+
 function textValue(value: unknown) {
   return typeof value === "string" ? value : "";
 }
@@ -158,6 +179,41 @@ export function createSupabaseAdminClient(config: AdminRuntimeConfig) {
 }
 
 export type AdminSupabaseClient = ReturnType<typeof createSupabaseAdminClient>;
+
+export async function registerAdminAccount(
+  client: AdminSupabaseClient,
+  email: string,
+  password: string,
+  emailRedirectTo: string,
+) {
+  const { data, error } = await client.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo },
+  });
+
+  if (error) throw new AdminAuthError("registration-failed");
+
+  return Object.freeze({
+    confirmationRequired: !data.session,
+    sessionAvailable: Boolean(data.session),
+  });
+}
+
+export async function claimInitialPlatformAdmin(
+  client: AdminSupabaseClient,
+  bootstrapToken: string,
+) {
+  const { data, error } = await client
+    .schema("admin_api")
+    .rpc("claim_initial_platform_admin", {
+      p_bootstrap_token: bootstrapToken,
+    });
+
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new AdminAuthError("bootstrap-failed");
+  }
+}
 
 export function createSupabaseAdminReadService(
   client: AdminSupabaseClient,

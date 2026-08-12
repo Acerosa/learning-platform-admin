@@ -19,9 +19,11 @@ import {
 } from "../services/admin-runtime-config";
 import {
   AdminReadError,
+  claimInitialPlatformAdmin,
   createSupabaseAdminClient,
   createSupabaseAdminReadService,
   loadAdminData,
+  registerAdminAccount,
   type AdminSupabaseClient,
 } from "../services/supabase-admin-service";
 import {
@@ -53,7 +55,9 @@ interface AdminPortalContextValue {
   dataSource: AdminDataSourceStatus;
   authMessage: string | null;
   signIn(email: string, password: string): Promise<void>;
+  signUp(email: string, password: string): Promise<void>;
   requestMagicLink(email: string): Promise<void>;
+  claimInitialAdmin(bootstrapToken: string): Promise<void>;
   signOut(): Promise<void>;
   retry(): Promise<void>;
 }
@@ -209,6 +213,38 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     await refresh();
   }, [client, refresh]);
 
+  const signUp = useCallback(async (email: string, password: string) => {
+    if (!client) return;
+    setState((current) => ({ ...current, status: "loading", message: null }));
+    try {
+      const result = await registerAdminAccount(
+        client,
+        email,
+        password,
+        redirectUrl() ?? window.location.origin,
+      );
+      if (result.confirmationRequired) {
+        setState({
+          status: "signed-out",
+          session: SIGNED_OUT_ADMIN_SESSION,
+          data: null,
+          message:
+            "Check your email to confirm the account, then sign in. Account creation does not grant administration access by itself.",
+        });
+        return;
+      }
+      await refresh();
+    } catch {
+      setState({
+        status: "signed-out",
+        session: SIGNED_OUT_ADMIN_SESSION,
+        data: null,
+        message:
+          "The account could not be created. Check the details and try again, or sign in if the account already exists.",
+      });
+    }
+  }, [client, refresh]);
+
   const requestMagicLink = useCallback(async (email: string) => {
     if (!client) return;
     setState((current) => ({ ...current, status: "loading", message: null }));
@@ -228,6 +264,28 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         : "Check the staff inbox for a time-limited sign-in link.",
     });
   }, [client]);
+
+  const claimInitialAdmin = useCallback(async (bootstrapToken: string) => {
+    if (!client) return;
+    setState((current) => ({
+      ...current,
+      status: "loading",
+      data: null,
+      message: null,
+    }));
+    try {
+      await claimInitialPlatformAdmin(client, bootstrapToken);
+      await refresh();
+    } catch {
+      setState((current) => ({
+        ...current,
+        status: "access-denied",
+        data: null,
+        message:
+          "Initial administrator setup could not be completed. Check the one-time setup code or contact the platform owner.",
+      }));
+    }
+  }, [client, refresh]);
 
   const signOut = useCallback(async () => {
     if (!client) return;
@@ -282,10 +340,12 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     dataSource,
     authMessage: state.message,
     signIn,
+    signUp,
     requestMagicLink,
+    claimInitialAdmin,
     signOut,
     retry: refresh,
-  }), [config, dataSource, refresh, requestMagicLink, signIn, signOut, state]);
+  }), [claimInitialAdmin, config, dataSource, refresh, requestMagicLink, signIn, signOut, signUp, state]);
 
   return (
     <AdminPortalContext.Provider value={value}>

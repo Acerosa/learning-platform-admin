@@ -1594,6 +1594,35 @@ tbody tr:hover {
 .access-card > p:not(.eyebrow) { color: var(--admin-muted); line-height: 1.65; }
 .access-card__detail { font-size: 0.74rem; }
 
+.access-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-bottom: 1.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--admin-border);
+  border-radius: 0.7rem;
+  background: var(--admin-canvas);
+}
+
+.access-tabs button {
+  min-height: 2.4rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--admin-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.access-tabs button[aria-selected="true"] {
+  background: var(--admin-panel-raised);
+  color: var(--admin-text);
+  box-shadow: var(--admin-shadow-sm);
+}
+
 .access-message {
   margin: 1rem 0;
   padding: 0.75rem;
@@ -1610,6 +1639,15 @@ tbody tr:hover {
 .access-form input { width: 100%; }
 .access-form .button { width: 100%; }
 .button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.access-setup {
+  margin: 1.25rem 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--admin-border);
+}
+
+.access-setup h2 { margin: 0 0 0.45rem; font-size: 1rem; }
+.access-setup > p { margin: 0; color: var(--admin-muted); font-size: 0.78rem; line-height: 1.55; }
 
 .loading-line {
   display: block;

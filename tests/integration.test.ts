@@ -5,9 +5,13 @@ import {
   resolveAdminRuntimeConfig,
 } from "../src/services/admin-runtime-config.ts";
 import {
+  AdminAuthError,
   AdminReadError,
+  claimInitialPlatformAdmin,
   createSupabaseAdminReadService,
   loadAdminData,
+  registerAdminAccount,
+  registrationValidationMessage,
   type AdminSupabaseClient,
 } from "../src/services/supabase-admin-service.ts";
 import { sessionFromStaffContext } from "../src/stores/admin-session.ts";
@@ -64,6 +68,102 @@ test("runtime configuration defaults explicitly to demo and rejects secret keys"
   assert.equal(resolveAdminRuntimeConfig({ NEXT_PUBLIC_ADMIN_DATA_MODE: "live" }).valid, false);
   assert.equal(isBrowserSafeSupabaseKey("sb_publishable_browser"), true);
   assert.equal(isBrowserSafeSupabaseKey("sb_secret_server"), false);
+});
+
+test("registration validates matching passwords before calling Supabase", () => {
+  assert.equal(registrationValidationMessage("one-password", "different-password"), "Passwords must match.");
+  assert.equal(registrationValidationMessage("matching-password", "matching-password"), null);
+});
+
+test("registration uses the existing public client and respects confirmation sessions", async () => {
+  const calls: unknown[] = [];
+  const registrationClient = {
+    auth: {
+      async signUp(credentials: unknown) {
+        calls.push(credentials);
+        return { data: { session: null }, error: null };
+      },
+    },
+  } as unknown as AdminSupabaseClient;
+
+  const pending = await registerAdminAccount(
+    registrationClient,
+    "admin@example.invalid",
+    "test-password",
+    "https://example.invalid/learning-platform-admin/",
+  );
+
+  assert.deepEqual(calls, [{
+    email: "admin@example.invalid",
+    password: "test-password",
+    options: { emailRedirectTo: "https://example.invalid/learning-platform-admin/" },
+  }]);
+  assert.equal(pending.confirmationRequired, true);
+  assert.equal(pending.sessionAvailable, false);
+
+  const immediateClient = {
+    auth: {
+      async signUp() {
+        return { data: { session: { access_token: "public-session" } }, error: null };
+      },
+    },
+  } as unknown as AdminSupabaseClient;
+  const immediate = await registerAdminAccount(
+    immediateClient,
+    "admin@example.invalid",
+    "test-password",
+    "https://example.invalid/learning-platform-admin/",
+  );
+  assert.equal(immediate.confirmationRequired, false);
+  assert.equal(immediate.sessionAvailable, true);
+});
+
+test("registration errors are normalised without exposing provider details", async () => {
+  const client = {
+    auth: {
+      async signUp() {
+        return {
+          data: { session: null },
+          error: { message: "Email already registered: private provider detail" },
+        };
+      },
+    },
+  } as unknown as AdminSupabaseClient;
+
+  await assert.rejects(
+    () => registerAdminAccount(client, "admin@example.invalid", "password", "https://example.invalid/"),
+    (error: unknown) => error instanceof AdminAuthError
+      && error.code === "registration-failed"
+      && !error.message.includes("already registered"),
+  );
+});
+
+test("initial administrator claim sends only the one-time token through admin_api", async () => {
+  const calls: unknown[] = [];
+  const client = {
+    schema(schema: string) {
+      calls.push({ schema });
+      return {
+        async rpc(name: string, parameters: unknown) {
+          calls.push({ name, parameters });
+          return { data: [{ idempotent: false }], error: null };
+        },
+      };
+    },
+  } as unknown as AdminSupabaseClient;
+
+  await claimInitialPlatformAdmin(client, "one-time-token");
+  assert.deepEqual(calls, [
+    { schema: "admin_api" },
+    {
+      name: "claim_initial_platform_admin",
+      parameters: { p_bootstrap_token: "one-time-token" },
+    },
+  ]);
+  assert.deepEqual(
+    Object.keys((calls[1] as { parameters: Record<string, unknown> }).parameters),
+    ["p_bootstrap_token"],
+  );
 });
 
 test("learner and non-admin staff contexts are denied while platform admin is authorised", () => {

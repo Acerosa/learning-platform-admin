@@ -43,9 +43,10 @@ test("admin API names match the documented read-only backend surface", async () 
 });
 
 test("live integration uses Supabase Auth and the admin_api schema only", async () => {
-  const [service, portal] = await Promise.all([
+  const [service, portal, accessGate] = await Promise.all([
     readFile(new URL("src/services/supabase-admin-service.ts", root), "utf8"),
     readFile(new URL("src/stores/admin-portal.tsx", root), "utf8"),
+    readFile(new URL("src/components/admin-access-gate.tsx", root), "utf8"),
   ]);
   assert.match(service, /schema\("admin_api"\)/);
   assert.match(service, /current_staff_context/);
@@ -54,7 +55,13 @@ test("live integration uses Supabase Auth and the admin_api schema only", async 
   assert.match(portal, /signInWithPassword/);
   assert.match(portal, /signInWithOtp/);
   assert.match(portal, /onAuthStateChange/);
+  assert.match(service, /auth\.signUp/);
+  assert.match(service, /claim_initial_platform_admin/);
+  assert.match(accessGate, /Create account/);
+  assert.match(accessGate, /Confirm password/);
+  assert.match(accessGate, /One-time setup code/);
   assert.match(portal, /No demo data has been substituted/);
+  assert.doesNotMatch(`${service}\n${portal}\n${accessGate}`, /service_role|sb_secret_/i);
 });
 
 test("source contains no email-based role or permission checks", async () => {

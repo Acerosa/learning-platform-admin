@@ -23,6 +23,7 @@ function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
       <AdminSignIn
         message={portal.authMessage}
         onSignIn={portal.signIn}
+        onSignUp={portal.signUp}
         onMagicLink={portal.requestMagicLink}
       />
     );
@@ -32,6 +33,7 @@ function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
       <AdminAccessDenied
         displayName={portal.session.displayName}
         message={portal.authMessage}
+        onClaimInitialAdmin={portal.claimInitialAdmin}
         onSignOut={portal.signOut}
       />
     );
