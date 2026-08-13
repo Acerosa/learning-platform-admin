@@ -6,7 +6,7 @@ const routes = [
   ["/", "Dashboard"],
   ["/hubs", "Hub registry"],
   ["/courses", "Courses"],
-  ["/curriculum", "Curriculum"],
+  ["/curriculum", "Curriculum authoring"],
   ["/activities", "Activities"],
   ["/learners", "Learners"],
   ["/teachers", "Teachers"],
@@ -32,6 +32,18 @@ for (const [route, heading] of routes) {
     assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
   });
 }
+
+test("curriculum authoring exposes local draft workspace tabs", async () => {
+  const { html } = await renderText("/curriculum");
+  assert.match(html, /Authoring views/);
+  assert.match(html, /Curriculum/);
+  assert.match(html, /Weeks/);
+  assert.match(html, /Activities/);
+  assert.match(html, /Imports/);
+  assert.match(html, /Drafts/);
+  assert.match(html, /Ready for Review/);
+  assert.match(html, /There is no Published state/);
+});
 
 test("unknown module routes return not found", async () => {
   const { response } = await renderText("/not-a-module");

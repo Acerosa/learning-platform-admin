@@ -64,3 +64,9 @@ separately allow the deployed portal callback URL before live deployment.
 - Teacher administration read model.
 - Certification and review-history model.
 - External monitoring/event ingestion and deployment-status contracts.
+
+## Canonical curriculum authoring
+
+Admin authors the Unit 14 `lp.content.*` model locally. Validation, block registry, Excel sheet names and preview rendering come from the vendored engine in `vendor/learning-platform-content/0.1.0/`. Drafts are browser storage. No curriculum mutation RPCs were added in this phase.
+
+See [Curriculum authoring](curriculum-authoring.md).

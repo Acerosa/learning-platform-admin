@@ -19,7 +19,7 @@ async function audit(pathname) {
   });
 }
 
-for (const route of ["/", "/hubs", "/learners", "/attempts", "/analytics", "/audit"]) {
+for (const route of ["/", "/hubs", "/learners", "/attempts", "/analytics", "/audit", "/curriculum"]) {
   test(`${route} has no automated WCAG A/AA structural violations`, async () => {
     const results = await audit(route);
     assert.equal(
@@ -42,4 +42,17 @@ test("dashboard exposes navigation, main landmark and skip link", async () => {
   assert.match(html, /<main id="admin-main"/);
   assert.match(html, /<th scope="col">/);
   assert.match(html, /<th scope="row">/);
+});
+
+test("curriculum authoring exposes labelled controls and accessible tabs", async () => {
+  const { html } = await renderText("/curriculum");
+  assert.match(html, /<h1>Curriculum authoring<\/h1>/);
+  assert.match(html, /for="authoring-hub"/);
+  assert.match(html, /for="authoring-course"/);
+  assert.match(html, /role="tablist"/);
+  assert.match(html, /aria-label="Authoring views"/);
+  assert.match(html, /role="tab"/);
+  assert.match(html, /aria-selected="true"/);
+  assert.match(html, /Canonical learner preview/);
+  assert.doesNotMatch(html, /draggable="true"/);
 });

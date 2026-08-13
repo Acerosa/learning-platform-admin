@@ -7,8 +7,8 @@ All modules are registered in `src/router/modules.ts`. Their routes and navigati
 | Dashboard | Backend counts, recent attempts, contracts and health | Live read available |
 | Hub Registry | Search, filter, inspect metadata/contracts/course links and prepare lifecycle actions | Live read available; writes pending |
 | Courses | Authoritative hub/course associations | Live links available; catalogue mutation pending |
-| Curriculum | LHDS hierarchy, metadata readiness and lifecycle workflow | Admin contract pending |
-| Activities | Reviewed manifest counts, evidence/version/lifecycle readiness | Curriculum admin view pending |
+| Curriculum authoring | Canonical week/session/activity drafts, validation, preview and export | Local drafts; no backend writes |
+| Activities | Reviewed manifest counts, evidence/version/lifecycle readiness | Curriculum catalogue view pending |
 | Learners | Minimised directory and group/enrolment summaries | Live read available |
 | Teachers | Active platform role records and authority boundary | Live role read; full directory deferred |
 | Groups | Academic year, course, registration and learner count | Live read available |
@@ -21,4 +21,4 @@ All modules are registered in `src/router/modules.ts`. Their routes and navigati
 | Configuration | Versioned platform contracts | Live read available |
 | Audit | Safe filters and minimised event fields | Live read available |
 
-The portal remains hub-agnostic. Hub-specific curriculum names appear only as data from the registry and reviewed source artefacts.
+The portal remains hub-agnostic. Hub-specific curriculum names appear only as data from the registry and reviewed source artefacts. Curriculum authoring loads a canonical package and renders editors from object type; it does not special-case a hub id. Details: [Curriculum authoring](curriculum-authoring.md).

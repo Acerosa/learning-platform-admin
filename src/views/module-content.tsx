@@ -16,6 +16,7 @@ import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import { getAdminModule, type AdminModuleId } from "../router/modules";
 import { useAdminPortal } from "../stores/admin-portal";
 import { formatDate } from "../utils/format";
+import { CurriculumAuthoringPage } from "./curriculum-authoring";
 
 function toneForStatus(status: string): BadgeTone {
   if (["active", "healthy", "certified", "open", "production", "completed", "succeeded"].includes(status)) return "positive";
@@ -191,9 +192,8 @@ function CoursesPage({ links, openPending }: { links: readonly HubCourseLinkReco
   );
 }
 
-function DeferredLearningPage({ moduleId, openPending }: { moduleId: "curriculum" | "activities"; openPending: (action: PendingAction) => void }) {
-  const noun = moduleId === "curriculum" ? "curriculum item" : "activity";
-  return <><PageHeader moduleId={moduleId} actionLabel={`Create ${noun}`} onAction={() => openPending({ title: `Create ${noun}` })} /><section className="panel"><EmptyState title="Administration contract deferred" body={`The Phase 2 MVP does not add ${moduleId} authoring or protected-schema reads. Existing portal workflow boundaries remain prepared for a reviewed backend contract.`} /></section></>;
+function DeferredLearningPage({ moduleId, openPending }: { moduleId: "activities"; openPending: (action: PendingAction) => void }) {
+  return <><PageHeader moduleId={moduleId} actionLabel="Create activity" onAction={() => openPending({ title: "Create activity" })} /><section className="panel"><EmptyState title="Administration contract deferred" body="The Phase 2 MVP does not add activity-catalogue authoring or protected-schema reads. Canonical activity composition lives in Curriculum authoring. Existing portal workflow boundaries remain prepared for a reviewed backend contract." /></section></>;
 }
 
 function LearnersPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
@@ -254,7 +254,7 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
     case "dashboard": content = <DashboardPage data={data} />; break;
     case "hubs": content = <HubRegistryPage data={data} openPending={openPending} />; break;
     case "courses": content = <CoursesPage links={data.hubCourseLinks} openPending={openPending} />; break;
-    case "curriculum": content = <DeferredLearningPage moduleId="curriculum" openPending={openPending} />; break;
+    case "curriculum": content = <CurriculumAuthoringPage hubs={data.hubs} links={data.hubCourseLinks} />; break;
     case "activities": content = <DeferredLearningPage moduleId="activities" openPending={openPending} />; break;
     case "learners": content = <LearnersPage data={data} openPending={openPending} />; break;
     case "teachers": content = <TeachersPage data={data} openPending={openPending} />; break;

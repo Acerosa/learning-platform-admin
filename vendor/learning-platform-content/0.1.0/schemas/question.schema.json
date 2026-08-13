@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lp.content.question",
+  "title": "Learning Platform question",
+  "description": "Question data only. Blocks render questions. Do not attach rendering behaviour or default to in-browser answers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "id", "version", "metadata", "relationships"],
+  "properties": {
+    "schema": { "const": "lp.content.question" },
+    "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "metadata": {
+      "type": "object",
+      "required": ["kind", "prompt"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "marking": {
+          "type": "object",
+          "properties": {
+            "mode": { "enum": ["protected", "formative-local"] }
+          }
+        }
+      }
+    },
+    "relationships": { "type": "object" },
+    "options": { "type": "array" },
+    "stem": { "type": "string" }
+  }
+}
