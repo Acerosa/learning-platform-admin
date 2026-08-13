@@ -2,7 +2,7 @@ export const ADMIN_API_CONTRACT = Object.freeze({
   schema: "admin_api",
   version: "0.2.0",
   status: "draft",
-  mode: "read-only",
+  mode: "read-models-with-curriculum-publication",
 });
 
 export const ADMIN_API_VIEWS = Object.freeze({
@@ -20,6 +20,7 @@ export const ADMIN_API_VIEWS = Object.freeze({
   attempts: "admin_api.attempts",
   dashboardSummary: "admin_api.dashboard_summary",
   activityPerformance: "admin_api.activity_performance",
+  curriculumPublications: "admin_api.curriculum_publications",
 });
 
 export type HubLifecycle =
@@ -186,6 +187,33 @@ export interface AuditEventRecord {
   occurredAt: string;
 }
 
+export interface CurriculumPublicationRecord {
+  id: string;
+  hubCode: string;
+  courseKey: string;
+  packageVersion: string;
+  schemaVersion: string;
+  sourcePackageVersion: string;
+  status: "published" | "superseded";
+  author: string;
+  reviewer: string;
+  publicationNotes: string;
+  publishedBy: string;
+  createdAt: string;
+  publishedAt: string;
+  contentHash: string;
+}
+
+export interface PlatformPublicationResult {
+  id: string;
+  hubCode: string;
+  courseKey: string;
+  packageVersion: string;
+  status: string;
+  publishedAt: string;
+  idempotent: boolean;
+}
+
 export interface AdminDataSnapshot {
   hubs: readonly HubRecord[];
   hubCourseLinks: readonly HubCourseLinkRecord[];
@@ -200,6 +228,7 @@ export interface AdminDataSnapshot {
   activityPerformance: readonly ActivityPerformanceRecord[];
   dashboardSummary: DashboardSummaryRecord;
   auditEvents: readonly AuditEventRecord[];
+  curriculumPublications: readonly CurriculumPublicationRecord[];
 }
 
 export interface AdminReadService {
@@ -217,6 +246,7 @@ export interface AdminReadService {
   listActivityPerformance(): Promise<readonly ActivityPerformanceRecord[]>;
   getDashboardSummary(): Promise<DashboardSummaryRecord>;
   listAuditEvents(): Promise<readonly AuditEventRecord[]>;
+  listCurriculumPublications(): Promise<readonly CurriculumPublicationRecord[]>;
 }
 
 export interface AdminMutationService {
@@ -235,7 +265,7 @@ export interface AdminMutationService {
 export const ADMIN_MUTATION_STATUS = Object.freeze({
   status: "pending-backend-contract" as const,
   reason:
-    "Backend version 0.2.0 intentionally exposes no administrative mutation RPCs.",
+    "Backend version 0.2.0 exposes curriculum publication only. Other administrative mutation RPCs remain unspecified.",
   requiredBeforeEnablement: [
     "role and permission requirement",
     "validated transactional RPC",

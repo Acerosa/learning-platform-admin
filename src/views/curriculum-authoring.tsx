@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { HubCourseLinkRecord, HubRecord } from "../api/admin-api";
+import type { CurriculumPublicationRecord, HubCourseLinkRecord, HubRecord } from "../api/admin-api";
 import { ActivityComposer } from "../components/authoring/activity-composer";
 import { ArchivePanel } from "../components/authoring/archive-panel";
 import { ComparePanel } from "../components/authoring/compare-panel";
@@ -43,6 +43,7 @@ import {
   suggestNextVersion,
   updateReviewMetadata,
   publishVersion,
+  withPlatformPublication,
 } from "../content/versioning";
 
 type AuthoringTab =
@@ -99,10 +100,16 @@ export function CurriculumAuthoringPage({
   hubs,
   links,
   actor = "local-author",
+  publications = [],
+  platformAvailable = false,
+  onPublishToPlatform,
 }: {
   hubs: readonly HubRecord[];
   links: readonly HubCourseLinkRecord[];
   actor?: string;
+  publications?: readonly CurriculumPublicationRecord[];
+  platformAvailable?: boolean;
+  onPublishToPlatform?: (record: AuthoringDraft) => Promise<{ id: string; publishedAt: string; idempotent: boolean }>;
 }) {
   const defaultHub = hubs[0];
   const defaultLink = links.find((link) => link.hubCode === defaultHub?.hubCode) || links[0];
@@ -228,7 +235,7 @@ export function CurriculumAuthoringPage({
         <div>
           <p className="eyebrow">Curriculum administration</p>
           <h1>Curriculum authoring</h1>
-          <p>Admin edits Drafts. Learners consume Published content only. Publication stays in this browser and does not write to the backend or learner hubs.</p>
+          <p>Admin edits Drafts. Learners consume Published content only. Local Publish stays in this browser; Publish to Platform sends an approved snapshot to the backend catalogue. Learner hubs are not updated.</p>
         </div>
         <StatusBadge label={LIFECYCLE_LABELS[draft.status]} tone={lifecycleTone(draft.status)} />
       </header>
@@ -505,10 +512,44 @@ export function CurriculumAuthoringPage({
                   setDraft(published);
                   setPreviewId(published.id);
                 }
-                setMessage("Published locally. Learner hubs were not updated.");
+                setMessage("Published locally. Use Publish to Platform to send this snapshot to the backend.");
               } catch (error) {
                 showError(error);
               }
+            }}
+            publications={publications}
+            platformAvailable={platformAvailable}
+            onPublishToPlatform={() => {
+              void (async () => {
+                if (!onPublishToPlatform) {
+                  setMessage("Platform publication requires a live administrator session.");
+                  return;
+                }
+                const publishing = withPlatformPublication(draft, { platformPublicationState: "publishing" });
+                commit(publishing);
+                try {
+                  const result = await onPublishToPlatform(publishing);
+                  commit(withPlatformPublication(publishing, {
+                    platformPublicationState: "published",
+                    platformPublicationError: null,
+                    platformPublishedAt: result.publishedAt,
+                    platformPublicationId: result.id,
+                  }));
+                  setMessage(
+                    result.idempotent
+                      ? "This snapshot is already on the platform. Learner hubs were not updated."
+                      : "Published to the platform. Learner hubs were not updated.",
+                  );
+                } catch (error) {
+                  commit(withPlatformPublication(publishing, {
+                    platformPublicationState: "failed",
+                    platformPublicationError: error instanceof Error
+                      ? error.message
+                      : "Curriculum could not be published to the platform.",
+                  }));
+                  showError(error);
+                }
+              })();
             }}
           />
         ) : null}
