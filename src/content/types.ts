@@ -1,4 +1,17 @@
-export type DraftStatus = "draft" | "valid" | "invalid" | "ready-for-review";
+export const LIFECYCLE_STATUSES = [
+  "draft",
+  "ready-for-review",
+  "in-review",
+  "approved",
+  "published",
+  "superseded",
+  "archived",
+] as const;
+
+export type LifecycleStatus = (typeof LIFECYCLE_STATUSES)[number];
+
+/** Validation result is not a lifecycle state. Legacy alias for editable drafts. */
+export type DraftStatus = LifecycleStatus;
 
 export interface ValidationIssue {
   code: string;
@@ -37,14 +50,47 @@ export interface ContentPackage {
   assets: ContentDocument[];
 }
 
+export interface ReviewMetadata {
+  status: LifecycleStatus;
+  created: string;
+  updated: string;
+  author: string;
+  reviewer: string;
+  reviewDate: string | null;
+  approvalNotes: string;
+  publicationNotes: string;
+}
+
+export interface PublicationRecord {
+  version: string;
+  status: LifecycleStatus;
+  created: string;
+  published: string | null;
+  publishedBy: string;
+  sourcePackageVersion: string;
+  schemaVersion: string;
+}
+
 export interface AuthoringDraft {
   id: string;
   title: string;
   hubId: string;
   courseKey: string;
-  status: DraftStatus;
+  status: LifecycleStatus;
+  version: string;
   createdAt: string;
   updatedAt: string;
+  publishedAt: string | null;
+  author: string;
+  reviewer: string;
+  reviewDate: string | null;
+  approvalNotes: string;
+  publicationNotes: string;
+  publishedBy: string;
+  sourcePackageVersion: string;
+  schemaVersion: string;
+  basedOnVersionId: string | null;
+  basedOnVersion: string | null;
   package: ContentPackage;
 }
 

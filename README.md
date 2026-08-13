@@ -4,7 +4,7 @@ Version **0.2.0** — Platform Integration MVP for the Learning Platform Central
 
 [Open the administration dashboard](https://acerosa.github.io/learning-platform-admin/)
 
-This repository is the administration interface for the entire Learning Platform. It is not a learner hub. Curriculum authoring drafts local canonical `lp.content.*` objects and previews them with the shared learner renderer; it does not publish curriculum or replace hub delivery.
+This repository is the administration interface for the entire Learning Platform. It is not a learner hub. Curriculum authoring drafts local canonical `lp.content.*` objects, previews them with the shared learner renderer, and manages an Admin-local publication lifecycle. It does not write into learner hubs.
 
 ## Current state
 
@@ -15,7 +15,7 @@ This repository is the administration interface for the entire Learning Platform
 - Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
 - Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
 - Write journeys against backend data remain pending: they explain the missing mutation contract and never invent an endpoint.
-- Curriculum authoring drafts weeks, sessions and activities locally, validates them with `@learning-platform/content`, and exports canonical JSON. Publication is deferred.
+- Curriculum authoring drafts weeks, sessions and activities locally, validates them with `@learning-platform/content`, and exports canonical JSON. Publication versions stay in Admin browser storage.
 - No hosted credentials, database migrations or learner-hub source editing live here.
 
 ## Local development
@@ -80,6 +80,7 @@ learning-platform-admin/
 - [Architecture](docs/architecture.md)
 - [Modules](docs/modules.md)
 - [Curriculum authoring](docs/curriculum-authoring.md)
+- [Publication workflow](docs/publication-workflow.md)
 - [Backend and core integration](docs/integration.md)
 - [Permissions](docs/permissions.md)
 - [Deployment](docs/deployment.md)
@@ -88,8 +89,8 @@ learning-platform-admin/
 
 ## Known limitations
 
-- The backend has no administrative mutation RPCs in 0.2.0. Authoring drafts are local/exportable only.
-- Publication, GitHub curriculum automation, hosted curriculum writes, certification workflows, external monitoring ingestion and Weeks 2–19 authoring remain deferred.
+- The backend has no administrative mutation RPCs in 0.2.0. Authoring drafts and publication records are local/exportable only.
+- GitHub curriculum automation, hosted curriculum writes, certification workflows, external monitoring ingestion and Weeks 2–19 authoring remain deferred.
 - Demo-mode people, group, enrolment, assignment and attempt records are synthetic fixtures.
 - A hosted live release still requires approved environment configuration, Auth redirect URLs and hosted RLS integration validation.
 

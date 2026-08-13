@@ -129,19 +129,25 @@ URLs.
 
 ## Draft model
 
-Drafts are browser `localStorage` only (`lp.admin.authoring.drafts.v1`).
-They are not backend curriculum.
+Drafts and publication records are browser `localStorage` only
+(`lp.admin.authoring.records.v2`). They are not backend curriculum.
 
 Statuses:
 
 - Draft
-- Valid
-- Invalid
 - Ready for Review
+- In Review
+- Approved
+- Published
+- Superseded
+- Archived
 
-There is no Published status because publication is not implemented.
+Validation is a gate, not a status. Only Drafts are editable. Publishing
+creates an immutable Admin-local version; it does not write to the backend or
+learner hubs. Details: [Publication workflow](publication-workflow.md).
 
-Actions: save, resume, duplicate, delete, export.
+Actions: save, resume, duplicate, delete, export, review, publish, compare,
+restore as Draft, archive.
 
 ## Export
 
@@ -157,11 +163,12 @@ content. That fixture is not added to live Unit 14 Week 1.
 
 ## Future publishing
 
-Deferred:
+Local publication lifecycle, version history, compare and restore are
+implemented in Admin storage. Still deferred:
 
 - GitHub commit automation
 - hosted Supabase curriculum writes
-- approval workflows and collaborative editing
+- collaborative multi-user editing
 - AI generation
 - automatic assignment grading
 - Weeks 2–19 curriculum authoring

@@ -17,7 +17,7 @@ npm run test:unit
 - **Permissions:** source checks reject email-based role logic and document backend authority.
 - **Dashboard and modules:** rendered route tests verify backend-shaped metrics, tables, attempts, analytics and pending states.
 - **Hub registry, curriculum and people:** source/data contract tests verify the reviewed registry and synthetic fixtures.
-- **Curriculum authoring:** factories, stable IDs, JSON/Excel import, sanitisation, drafts, preview, export and shared content-engine interoperability.
+- **Curriculum authoring:** factories, stable IDs, JSON/Excel import, sanitisation, drafts, preview, export, publication lifecycle, compare, restore and shared content-engine interoperability.
 - **Accessibility:** axe checks run against server-rendered dashboard and module routes, including `/curriculum`; semantic checks cover landmarks, skip links, labels, tabs and scoped table headers.
 - **Responsive behaviour:** CSS contract tests require tablet/mobile breakpoints, contained table overflow, off-canvas navigation and reduced-motion support.
 - **Platform-core integration:** dependency, CSS and theme-service usage are asserted.
