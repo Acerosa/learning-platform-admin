@@ -17,7 +17,7 @@ It deliberately does not reuse learner header, learner account, learner onboardi
 
 The documented administrative boundary is `admin_api` version 0.2.0.
 
-| Portal service | Backend view |
+| Portal service | Backend contract |
 | --- | --- |
 | Current staff authority | `admin_api.current_staff_context` |
 | Hubs | `admin_api.hubs` |
@@ -34,6 +34,8 @@ The documented administrative boundary is `admin_api` version 0.2.0.
 | Dashboard counts | `admin_api.dashboard_summary` |
 | Activity analytics | `admin_api.activity_performance` |
 | Curriculum publications | `admin_api.curriculum_publications` |
+| Hub registration | `admin_api.register_hub` |
+| Curriculum publication | `admin_api.publish_curriculum` |
 
 All views rely on backend RLS. The portal must use an authenticated staff session and the public browser credential only. A service-role key must never be placed in this application.
 
@@ -60,7 +62,7 @@ separately allow the deployed portal callback URL before live deployment.
 
 ## Pending backend dependencies
 
-- Narrow mutation RPCs for hubs, groups, enrolments, assignments and staff roles.
+- Narrow mutation RPCs for groups, enrolments, assignments and staff roles.
 - Course catalogue administration.
 - Teacher administration read model.
 - Certification and review-history model.
