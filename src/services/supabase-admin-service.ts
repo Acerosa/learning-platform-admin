@@ -17,9 +17,11 @@ import type {
   HubRecord,
   LearnerRecord,
   PlatformContractRecord,
+  HubRegistrationResult,
   PlatformPublicationResult,
   TeacherRecord,
 } from "../api/admin-api";
+import type { HubRegistrationRequest } from "../content/hub-registration.ts";
 import { platformPublicationArgs } from "../content/platform-publication.ts";
 import type { AuthoringDraft } from "../content/types.ts";
 import type { AdminRuntimeConfig } from "./admin-runtime-config";
@@ -48,6 +50,41 @@ export class AdminAuthError extends Error {
     this.name = "AdminAuthError";
     this.code = code;
   }
+}
+
+const REGISTRATION_ERROR_MESSAGES: Record<string, string> = {
+  unavailable: "Hub registration requires a live administrator session.",
+  AUTHENTICATION_REQUIRED: "Sign in with an authorised administrator account to register a hub.",
+  HUB_REGISTRATION_NOT_AUTHORISED: "This account is not authorised to register hubs.",
+  HUB_MANIFEST_INVALID: "The hub manifest is incomplete or does not match the LHDS contract.",
+  HUB_INVALID_URL: "Repository and site URLs must be canonical HTTPS addresses.",
+  HUB_STATUS_INVALID: "Choose a supported hub lifecycle status.",
+  HUB_ACTIVE_STATUS_INVALID: "Only testing, production or maintenance hubs can be registered as active.",
+  HUB_MANIFEST_VERSION_UNSUPPORTED: "The backend does not accept this hub manifest version.",
+  HUB_CORE_VERSION_UNSUPPORTED: "The backend does not accept this core version.",
+  HUB_LEARNER_API_VERSION_UNSUPPORTED: "The backend does not accept this learner API version.",
+  HUB_SUBMISSION_VERSION_UNSUPPORTED: "The backend does not accept this submission contract version.",
+  HUB_COURSE_NOT_FOUND: "A declared course is not registered in the platform catalogue.",
+  HUB_DUPLICATE_CODE: "A hub with this code is already registered.",
+  HUB_DUPLICATE_REPOSITORY: "A hub with this repository URL is already registered.",
+  HUB_DUPLICATE_DEPLOYMENT: "A hub with this site URL is already registered.",
+  "registration-failed": "The hub could not be registered.",
+};
+
+export class AdminHubRegistrationError extends Error {
+  readonly code: string;
+
+  constructor(code: string) {
+    super(REGISTRATION_ERROR_MESSAGES[code] ?? REGISTRATION_ERROR_MESSAGES["registration-failed"]);
+    this.name = "AdminHubRegistrationError";
+    this.code = code;
+  }
+}
+
+function registrationErrorCode(error: { message?: string } | null) {
+  const message = error?.message ?? "";
+  return Object.keys(REGISTRATION_ERROR_MESSAGES).find((code) => message.includes(code))
+    ?? "registration-failed";
 }
 
 const PUBLICATION_ERROR_MESSAGES: Record<string, string> = {
@@ -250,6 +287,45 @@ export async function claimInitialPlatformAdmin(
   if (error || !Array.isArray(data) || !data[0]) {
     throw new AdminAuthError("bootstrap-failed");
   }
+}
+
+export async function registerHub(
+  client: AdminSupabaseClient,
+  request: HubRegistrationRequest,
+): Promise<HubRegistrationResult> {
+  const { data, error } = await client
+    .schema("admin_api")
+    .rpc("register_hub", {
+      p_manifest: request.manifest,
+      p_status: request.status,
+      p_active: request.active,
+    });
+
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new AdminHubRegistrationError(registrationErrorCode(error));
+  }
+
+  const row = data[0] as AdminRow;
+  return {
+    hubCode: textValue(row.hub_code),
+    hubName: textValue(row.hub_name),
+    description: textValue(row.description),
+    hubVersion: textValue(row.hub_version),
+    manifestVersion: textValue(row.manifest_version),
+    coreVersion: textValue(row.core_version),
+    learnerApiVersion: textValue(row.learner_api_version),
+    submissionContractVersion: textValue(row.submission_contract_version),
+    platformVersion: textValue(row.platform_version),
+    repositoryUrl: textValue(row.repository_url),
+    deploymentUrl: nullableText(row.deployment_url),
+    activityTypes: stringArray(row.activity_types),
+    evidenceCapabilities: stringArray(row.evidence_capabilities),
+    features: featureFlags(row.features),
+    compatibility: objectValue(row.compatibility),
+    status: textValue(row.status) as HubLifecycle,
+    active: booleanValue(row.active),
+    courseKeys: stringArray(row.course_keys),
+  };
 }
 
 export async function publishCurriculum(

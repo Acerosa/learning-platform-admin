@@ -2,7 +2,7 @@ export const ADMIN_API_CONTRACT = Object.freeze({
   schema: "admin_api",
   version: "0.2.0",
   status: "draft",
-  mode: "read-models-with-curriculum-publication",
+  mode: "read-models-with-hub-registration-and-curriculum-publication",
 });
 
 export const ADMIN_API_VIEWS = Object.freeze({
@@ -21,6 +21,12 @@ export const ADMIN_API_VIEWS = Object.freeze({
   dashboardSummary: "admin_api.dashboard_summary",
   activityPerformance: "admin_api.activity_performance",
   curriculumPublications: "admin_api.curriculum_publications",
+});
+
+export const ADMIN_API_RPCS = Object.freeze({
+  claimInitialPlatformAdmin: "admin_api.claim_initial_platform_admin",
+  registerHub: "admin_api.register_hub",
+  publishCurriculum: "admin_api.publish_curriculum",
 });
 
 export type HubLifecycle =
@@ -204,6 +210,27 @@ export interface CurriculumPublicationRecord {
   contentHash: string;
 }
 
+export interface HubRegistrationResult {
+  hubCode: string;
+  hubName: string;
+  description: string;
+  hubVersion: string;
+  manifestVersion: string;
+  coreVersion: string;
+  learnerApiVersion: string;
+  submissionContractVersion: string;
+  platformVersion: string;
+  repositoryUrl: string;
+  deploymentUrl: string | null;
+  activityTypes: readonly string[];
+  evidenceCapabilities: readonly string[];
+  features: Readonly<Record<string, boolean>>;
+  compatibility: Readonly<Record<string, unknown>>;
+  status: HubLifecycle;
+  active: boolean;
+  courseKeys: readonly string[];
+}
+
 export interface PlatformPublicationResult {
   id: string;
   hubCode: string;
@@ -251,7 +278,7 @@ export interface AdminReadService {
 
 export interface AdminMutationService {
   readonly status: "pending-backend-contract";
-  registerHub(input: unknown): Promise<never>;
+  registerHub(input: unknown): Promise<HubRegistrationResult>;
   updateHub(hubCode: string, input: unknown): Promise<never>;
   deactivateHub(hubCode: string): Promise<never>;
   updateCurriculum(input: unknown): Promise<never>;
@@ -265,7 +292,7 @@ export interface AdminMutationService {
 export const ADMIN_MUTATION_STATUS = Object.freeze({
   status: "pending-backend-contract" as const,
   reason:
-    "Backend version 0.2.0 exposes curriculum publication only. Other administrative mutation RPCs remain unspecified.",
+    "Hub registration uses admin_api.register_hub. Other administrative mutation RPCs remain unspecified.",
   requiredBeforeEnablement: [
     "role and permission requirement",
     "validated transactional RPC",

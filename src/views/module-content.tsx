@@ -8,12 +8,14 @@ import type {
 } from "../api/admin-api";
 import { AdminLink } from "../components/admin-link";
 import { HubDetailDialog } from "../components/hub-detail-dialog";
+import { RegisterHubDialog } from "../components/register-hub-dialog";
 import {
   PendingActionDialog,
   type PendingAction,
 } from "../components/pending-action-dialog";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import { getAdminModule, type AdminModuleId } from "../router/modules";
+import { AdminHubRegistrationError } from "../services/supabase-admin-service";
 import { useAdminPortal } from "../stores/admin-portal";
 import { formatDate } from "../utils/format";
 import { CurriculumAuthoringPage } from "./curriculum-authoring";
@@ -148,7 +150,11 @@ function DashboardPage({ data }: { data: AdminDataSnapshot }) {
   );
 }
 
-function HubRegistryPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
+function HubRegistryPage({ data, openPending, onRegister }: {
+  data: AdminDataSnapshot;
+  openPending: (action: PendingAction) => void;
+  onRegister: () => void;
+}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [selectedHub, setSelectedHub] = useState<HubRecord | null>(null);
@@ -165,7 +171,7 @@ function HubRegistryPage({ data, openPending }: { data: AdminDataSnapshot; openP
 
   return (
     <>
-      <PageHeader moduleId="hubs" actionLabel="Register hub" onAction={() => openPending({ title: "Register a hub" })} />
+      <PageHeader moduleId="hubs" actionLabel="Register hub" onAction={onRegister} />
       <section className="panel">
         <div className="toolbar">
           <div className="toolbar__search"><label htmlFor="hub-search">Search hubs</label><input id="hub-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, code or description" /></div>
@@ -244,15 +250,18 @@ function AuditPage({ data }: { data: AdminDataSnapshot }) {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, publishCurriculum } = useAdminPortal();
+  const { data, session, dataSource, publishCurriculum, registerHub } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
   if (!data) return null;
   const openPending = (action: PendingAction) => setPendingAction(action);
   let content: React.ReactNode;
 
   switch (moduleId) {
     case "dashboard": content = <DashboardPage data={data} />; break;
-    case "hubs": content = <HubRegistryPage data={data} openPending={openPending} />; break;
+    case "hubs": content = <HubRegistryPage data={data} openPending={openPending} onRegister={() => { setRegisterError(null); setRegisterOpen(true); }} />; break;
     case "courses": content = <CoursesPage links={data.hubCourseLinks} openPending={openPending} />; break;
     case "curriculum": content = (
       <CurriculumAuthoringPage
@@ -279,5 +288,43 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
     default: content = <DashboardPage data={data} />;
   }
 
-  return <>{content}<PendingActionDialog action={pendingAction} onClose={() => setPendingAction(null)} /></>;
+  return (
+    <>
+      {content}
+      <PendingActionDialog action={pendingAction} onClose={() => setPendingAction(null)} />
+      {registerOpen ? (
+        <RegisterHubDialog
+          open={registerOpen}
+          data={data}
+          demoMode={dataSource.mode === "demo"}
+          submitting={registering}
+          error={registerError}
+          onClose={() => {
+            if (!registering) {
+              setRegisterOpen(false);
+              setRegisterError(null);
+            }
+          }}
+          onConfirm={async (request) => {
+            setRegistering(true);
+            setRegisterError(null);
+            try {
+              await registerHub(request);
+              setRegisterOpen(false);
+            } catch (caught) {
+              setRegisterError(
+                caught instanceof AdminHubRegistrationError
+                  ? caught.message
+                  : caught instanceof Error
+                    ? caught.message
+                    : "The hub could not be registered.",
+              );
+            } finally {
+              setRegistering(false);
+            }
+          }}
+        />
+      ) : null}
+    </>
+  );
 }
