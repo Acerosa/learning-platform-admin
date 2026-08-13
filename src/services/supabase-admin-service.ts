@@ -7,6 +7,7 @@ import type {
   AttemptRecord,
   AuditEventRecord,
   CurrentStaffContextRecord,
+  CurriculumPublicationRecord,
   DashboardSummaryRecord,
   EnrolmentRecord,
   GroupRecord,
@@ -16,8 +17,11 @@ import type {
   HubRecord,
   LearnerRecord,
   PlatformContractRecord,
+  PlatformPublicationResult,
   TeacherRecord,
 } from "../api/admin-api";
+import { platformPublicationArgs } from "../content/platform-publication.ts";
+import type { AuthoringDraft } from "../content/types.ts";
 import type { AdminRuntimeConfig } from "./admin-runtime-config";
 
 type AdminRow = Readonly<Record<string, unknown>>;
@@ -44,6 +48,39 @@ export class AdminAuthError extends Error {
     this.name = "AdminAuthError";
     this.code = code;
   }
+}
+
+const PUBLICATION_ERROR_MESSAGES: Record<string, string> = {
+  unavailable: "Platform publication requires a live administrator session.",
+  AUTHENTICATION_REQUIRED: "Sign in with an authorised administrator account to publish curriculum.",
+  PUBLICATION_NOT_AUTHORISED: "This account is not authorised to publish curriculum to the platform.",
+  PUBLICATION_STATUS_INVALID: "Only Approved or Published snapshots can be sent to the platform.",
+  PUBLICATION_VALIDATION_FAILED: "The backend rejected the package during validation.",
+  UNSUPPORTED_SCHEMA_VERSION: "The backend does not accept this schema version.",
+  UNSUPPORTED_PACKAGE_VERSION: "The backend does not accept this content package version.",
+  PUBLICATION_CONTEXT_MISMATCH: "The snapshot hub and course do not match the selected curriculum.",
+  HUB_NOT_FOUND: "The selected hub is not registered in the platform catalogue.",
+  COURSE_NOT_FOUND: "The selected course is not linked to that hub.",
+  DUPLICATE_VERSION: "That version is already published with different content.",
+  PUBLICATION_VERSION_REGRESSION: "The new version must be greater than the latest published version.",
+  PUBLISHED_CURRICULUM_IMMUTABLE: "Published platform records cannot be edited.",
+  "publication-failed": "Curriculum could not be published to the platform.",
+};
+
+export class AdminPublicationError extends Error {
+  readonly code: string;
+
+  constructor(code: string) {
+    super(PUBLICATION_ERROR_MESSAGES[code] ?? PUBLICATION_ERROR_MESSAGES["publication-failed"]);
+    this.name = "AdminPublicationError";
+    this.code = code;
+  }
+}
+
+function publicationErrorCode(error: { message?: string } | null) {
+  const message = error?.message ?? "";
+  return Object.keys(PUBLICATION_ERROR_MESSAGES).find((code) => message.includes(code))
+    ?? "publication-failed";
 }
 
 export function registrationValidationMessage(
@@ -213,6 +250,30 @@ export async function claimInitialPlatformAdmin(
   if (error || !Array.isArray(data) || !data[0]) {
     throw new AdminAuthError("bootstrap-failed");
   }
+}
+
+export async function publishCurriculum(
+  client: AdminSupabaseClient,
+  record: AuthoringDraft,
+): Promise<PlatformPublicationResult> {
+  const { data, error } = await client
+    .schema("admin_api")
+    .rpc("publish_curriculum", platformPublicationArgs(record));
+
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new AdminPublicationError(publicationErrorCode(error));
+  }
+
+  const row = data[0] as AdminRow;
+  return {
+    id: textValue(row.id),
+    hubCode: textValue(row.hub_code),
+    courseKey: textValue(row.course_key),
+    packageVersion: textValue(row.package_version),
+    status: textValue(row.status),
+    publishedAt: textValue(row.published_at),
+    idempotent: booleanValue(row.idempotent),
+  };
 }
 
 export function createSupabaseAdminReadService(
@@ -457,6 +518,30 @@ export function createSupabaseAdminReadService(
         occurredAt: textValue(row.occurred_at),
       }));
     },
+
+    async listCurriculumPublications() {
+      const data = await rows(
+        "curriculum_publications",
+        "id,hub_code,course_key,package_version,schema_version,source_package_version,status,author,reviewer,publication_notes,published_by_staff_reference,created_at,published_at,content_hash",
+        { column: "published_at", ascending: false },
+      );
+      return data.map((row): CurriculumPublicationRecord => ({
+        id: textValue(row.id),
+        hubCode: textValue(row.hub_code),
+        courseKey: textValue(row.course_key),
+        packageVersion: textValue(row.package_version),
+        schemaVersion: textValue(row.schema_version),
+        sourcePackageVersion: textValue(row.source_package_version),
+        status: textValue(row.status) as CurriculumPublicationRecord["status"],
+        author: textValue(row.author),
+        reviewer: textValue(row.reviewer),
+        publicationNotes: textValue(row.publication_notes),
+        publishedBy: textValue(row.published_by_staff_reference),
+        createdAt: textValue(row.created_at),
+        publishedAt: textValue(row.published_at),
+        contentHash: textValue(row.content_hash),
+      }));
+    },
   });
 }
 
@@ -477,6 +562,7 @@ export async function loadAdminData(
     activityPerformance,
     dashboardSummary,
     auditEvents,
+    curriculumPublications,
   ] = await Promise.all([
     service.listHubs(),
     service.listHubCourseLinks(),
@@ -491,6 +577,7 @@ export async function loadAdminData(
     service.listActivityPerformance(),
     service.getDashboardSummary(),
     service.listAuditEvents(),
+    service.listCurriculumPublications(),
   ]);
 
   return Object.freeze({
@@ -507,5 +594,6 @@ export async function loadAdminData(
     activityPerformance,
     dashboardSummary,
     auditEvents,
+    curriculumPublications,
   });
 }

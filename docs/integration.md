@@ -33,6 +33,7 @@ The documented administrative boundary is `admin_api` version 0.2.0.
 | Attempts | `admin_api.attempts` |
 | Dashboard counts | `admin_api.dashboard_summary` |
 | Activity analytics | `admin_api.activity_performance` |
+| Curriculum publications | `admin_api.curriculum_publications` |
 
 All views rely on backend RLS. The portal must use an authenticated staff session and the public browser credential only. A service-role key must never be placed in this application.
 
@@ -59,14 +60,15 @@ separately allow the deployed portal callback URL before live deployment.
 
 ## Pending backend dependencies
 
-- Narrow mutation RPCs for hubs, groups, enrolments, assignments, curriculum lifecycle and staff roles.
-- Course and curriculum administration read models.
+- Narrow mutation RPCs for hubs, groups, enrolments, assignments and staff roles.
+- Course catalogue administration.
 - Teacher administration read model.
 - Certification and review-history model.
 - External monitoring/event ingestion and deployment-status contracts.
+- Learner-hub consumption of published curriculum metadata.
 
 ## Canonical curriculum authoring
 
-Admin authors canonical `lp.content.*` objects locally. Validation, block registry, Excel sheet names and preview rendering come from `@learning-platform/content` 0.1.0. Drafts and publication records are browser storage. No curriculum mutation RPCs were added.
+Admin authors canonical `lp.content.*` objects locally. Validation, block registry, Excel sheet names and preview rendering come from `@learning-platform/content` 0.1.0. Drafts remain browser storage. After local Publish, **Publish to Platform** calls `admin_api.publish_curriculum`.
 
-See [Curriculum authoring](curriculum-authoring.md) and [Publication workflow](publication-workflow.md).
+See [Curriculum authoring](curriculum-authoring.md), [Publication workflow](publication-workflow.md) and [Backend publication](backend-publication.md).

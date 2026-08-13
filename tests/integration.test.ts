@@ -6,15 +6,25 @@ import {
 } from "../src/services/admin-runtime-config.ts";
 import {
   AdminAuthError,
+  AdminPublicationError,
   AdminReadError,
   claimInitialPlatformAdmin,
   createSupabaseAdminReadService,
   loadAdminData,
+  publishCurriculum,
   registerAdminAccount,
   registrationValidationMessage,
   type AdminSupabaseClient,
 } from "../src/services/supabase-admin-service.ts";
 import { sessionFromStaffContext } from "../src/stores/admin-session.ts";
+import { createActivity, createBlock, createWeek, syncCurriculumLists } from "../src/content/factories.ts";
+import {
+  approveRecord,
+  createDraft,
+  publishVersion,
+  startReview,
+  submitForReview,
+} from "../src/content/versioning.ts";
 
 const viewRows: Record<string, readonly Record<string, unknown>[]> = {
   current_staff_context: [{ teacher_id: "teacher-1", staff_reference: "STAFF-1", display_name: "Platform Admin", active: true, active_roles: ["platform_admin"] }],
@@ -31,11 +41,16 @@ const viewRows: Record<string, readonly Record<string, unknown>[]> = {
   activity_performance: [{ group_code: "G-1", activity_key: "activity-a", activity_version: "1.0.0", completed_attempts: 1, learner_count: 1, average_score_percentage: 80, best_score_percentage: 80, first_completed_at: "2026-08-11T00:01:00Z", latest_completed_at: "2026-08-11T00:01:00Z" }],
   dashboard_summary: [{ registered_hubs: 1, active_hubs: 1, active_learners: 1, active_groups: 1, active_enrolments: 1, assignments: 1, recent_attempts: 1, completed_attempts: 1, average_score_percentage: 80, healthy_services: 1, service_count: 1, active_contracts: 0, contract_count: 1 }],
   audit_events: [{ event_key: "admin.read", actor_type: "staff", entity_type: "hub", entity_key: "hub-a", outcome: "succeeded", occurred_at: "2026-08-11T00:02:00Z" }],
+  curriculum_publications: [{ id: "pub-1", hub_code: "hub-a", course_key: "course-a", package_version: "0.1.0", schema_version: "0.1.0", source_package_version: "0.1.0", status: "published", author: "Ada Author", reviewer: "Riley Reviewer", publication_notes: "First platform snapshot.", published_by_staff_reference: "STAFF-1", created_at: "2026-08-13T00:00:00Z", published_at: "2026-08-13T00:01:00Z", content_hash: "a".repeat(64) }],
 };
 
-function fakeClient(options: { failView?: string } = {}) {
+function fakeClient(options: {
+  failView?: string;
+  rpc?: (name: string, parameters: unknown) => { data: unknown; error: unknown };
+} = {}) {
   const selections: string[] = [];
   const schemas: string[] = [];
+  const rpcs: unknown[] = [];
   const client = {
     schema(schema: string) {
       schemas.push(schema);
@@ -57,10 +72,15 @@ function fakeClient(options: { failView?: string } = {}) {
           };
           return query;
         },
+        async rpc(name: string, parameters: unknown) {
+          rpcs.push({ name, parameters });
+          if (options.rpc) return options.rpc(name, parameters);
+          return { data: null, error: { message: "unexpected rpc" } };
+        },
       };
     },
   } as unknown as AdminSupabaseClient;
-  return { client, selections, schemas };
+  return { client, selections, schemas, rpcs };
 }
 
 test("runtime configuration defaults explicitly to demo and rejects secret keys", () => {
@@ -188,9 +208,11 @@ test("live service reads every MVP surface through admin_api and maps safe rows"
   assert.equal(data.attempts[0].score, 8);
   assert.equal(data.activityPerformance[0].averageScorePercentage, 80);
   assert.equal(data.dashboardSummary.recentAttempts, 1);
+  assert.equal(data.curriculumPublications[0].packageVersion, "0.1.0");
+  assert.equal(data.curriculumPublications[0].status, "published");
   assert.ok(fake.schemas.every((schema) => schema === "admin_api"));
   const selected = fake.selections.join("\n");
-  assert.doesNotMatch(selected, /response_payload|diagnostics|contact_email/);
+  assert.doesNotMatch(selected, /response_payload|diagnostics|contact_email|package\b/);
 });
 
 test("a live read failure becomes unavailable and never invokes demo fallback", async () => {
@@ -198,5 +220,85 @@ test("a live read failure becomes unavailable and never invokes demo fallback", 
   await assert.rejects(
     () => service.listHubs(),
     (error: unknown) => error instanceof AdminReadError && error.code === "unavailable",
+  );
+});
+
+function publishedSnapshot() {
+  const draft = createDraft("hub-a", "Hub A", "course-a", "Ada Author");
+  const week = createWeek({ id: "week-20", teachingWeek: 20, title: "Synthetic week", learningOutcomes: [] });
+  const activity = createActivity({ id: "pub-activity", title: "Publication activity" });
+  activity.blocks = [createBlock(activity.id, "paragraph", [])];
+  const ready = submitForReview({
+    ...draft,
+    package: syncCurriculumLists({
+      ...draft.package,
+      weeks: [week],
+      activities: [activity],
+    }),
+  });
+  const approved = approveRecord(startReview(ready, "Riley Reviewer"), "Approved.", "Riley Reviewer");
+  return publishVersion([approved], approved, { version: "0.1.0", publishedBy: "Ada Author" })[0];
+}
+
+test("publishCurriculum sends only the documented admin_api arguments", async () => {
+  const record = publishedSnapshot();
+  const fake = fakeClient({
+    rpc() {
+      return {
+        data: [{
+          id: "pub-1",
+          hub_code: record.hubId,
+          course_key: record.courseKey,
+          package_version: record.version,
+          status: "published",
+          published_at: "2026-08-13T12:00:00Z",
+          idempotent: false,
+        }],
+        error: null,
+      };
+    },
+  });
+  const result = await publishCurriculum(fake.client, record);
+  assert.equal(result.packageVersion, "0.1.0");
+  assert.equal(result.idempotent, false);
+  assert.deepEqual(fake.schemas, ["admin_api"]);
+  assert.equal((fake.rpcs[0] as { name: string }).name, "publish_curriculum");
+  assert.deepEqual(
+    Object.keys((fake.rpcs[0] as { parameters: Record<string, unknown> }).parameters).sort(),
+    [
+      "p_author",
+      "p_course_key",
+      "p_hub_code",
+      "p_lifecycle_status",
+      "p_package",
+      "p_package_version",
+      "p_publication_notes",
+      "p_reviewer",
+      "p_schema_version",
+      "p_source_package_version",
+    ],
+  );
+});
+
+test("publishCurriculum rejects drafts before calling the backend", async () => {
+  const fake = fakeClient();
+  await assert.rejects(
+    () => publishCurriculum(fake.client, createDraft("hub-a", "Hub A", "course-a")),
+    /Approved or Published/,
+  );
+  assert.equal(fake.rpcs.length, 0);
+});
+
+test("publishCurriculum maps backend validation failures without exposing SQL", async () => {
+  const fake = fakeClient({
+    rpc() {
+      return { data: null, error: { message: "PUBLICATION_VALIDATION_FAILED" } };
+    },
+  });
+  await assert.rejects(
+    () => publishCurriculum(fake.client, publishedSnapshot()),
+    (error: unknown) => error instanceof AdminPublicationError
+      && error.code === "PUBLICATION_VALIDATION_FAILED"
+      && !error.message.includes("sql"),
   );
 });

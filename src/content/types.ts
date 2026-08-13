@@ -10,6 +10,25 @@ export const LIFECYCLE_STATUSES = [
 
 export type LifecycleStatus = (typeof LIFECYCLE_STATUSES)[number];
 
+export const PLATFORM_PUBLICATION_STATES = [
+  "idle",
+  "pending",
+  "publishing",
+  "published",
+  "failed",
+] as const;
+
+export type PlatformPublicationState = (typeof PLATFORM_PUBLICATION_STATES)[number];
+
+export function idlePlatformPublication() {
+  return {
+    platformPublicationState: "idle" as const,
+    platformPublicationError: null as string | null,
+    platformPublishedAt: null as string | null,
+    platformPublicationId: null as string | null,
+  };
+}
+
 /** Validation result is not a lifecycle state. Legacy alias for editable drafts. */
 export type DraftStatus = LifecycleStatus;
 
@@ -91,6 +110,10 @@ export interface AuthoringDraft {
   schemaVersion: string;
   basedOnVersionId: string | null;
   basedOnVersion: string | null;
+  platformPublicationState: PlatformPublicationState;
+  platformPublicationError: string | null;
+  platformPublishedAt: string | null;
+  platformPublicationId: string | null;
   package: ContentPackage;
 }
 

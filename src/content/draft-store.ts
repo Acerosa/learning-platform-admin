@@ -4,7 +4,16 @@ import { slugify } from "./factories.ts";
 import { isLifecycleStatus, isImmutableStatus } from "./lifecycle.ts";
 import { CONTENT_PACKAGE_VERSION } from "./publication-gate.ts";
 import { sanitizeObject } from "./sanitize.ts";
-import type { AuthoringDraft, ContentActivity, ContentDocument, ContentPackage, LifecycleStatus } from "./types";
+import {
+  idlePlatformPublication,
+  PLATFORM_PUBLICATION_STATES,
+  type AuthoringDraft,
+  type ContentActivity,
+  type ContentDocument,
+  type ContentPackage,
+  type LifecycleStatus,
+  type PlatformPublicationState,
+} from "./types.ts";
 import { createDraft, touchDraft } from "./versioning.ts";
 
 export { createDraft, touchDraft };
@@ -21,6 +30,12 @@ const LEGACY_STATUS: Record<string, LifecycleStatus> = {
 
 function now() {
   return new Date().toISOString();
+}
+
+function migratePlatformState(value: unknown): PlatformPublicationState {
+  return (PLATFORM_PUBLICATION_STATES as readonly string[]).includes(String(value))
+    ? value as PlatformPublicationState
+    : "idle";
 }
 
 function randomId() {
@@ -58,6 +73,10 @@ export function migrateRecord(raw: unknown): AuthoringDraft | null {
     schemaVersion: value.schemaVersion || value.package.hub?.schemaVersion || CONTENT_PACKAGE_VERSION,
     basedOnVersionId: value.basedOnVersionId || null,
     basedOnVersion: value.basedOnVersion || null,
+    platformPublicationState: migratePlatformState(value.platformPublicationState),
+    platformPublicationError: value.platformPublicationError || null,
+    platformPublishedAt: value.platformPublishedAt || null,
+    platformPublicationId: value.platformPublicationId || null,
     package: value.package,
   };
 }
@@ -126,6 +145,7 @@ export function duplicateDraft(draft: AuthoringDraft): AuthoringDraft {
     reviewDate: null,
     basedOnVersionId: null,
     basedOnVersion: null,
+    ...idlePlatformPublication(),
   };
 }
 

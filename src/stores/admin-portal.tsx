@@ -8,7 +8,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { AdminDataSnapshot } from "../api/admin-api";
+import type { AdminDataSnapshot, PlatformPublicationResult } from "../api/admin-api";
+import type { AuthoringDraft } from "../content/types";
 import {
   DEMO_ADMIN_DATA,
   DEMO_DATA_NOTICE,
@@ -18,11 +19,13 @@ import {
   type AdminRuntimeConfig,
 } from "../services/admin-runtime-config";
 import {
+  AdminPublicationError,
   AdminReadError,
   claimInitialPlatformAdmin,
   createSupabaseAdminClient,
   createSupabaseAdminReadService,
   loadAdminData,
+  publishCurriculum as publishCurriculumRpc,
   registerAdminAccount,
   type AdminSupabaseClient,
 } from "../services/supabase-admin-service";
@@ -58,6 +61,7 @@ interface AdminPortalContextValue {
   signUp(email: string, password: string): Promise<void>;
   requestMagicLink(email: string): Promise<void>;
   claimInitialAdmin(bootstrapToken: string): Promise<void>;
+  publishCurriculum(record: AuthoringDraft): Promise<PlatformPublicationResult>;
   signOut(): Promise<void>;
   retry(): Promise<void>;
 }
@@ -287,6 +291,19 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     }
   }, [client, refresh]);
 
+  const publishCurriculum = useCallback(async (record: AuthoringDraft) => {
+    if (!client) {
+      throw new AdminPublicationError("unavailable");
+    }
+    const result = await publishCurriculumRpc(client, record);
+    const service = createSupabaseAdminReadService(client);
+    const data = await loadAdminData(service);
+    setState((current) => (
+      current.status === "ready" ? { ...current, data } : current
+    ));
+    return result;
+  }, [client]);
+
   const signOut = useCallback(async () => {
     if (!client) return;
     await client.auth.signOut();
@@ -343,9 +360,10 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     signUp,
     requestMagicLink,
     claimInitialAdmin,
+    publishCurriculum,
     signOut,
     retry: refresh,
-  }), [claimInitialAdmin, config, dataSource, refresh, requestMagicLink, signIn, signOut, signUp, state]);
+  }), [claimInitialAdmin, config, dataSource, publishCurriculum, refresh, requestMagicLink, signIn, signOut, signUp, state]);
 
   return (
     <AdminPortalContext.Provider value={value}>

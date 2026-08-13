@@ -17,6 +17,7 @@ import {
   suggestNextVersion,
   touchDraft,
 } from "../src/content/versioning.ts";
+import { platformPublicationArgs } from "../src/content/platform-publication.ts";
 
 function withContent(draft = createDraft("authoring-hub", "Authoring hub", "ocr-level-3-it", "Ada Author")) {
   const week = createWeek({ id: "week-20", teachingWeek: 20, title: "Synthetic week", learningOutcomes: [] });
@@ -220,4 +221,30 @@ test("legacy valid and invalid draft statuses migrate to draft", () => {
     package: createDraft("authoring-hub", "Authoring hub", "ocr-level-3-it").package,
   });
   assert.equal(migrated?.status, "draft");
+  assert.equal(migrated?.platformPublicationState, "idle");
+});
+
+test("local publish marks the snapshot pending for platform publication", () => {
+  const published = publishVersion([throughApproval()], throughApproval(), {
+    version: "0.1.0",
+    publishedBy: "Ada Author",
+  })[0];
+  assert.equal(published.platformPublicationState, "pending");
+});
+
+test("platform publication payload accepts only approved or published snapshots", () => {
+  const draft = withContent();
+  assert.throws(() => platformPublicationArgs(draft), /Approved or Published/);
+  const published = publishVersion([throughApproval()], throughApproval(), {
+    version: "0.1.0",
+    publishedBy: "Ada Author",
+  })[0];
+  const args = platformPublicationArgs(published);
+  assert.equal(args.p_lifecycle_status, "published");
+  assert.equal(args.p_hub_code, published.hubId);
+  assert.equal(args.p_course_key, published.courseKey);
+  assert.equal(args.p_package_version, "0.1.0");
+  assert.equal(args.p_schema_version, published.schemaVersion);
+  assert.equal(args.p_source_package_version, published.sourcePackageVersion);
+  assert.equal(args.p_package, published.package);
 });

@@ -4,7 +4,8 @@ import { emptyPackage } from "./factories.ts";
 import { assertMutable, isImmutableStatus, LifecycleError, transitionRecord } from "./lifecycle.ts";
 import { CONTENT_PACKAGE_VERSION, publicationGate } from "./publication-gate.ts";
 import { bumpPatch, compareSemver, isSemver } from "./semver.ts";
-import type { AuthoringDraft, ContentPackage, LifecycleStatus } from "./types";
+import { idlePlatformPublication } from "./types.ts";
+import type { AuthoringDraft, ContentPackage, LifecycleStatus, PlatformPublicationState } from "./types.ts";
 
 function now() {
   return new Date().toISOString();
@@ -49,6 +50,7 @@ export function createDraft(
     schemaVersion: engine.SCHEMA_VERSION,
     basedOnVersionId: null,
     basedOnVersion: null,
+    ...idlePlatformPublication(),
     package: emptyPackage(hubId, hubName, courseKey),
   };
 }
@@ -147,6 +149,10 @@ export function publishVersion(
       schemaVersion: getContentEngine().SCHEMA_VERSION,
       sourcePackageVersion: draft.sourcePackageVersion || CONTENT_PACKAGE_VERSION,
       package: freezeSnapshot(draft.package),
+      platformPublicationState: "pending",
+      platformPublicationError: null,
+      platformPublishedAt: null,
+      platformPublicationId: null,
     }, at),
   };
   const superseded = records.map((item) => {
@@ -188,6 +194,7 @@ export function createWorkingCopy(published: AuthoringDraft, actor = "local-auth
     author: defaultActor(actor),
     basedOnVersionId: published.id,
     basedOnVersion: published.version,
+    ...idlePlatformPublication(),
     package: clonePackage(published.package),
   };
 }
@@ -211,12 +218,31 @@ export function restoreAsDraft(source: AuthoringDraft, actor = "local-author"): 
     author: defaultActor(actor),
     basedOnVersionId: source.id,
     basedOnVersion: source.version || null,
+    ...idlePlatformPublication(),
     package: clonePackage(source.package),
   };
 }
 
 export function archiveVersion(record: AuthoringDraft, at = now()): AuthoringDraft {
   return transitionRecord(record, "archived", {}, at);
+}
+
+export function withPlatformPublication(
+  record: AuthoringDraft,
+  patch: {
+    platformPublicationState: PlatformPublicationState;
+    platformPublicationError?: string | null;
+    platformPublishedAt?: string | null;
+    platformPublicationId?: string | null;
+  },
+): AuthoringDraft {
+  return {
+    ...record,
+    platformPublicationState: patch.platformPublicationState,
+    platformPublicationError: patch.platformPublicationError ?? null,
+    platformPublishedAt: patch.platformPublishedAt ?? record.platformPublishedAt,
+    platformPublicationId: patch.platformPublicationId ?? record.platformPublicationId,
+  };
 }
 
 export function replaceRecord(records: AuthoringDraft[], record: AuthoringDraft) {

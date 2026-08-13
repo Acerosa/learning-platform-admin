@@ -3,8 +3,9 @@
 Curriculum publication is an Admin-local CMS lifecycle. Admin edits Drafts.
 Learners consume Published content. Drafts must never appear in a learner hub.
 
-This workflow does **not** commit to GitHub, write to the backend, or deploy
-into Unit 14 or any other hub.
+This workflow does **not** commit to GitHub or deploy into Unit 14 or any other
+hub. Backend catalogue publication is a separate, explicit **Publish to
+Platform** step after a local Published snapshot exists.
 
 ## Architecture
 
@@ -13,6 +14,7 @@ Admin working copy (Draft)
   → review states
       → Approved
           → immutable Published snapshot (browser storage)
+              → Publish to Platform (admin_api.publish_curriculum)
 ```
 
 Storage key: `lp.admin.authoring.records.v2`.
@@ -112,18 +114,22 @@ Each published snapshot stores:
 - source package version
 - schema version
 
-There is no GitHub commit, backend write, or deployment.
+There is no GitHub commit or learner-hub deployment.
 
 ## Preview
 
 Preview uses the `@learning-platform/content` renderer against the **selected**
 version, including historical snapshots.
 
-## Future backend publication
+## Backend publication
 
-A later backend contract may accept an already-published Admin snapshot into
-`admin_api` / `learning` catalogue tables. That requires mutation RPCs, RLS,
-audit events and tests. This portal still must not invent those RPCs.
+After local Publish, **Publish to Platform** sends the frozen snapshot through
+`admin_api.publish_curriculum`. The backend re-validates, stores an immutable
+catalogue row, supersedes the previous current version, and audits the event.
+Admin shows Pending / Publishing / Published / Failed and the staff history
+view. Rollback is Restore as Draft → review → publish a new version.
+
+See [Backend publication](backend-publication.md).
 
 ## Future GitHub publication
 

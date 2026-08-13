@@ -4,18 +4,18 @@ Version **0.2.0** — Platform Integration MVP for the Learning Platform Central
 
 [Open the administration dashboard](https://acerosa.github.io/learning-platform-admin/)
 
-This repository is the administration interface for the entire Learning Platform. It is not a learner hub. Curriculum authoring drafts local canonical `lp.content.*` objects, previews them with the shared learner renderer, and manages an Admin-local publication lifecycle. It does not write into learner hubs.
+This repository is the administration interface for the entire Learning Platform. It is not a learner hub. Curriculum authoring drafts local canonical `lp.content.*` objects, previews them with the shared learner renderer, and can publish approved snapshots to the backend catalogue. It does not write into learner hubs.
 
 ## Current state
 
 - The portal consumes the shared theme service and semantic tokens from `@learning-platform/core`.
 - Curriculum authoring consumes `@learning-platform/content` 0.1.0 from [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content) for schemas, validation, import and preview.
-- The backend `admin_api` contract is version `0.2.0`, draft and read-only.
+- The backend `admin_api` contract is version `0.2.0`, draft, with read models and curriculum publication.
 - Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.
 - Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
 - Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
-- Write journeys against backend data remain pending: they explain the missing mutation contract and never invent an endpoint.
-- Curriculum authoring drafts weeks, sessions and activities locally, validates them with `@learning-platform/content`, and exports canonical JSON. Publication versions stay in Admin browser storage.
+- Write journeys against backend data remain pending except curriculum publication: they explain the missing mutation contract and never invent an endpoint.
+- Curriculum authoring drafts weeks, sessions and activities locally, validates them with `@learning-platform/content`, publishes immutable local versions, and can publish those snapshots to the backend catalogue. Learner hubs are not updated.
 - No hosted credentials, database migrations or learner-hub source editing live here.
 
 ## Local development

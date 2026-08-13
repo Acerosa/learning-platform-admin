@@ -10,7 +10,8 @@ Central Admin Portal
        ├── shared theme service and tokens ──> learning-platform-core
        ├── canonical content engine ─────────> learning-platform-content
        │
-       └── authenticated staff reads ────────> admin_api
+       └── authenticated staff reads and
+           curriculum publication RPC ───────> admin_api
                                                    │
                                       learning + platform schemas
                                                    │
@@ -58,11 +59,18 @@ data. Analytics are supplied by backend aggregate views.
 
 ## Administrative writes
 
-Backend 0.2.0 intentionally excludes staff mutation RPCs. All visible write journeys against backend data route through a pending mutation service. The interface explains the required backend work instead of constructing speculative endpoints.
+Backend 0.2.0 keeps general staff mutations pending. Curriculum publication is
+the documented exception: after a local Approved/Published snapshot exists, the
+live client calls `admin_api.publish_curriculum` from the admin service. The
+authoring view never issues `.rpc(` itself and never queries `learning` or
+`platform`.
 
-Curriculum authoring is a local exception: drafts and publication records persist in the browser and export canonical JSON. They do not call mutation RPCs, write hosted Supabase rows, or publish GitHub files. Learners never read this store.
+Other write journeys still route through the pending mutation service. GitHub
+publication and learner-hub deployment remain out of scope.
 
-A mutation becomes eligible only after the backend defines its role requirement, validation and conflicts, transaction, stable errors, audit event, idempotency where relevant, RLS and integration tests.
+A further mutation becomes eligible only after the backend defines its role
+requirement, validation and conflicts, transaction, stable errors, audit event,
+idempotency where relevant, RLS and integration tests.
 
 ## Accessibility and responsive architecture
 
