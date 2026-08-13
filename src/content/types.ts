@@ -69,6 +69,9 @@ export interface ContentEngine {
   importFromSheets(sheets: Record<string, unknown>): ContentPackage;
   importFromCsvSheets(csvByName: Record<string, string>, hub: unknown, curriculum: unknown): ContentPackage;
   parseCsvSheet(text: string): Record<string, string>[];
+  containsUnsafeMarkup(value: string): boolean;
+  sanitizeImportedText(value: unknown): string;
+  sanitiseContent(value: unknown): unknown;
   renderActivity(activity: unknown, options?: { root?: string }): string;
   renderWeek(resolved: unknown, options?: { root?: string }): string;
   resolveWeek(pkg: ContentPackage, weekId: string): unknown;
