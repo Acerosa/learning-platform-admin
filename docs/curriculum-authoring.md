@@ -22,7 +22,8 @@ Admin depends on those semantics. It does not own them.
 Package:
 
 - dependency: `@learning-platform/content` `file:../learning-platform-content`
-- version: `0.1.0`
+- version: `0.1.0` (tag `v0.1.0`)
+- canonical repository: [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content)
 - model: exact reviewed schema set (`lp.content.*`)
 
 The UI loads a canonical package, then renders editors from object type. There
