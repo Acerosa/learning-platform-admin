@@ -82,8 +82,20 @@ test("shared theme service is used instead of a duplicate theme store", async ()
 });
 
 test("required documentation exists", async () => {
-  for (const file of ["README.md", "docs/architecture.md", "docs/modules.md", "docs/integration.md", "docs/permissions.md", "docs/deployment.md", "docs/testing.md"]) {
+  for (const file of ["README.md", "docs/architecture.md", "docs/modules.md", "docs/integration.md", "docs/permissions.md", "docs/deployment.md", "docs/testing.md", "docs/curriculum-authoring.md"]) {
     const content = await readFile(new URL(file, root), "utf8");
     assert.ok(content.length > 300, `${file} should be substantive`);
   }
+});
+
+test("curriculum authoring stays local and does not add backend write RPCs", async () => {
+  const [mutations, service, authoring] = await Promise.all([
+    readFile(new URL("src/services/pending-admin-mutations.ts", root), "utf8"),
+    readFile(new URL("src/services/supabase-admin-service.ts", root), "utf8"),
+    readFile(new URL("src/views/curriculum-authoring.tsx", root), "utf8"),
+  ]);
+  assert.match(mutations, /updateCurriculum: pending/);
+  assert.doesNotMatch(service, /\.rpc\("(?:update_|create_|publish_|save_)/);
+  assert.doesNotMatch(authoring, /schema\("(?:learning|platform)"\)|\.rpc\(/);
+  assert.match(authoring, /local drafts/i);
 });
