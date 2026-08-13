@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lp.content.curriculum",
+  "title": "Learning Platform curriculum",
+  "description": "Entry point for teaching content. References learning outcomes, assignments, weeks and resources. Does not contain question banks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schemaVersion", "id", "version", "metadata", "relationships"],
+  "properties": {
+    "schema": { "const": "lp.content.curriculum" },
+    "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "id": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "metadata": {
+      "type": "object",
+      "required": ["title", "course"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "course": { "type": "string", "minLength": 1 },
+        "unitCode": { "type": "string" },
+        "qualification": { "type": "string" },
+        "language": { "type": "string" },
+        "assessment": { "type": "string" },
+        "planner": {
+          "type": "object",
+          "properties": {
+            "source": { "type": ["string", "null"] },
+            "weekCommencing": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "relationships": {
+      "type": "object",
+      "required": ["learningOutcomes", "assignments", "weeks"],
+      "properties": {
+        "learningOutcomes": { "type": "array", "items": { "type": "string" } },
+        "assignments": { "type": "array", "items": { "type": "string" } },
+        "weeks": { "type": "array", "items": { "type": "string" } },
+        "resources": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
