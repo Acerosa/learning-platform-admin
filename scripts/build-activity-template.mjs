@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import XLSX from "xlsx";
@@ -38,14 +38,7 @@ add("Feedback", [
 const destinations = [
   join(root, "public/templates"),
   join(root, "github-pages/public/templates"),
-  join(root, "vendor/learning-platform-content/0.1.0/templates"),
 ];
 destinations.forEach((dir) => mkdirSync(dir, { recursive: true }));
 destinations.forEach((dir) => XLSX.writeFile(workbook, join(dir, "lp-content-activity-import.xlsx")));
-writeFileSync(join(root, "vendor/learning-platform-content/0.1.0/templates/README.md"), `# Activity import workbook
-
-Shared importer sheets: LearningOutcomes, Assignments, Weeks, Sessions, Activities, Blocks, Questions, Assets.
-
-Admin extensions merged after import: Options (blockId, optionId, label, correct) and Feedback (blockId, correct, incorrect).
-`);
 console.log("Wrote lp-content-activity-import.xlsx");

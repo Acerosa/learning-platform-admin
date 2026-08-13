@@ -8,6 +8,7 @@ The portal is a presentation-layer client of the shared Learning Platform. It do
 Central Admin Portal
        │
        ├── shared theme service and tokens ──> learning-platform-core
+       ├── canonical content engine ─────────> learning-platform-content
        │
        └── authenticated staff reads ────────> admin_api
                                                    │
@@ -28,8 +29,7 @@ The learner-safe `api` schema and staff-only `admin_api` schema remain separate.
 - `src/services/` supplies read data and mutation boundaries.
 - `src/stores/` represents backend-derived staff context without email-based checks.
 - `src/theme/` adapts the shared platform theme service for React.
-- `src/content/` adapts the vendored canonical content engine for local authoring. It does not own schema semantics.
-- `vendor/learning-platform-content/` is the reviewed Unit 14 schema/engine snapshot. See [Curriculum authoring](curriculum-authoring.md).
+- `src/content/` adapts `@learning-platform/content` for local authoring. It does not own schema semantics.
 
 ## Authentication and authority
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { getLearningPlatformContent } from "../../vendor/learning-platform-content/0.1.0/engine-bundle.js";
+import { getLearningPlatformContent } from "@learning-platform/content";
 import type { ContentEngine } from "./types";
 
 export function getContentEngine(): ContentEngine {

@@ -19,6 +19,7 @@ test("package is the 0.2.0 administration repository and consumes platform core"
   assert.equal(pkg.name, "learning-platform-admin");
   assert.equal(pkg.version, "0.2.0");
   assert.equal(pkg.dependencies["@learning-platform/core"], "file:../learning-platform-core");
+  assert.equal(pkg.dependencies["@learning-platform/content"], "file:../learning-platform-content");
   assert.equal(pkg.dependencies["react-loading-skeleton"], undefined);
   assert.equal(pkg.dependencies["drizzle-orm"], undefined);
 });
