@@ -20,6 +20,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
+    "@learning-platform/content": "file:../learning-platform-content",
     "@learning-platform/core": "file:../learning-platform-core",
     "@supabase/supabase-js": "2.112.3",
     "react": "19.2.6",

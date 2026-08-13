@@ -9,7 +9,7 @@ backend, or publish GitHub curriculum files.
 ```text
 Admin UI
   → factories / importers / draft store
-      → vendored learning-platform-content 0.1.0
+      → @learning-platform/content 0.1.0
           schemas
           validator
           block registry
@@ -19,21 +19,11 @@ Admin UI
 
 Admin depends on those semantics. It does not own them.
 
-Vendored copy:
+Package:
 
-- path: `vendor/learning-platform-content/0.1.0/`
-- provenance: Unit 14 commit `655e2d9168d80bf07b3d05bdb22d83c24f44e741`
-  (`curriculum-engine-mvp`)
-- model: option A, exact reviewed schema set with version and provenance
-
-Future extraction target: `learning-platform-content`. Keep these boundaries
-isolated so Admin can switch from the vendored copy to that package:
-
-- schemas
-- validator
-- importers
-- block registry
-- preview renderer
+- dependency: `@learning-platform/content` `file:../learning-platform-content`
+- version: `0.1.0`
+- model: exact reviewed schema set (`lp.content.*`)
 
 The UI loads a canonical package, then renders editors from object type. There
 is no `if hub === "unit14"` rendering branch. Unit 14 is currently the only
@@ -44,7 +34,7 @@ learner attempts, marks, RLS, or GitHub repository files.
 
 ## Canonical schemas
 
-Supported envelopes are the vendored `lp.content.*` set:
+Supported envelopes are the package `lp.content.*` set:
 
 - hub, curriculum, learning-outcome, assignment
 - week, session, activity, block, question, asset
@@ -93,7 +83,7 @@ Workbook: `/templates/lp-content-activity-import.xlsx`
 
 The browser parser uses pinned `xlsx@0.18.5`. There is no CDN dependency.
 
-Shared Unit 14 importer sheets:
+Shared importer sheets:
 
 `LearningOutcomes`, `Assignments`, `Weeks`, `Sessions`, `Activities`,
 `Blocks`, `Questions`, `Assets`
@@ -115,7 +105,7 @@ npm run build:activity-template
 
 ## Validation
 
-`src/content/validate.ts` is a thin adapter over the vendored
+`src/content/validate.ts` is a thin adapter over the package
 `validatePackage` / `validateDocument`. Admin does not maintain a second rule
 set.
 
@@ -129,11 +119,8 @@ Typical codes:
 
 ## Preview
 
-Preview calls `renderActivity` / `renderWeek` from the vendored engine. Staff
+Preview calls `renderActivity` / `renderWeek` from `@learning-platform/content`. Staff
 see the same HTML contract as the learner hub. The pane is read-only.
-
-Extraction point: replace `vendor/learning-platform-content/0.1.0/engine-bundle.js`
-with `learning-platform-content` without rewriting the preview pane.
 
 Imported rich text is treated as untrusted. The renderer HTML-escapes output;
 import sanitisation also rejects `<script`, event handlers and `javascript:`
@@ -163,7 +150,7 @@ Validated drafts can export:
 - an activity package
 - a full curriculum package
 
-Exported JSON must be accepted by the Unit 14 validator without manual edits.
+Exported JSON must be accepted by `@learning-platform/content` without manual edits.
 Interop is covered by `tests/authoring-interop.test.ts` using synthetic
 content. That fixture is not added to live Unit 14 Week 1.
 

@@ -9,12 +9,13 @@ This repository is the administration interface for the entire Learning Platform
 ## Current state
 
 - The portal consumes the shared theme service and semantic tokens from `@learning-platform/core`.
+- Curriculum authoring consumes `@learning-platform/content` 0.1.0 for schemas, validation, import and preview.
 - The backend `admin_api` contract is version `0.2.0`, draft and read-only.
 - Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.
 - Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
 - Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
 - Write journeys against backend data remain pending: they explain the missing mutation contract and never invent an endpoint.
-- Curriculum authoring drafts weeks, sessions and activities locally, validates them with the vendored Unit 14 engine, and exports canonical JSON. Publication is deferred.
+- Curriculum authoring drafts weeks, sessions and activities locally, validates them with `@learning-platform/content`, and exports canonical JSON. Publication is deferred.
 - No hosted credentials, database migrations or learner-hub source editing live here.
 
 ## Local development
@@ -68,7 +69,6 @@ learning-platform-admin/
 │   ├── theme/              Adapter for learning-platform-core theme
 │   ├── types/              Local package declarations
 │   └── utils/              Presentation utilities
-├── vendor/                 Reviewed learning-platform-content 0.1.0 snapshot
 ├── docs/                   Architecture and operating documentation
 ├── tests/                  Automated foundation checks
 ├── public/                 Excel template and other public assets
