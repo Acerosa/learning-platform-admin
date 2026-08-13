@@ -143,11 +143,13 @@ Statuses:
 - Archived
 
 Validation is a gate, not a status. Only Drafts are editable. Publishing
-creates an immutable Admin-local version; it does not write to the backend or
-learner hubs. Details: [Publication workflow](publication-workflow.md).
+creates an immutable Admin-local version. **Publish to Platform** then sends
+that snapshot to the backend catalogue. Learner hubs are not updated. Details:
+[Publication workflow](publication-workflow.md) and
+[Backend publication](backend-publication.md).
 
-Actions: save, resume, duplicate, delete, export, review, publish, compare,
-restore as Draft, archive.
+Actions: save, resume, duplicate, delete, export, review, publish, publish to
+platform, compare, restore as Draft, archive.
 
 ## Export
 
@@ -163,13 +165,12 @@ content. That fixture is not added to live Unit 14 Week 1.
 
 ## Future publishing
 
-Local publication lifecycle, version history, compare and restore are
-implemented in Admin storage. Still deferred:
+Local publication and backend catalogue publication are implemented. Still
+deferred:
 
 - GitHub commit automation
-- hosted Supabase curriculum writes
+- learner-hub consumption of published metadata
 - collaborative multi-user editing
 - AI generation
 - automatic assignment grading
 - Weeks 2–19 curriculum authoring
-- backend mutation RPCs for curriculum

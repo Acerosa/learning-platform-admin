@@ -7,7 +7,7 @@ All modules are registered in `src/router/modules.ts`. Their routes and navigati
 | Dashboard | Backend counts, recent attempts, contracts and health | Live read available |
 | Hub Registry | Search, filter, inspect metadata/contracts/course links and prepare lifecycle actions | Live read available; writes pending |
 | Courses | Authoritative hub/course associations | Live links available; catalogue mutation pending |
-| Curriculum authoring | Canonical drafts, local publication lifecycle, history, compare and restore | Local records; no backend writes |
+| Curriculum authoring | Canonical drafts, local publication lifecycle, platform publication | Local records plus `admin_api.publish_curriculum` |
 | Activities | Reviewed manifest counts, evidence/version/lifecycle readiness | Curriculum catalogue view pending |
 | Learners | Minimised directory and group/enrolment summaries | Live read available |
 | Teachers | Active platform role records and authority boundary | Live role read; full directory deferred |

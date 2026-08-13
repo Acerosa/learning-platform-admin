@@ -7,6 +7,7 @@ here.
 
 ### Added
 
+- Publish to Platform after local Publish, with Pending / Publishing / Published / Failed states and backend publication history.
 - Local curriculum publication lifecycle with immutable versions, working copies, review metadata, history, compare and restore.
 - Curriculum authoring module for canonical weeks, sessions, activities and blocks.
 - JSON and controlled Excel import against the shared `lp.content.*` contract.
