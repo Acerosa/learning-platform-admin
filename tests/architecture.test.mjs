@@ -83,7 +83,7 @@ test("shared theme service is used instead of a duplicate theme store", async ()
 });
 
 test("required documentation exists", async () => {
-  for (const file of ["README.md", "docs/architecture.md", "docs/modules.md", "docs/integration.md", "docs/permissions.md", "docs/deployment.md", "docs/testing.md", "docs/curriculum-authoring.md"]) {
+  for (const file of ["README.md", "docs/architecture.md", "docs/modules.md", "docs/integration.md", "docs/permissions.md", "docs/deployment.md", "docs/testing.md", "docs/curriculum-authoring.md", "docs/publication-workflow.md"]) {
     const content = await readFile(new URL(file, root), "utf8");
     assert.ok(content.length > 300, `${file} should be substantive`);
   }

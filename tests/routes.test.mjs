@@ -42,7 +42,11 @@ test("curriculum authoring exposes local draft workspace tabs", async () => {
   assert.match(html, /Imports/);
   assert.match(html, /Drafts/);
   assert.match(html, /Ready for Review/);
-  assert.match(html, /There is no Published state/);
+  assert.match(html, /Publication/);
+  assert.match(html, /History/);
+  assert.match(html, /Compare/);
+  assert.match(html, /Archive/);
+  assert.match(html, /Learners consume Published content/);
 });
 
 test("unknown module routes return not found", async () => {

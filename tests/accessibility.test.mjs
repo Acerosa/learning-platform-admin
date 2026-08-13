@@ -54,5 +54,6 @@ test("curriculum authoring exposes labelled controls and accessible tabs", async
   assert.match(html, /role="tab"/);
   assert.match(html, /aria-selected="true"/);
   assert.match(html, /Canonical learner preview/);
+  assert.match(html, /for="preview-version"/);
   assert.doesNotMatch(html, /draggable="true"/);
 });
