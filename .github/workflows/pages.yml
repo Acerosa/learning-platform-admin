@@ -30,6 +30,13 @@ jobs:
           repository: Acerosa/learning-platform-core
           path: learning-platform-core
 
+      - name: Check out shared curriculum content engine
+        uses: actions/checkout@v7
+        with:
+          repository: Acerosa/learning-platform-content
+          ref: v0.1.0
+          path: learning-platform-content
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
