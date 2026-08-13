@@ -28,6 +28,8 @@ The learner-safe `api` schema and staff-only `admin_api` schema remain separate.
 - `src/services/` supplies read data and mutation boundaries.
 - `src/stores/` represents backend-derived staff context without email-based checks.
 - `src/theme/` adapts the shared platform theme service for React.
+- `src/content/` adapts the vendored canonical content engine for local authoring. It does not own schema semantics.
+- `vendor/learning-platform-content/` is the reviewed Unit 14 schema/engine snapshot. See [Curriculum authoring](curriculum-authoring.md).
 
 ## Authentication and authority
 
@@ -56,7 +58,9 @@ data. Analytics are supplied by backend aggregate views.
 
 ## Administrative writes
 
-Backend 0.2.0 intentionally excludes staff mutation RPCs. All visible write journeys route through a pending mutation service. The interface explains the required backend work instead of constructing speculative endpoints.
+Backend 0.2.0 intentionally excludes staff mutation RPCs. All visible write journeys against backend data route through a pending mutation service. The interface explains the required backend work instead of constructing speculative endpoints.
+
+Curriculum authoring is a local exception: drafts persist in the browser and export canonical JSON. They do not call mutation RPCs, write hosted Supabase rows, or publish GitHub files.
 
 A mutation becomes eligible only after the backend defines its role requirement, validation and conflicts, transaction, stable errors, audit event, idempotency where relevant, RLS and integration tests.
 
@@ -65,6 +69,7 @@ A mutation becomes eligible only after the backend defines its role requirement,
 - Semantic headings, landmarks, labels and table headers are server-rendered.
 - The skip link targets the main administration region.
 - Native dialog semantics are used for detail and pending-action workflows.
+- Curriculum authoring tabs, forms and block reorder controls are labelled and keyboard-operable; drag-and-drop is not the only reorder path.
 - Focus indicators use the shared platform focus token.
 - Large tables scroll within a labelled content region rather than forcing page-level horizontal scrolling.
 - Navigation becomes an off-canvas region below 64rem; dashboard and record grids collapse progressively.

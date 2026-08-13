@@ -1,0 +1,180 @@
+# Curriculum authoring MVP
+
+The Curriculum authoring module edits the same canonical `lp.content.*` model
+consumed by Unit 14. It does not invent a second curriculum model, write to the
+backend, or publish GitHub curriculum files.
+
+## Architecture
+
+```text
+Admin UI
+  → factories / importers / draft store
+      → vendored learning-platform-content 0.1.0
+          schemas
+          validator
+          block registry
+          importer
+          renderer
+```
+
+Admin depends on those semantics. It does not own them.
+
+Vendored copy:
+
+- path: `vendor/learning-platform-content/0.1.0/`
+- provenance: Unit 14 commit `655e2d9168d80bf07b3d05bdb22d83c24f44e741`
+  (`curriculum-engine-mvp`)
+- model: option A, exact reviewed schema set with version and provenance
+
+Future extraction target: `learning-platform-content`. Keep these boundaries
+isolated so Admin can switch from the vendored copy to that package:
+
+- schemas
+- validator
+- importers
+- block registry
+- preview renderer
+
+The UI loads a canonical package, then renders editors from object type. There
+is no `if hub === "unit14"` rendering branch. Unit 14 is currently the only
+fully proven live consumer; Admin still authors generic canonical objects.
+
+Authoring does **not** edit HTML, hub source files, database migrations,
+learner attempts, marks, RLS, or GitHub repository files.
+
+## Canonical schemas
+
+Supported envelopes are the vendored `lp.content.*` set:
+
+- hub, curriculum, learning-outcome, assignment
+- week, session, activity, block, question, asset
+- schemaVersion `0.1.0` only
+
+Week, session and activity forms map onto those fields. Version is taken from
+the engine `SCHEMA_VERSION`; the UI does not invent extra properties.
+
+Session kinds come from the engine contract:
+
+`session`, `independent-study`, `homework`, `revision`, `retrieval`
+
+Activities are ordered block lists. Quiz, coding and reflection are not
+separate editors; they are block compositions.
+
+## Block composer
+
+Authorable types are the implemented registry entries:
+
+- interactive: `single-choice`, `classification`, `short-response`,
+  `code-editor`, `python-exercise`, `reflection`
+- prose/media: `heading`, `paragraph`, `markdown`, `callout`, `accordion`,
+  `hint`, `quote`, `reference`, `image`, `video`, `teacher-note`, `divider`
+
+Unimplemented registry types cannot be added. Block and question IDs are
+generated once and stay stable while content is edited. Duplicate creates a
+new id. Reorder uses Move up / Move down; drag-and-drop is not required.
+
+## JSON import
+
+Accepted input:
+
+- a canonical object (`lp.content.activity`, `week`, `session`, or other
+  envelope)
+- a canonical content package
+
+Flow: select file → parse → identify schema → sanitise → validate → preview →
+merge into the draft workspace.
+
+Malformed JSON and script/event-handler markup are rejected. Diagnostics show
+`code`, `path` and `message`.
+
+## Excel template
+
+Workbook: `/templates/lp-content-activity-import.xlsx`
+
+The browser parser uses pinned `xlsx@0.18.5`. There is no CDN dependency.
+
+Shared Unit 14 importer sheets:
+
+`LearningOutcomes`, `Assignments`, `Weeks`, `Sessions`, `Activities`,
+`Blocks`, `Questions`, `Assets`
+
+Admin-only extensions merged after import, because the shared Blocks importer
+does not map MCQ options:
+
+- `Options` — `blockId`, `optionId`, `label`, `correct`
+- `Feedback` — `blockId`, `correct`, `incorrect`
+
+MVP target is one activity workbook, not a full curriculum workbook. Arbitrary
+spreadsheets are not supported.
+
+Build committed copies with:
+
+```bash
+npm run build:activity-template
+```
+
+## Validation
+
+`src/content/validate.ts` is a thin adapter over the vendored
+`validatePackage` / `validateDocument`. Admin does not maintain a second rule
+set.
+
+Typical codes:
+
+- `DUPLICATE_ID`
+- `MISSING_REFERENCE`
+- `UNSUPPORTED_VERSION`
+- `UNSUPPORTED_BLOCK_TYPE`
+- `CYCLIC_REFERENCE`
+
+## Preview
+
+Preview calls `renderActivity` / `renderWeek` from the vendored engine. Staff
+see the same HTML contract as the learner hub. The pane is read-only.
+
+Extraction point: replace `vendor/learning-platform-content/0.1.0/engine-bundle.js`
+with `learning-platform-content` without rewriting the preview pane.
+
+Imported rich text is treated as untrusted. The renderer HTML-escapes output;
+import sanitisation also rejects `<script`, event handlers and `javascript:`
+URLs.
+
+## Draft model
+
+Drafts are browser `localStorage` only (`lp.admin.authoring.drafts.v1`).
+They are not backend curriculum.
+
+Statuses:
+
+- Draft
+- Valid
+- Invalid
+- Ready for Review
+
+There is no Published status because publication is not implemented.
+
+Actions: save, resume, duplicate, delete, export.
+
+## Export
+
+Validated drafts can export:
+
+- a single canonical object
+- an activity package
+- a full curriculum package
+
+Exported JSON must be accepted by the Unit 14 validator without manual edits.
+Interop is covered by `tests/authoring-interop.test.ts` using synthetic
+content. That fixture is not added to live Unit 14 Week 1.
+
+## Future publishing
+
+Deferred:
+
+- GitHub commit automation
+- hosted Supabase curriculum writes
+- approval workflows and collaborative editing
+- AI generation
+- automatic assignment grading
+- Weeks 2–19 curriculum authoring
+- backend mutation RPCs for curriculum

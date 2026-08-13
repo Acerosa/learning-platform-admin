@@ -7,6 +7,10 @@ here.
 
 ### Added
 
+- Curriculum authoring module for canonical weeks, sessions, activities and blocks.
+- JSON and controlled Excel import against the Unit 14 content contract.
+- Local draft workspace, validation diagnostics, learner-renderer preview and canonical export.
+- Vendored `learning-platform-content` 0.1.0 snapshot with Unit 14 provenance.
 - Supabase Auth staff sign-in using a public browser credential.
 - Backend-derived staff authority through `admin_api.current_staff_context`.
 - Explicit live, demo, loading, signed-out, access-denied and unavailable states.

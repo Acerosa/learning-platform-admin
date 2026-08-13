@@ -4,7 +4,7 @@ Version **0.2.0** — Platform Integration MVP for the Learning Platform Central
 
 [Open the administration dashboard](https://acerosa.github.io/learning-platform-admin/)
 
-This repository is the administration interface for the entire Learning Platform. It is not a learner hub and does not render curriculum activities. It prepares staff workflows for hubs, curriculum, people, delivery, analytics, operations, certification and audit.
+This repository is the administration interface for the entire Learning Platform. It is not a learner hub. Curriculum authoring drafts local canonical `lp.content.*` objects and previews them with the shared learner renderer; it does not publish curriculum or replace hub delivery.
 
 ## Current state
 
@@ -13,8 +13,9 @@ This repository is the administration interface for the entire Learning Platform
 - Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.
 - Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
 - Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
-- Write journeys are visible but safe: they explain the missing backend contract and never invent an endpoint.
-- No hosted credentials, database migrations or learner-hub code live here.
+- Write journeys against backend data remain pending: they explain the missing mutation contract and never invent an endpoint.
+- Curriculum authoring drafts weeks, sessions and activities locally, validates them with the vendored Unit 14 engine, and exports canonical JSON. Publication is deferred.
+- No hosted credentials, database migrations or learner-hub source editing live here.
 
 ## Local development
 
@@ -46,7 +47,7 @@ npm run test:integration
 npm test
 ```
 
-`npm test` builds the portal and runs route, architecture, accessibility and responsive-contract tests.
+`npm test` builds the portal and runs route, architecture, accessibility, responsive-contract and curriculum-authoring tests.
 
 `npm run build:pages` creates the static GitHub Pages build used by the deployment workflow.
 
@@ -57,7 +58,8 @@ learning-platform-admin/
 ├── app/                    Route entry points and global presentation
 ├── src/
 │   ├── api/                Documented admin API types and view names
-│   ├── components/         Shared administration components
+│   ├── components/         Shared administration and authoring components
+│   ├── content/            Canonical authoring adapters (not schema ownership)
 │   ├── layouts/            Administration shell
 │   ├── views/              Independent module surfaces
 │   ├── router/             Module and navigation registry
@@ -66,9 +68,10 @@ learning-platform-admin/
 │   ├── theme/              Adapter for learning-platform-core theme
 │   ├── types/              Local package declarations
 │   └── utils/              Presentation utilities
+├── vendor/                 Reviewed learning-platform-content 0.1.0 snapshot
 ├── docs/                   Architecture and operating documentation
 ├── tests/                  Automated foundation checks
-├── public/                 Public assets, when required
+├── public/                 Excel template and other public assets
 └── worker/                 Sites-compatible request entry
 ```
 
@@ -76,6 +79,7 @@ learning-platform-admin/
 
 - [Architecture](docs/architecture.md)
 - [Modules](docs/modules.md)
+- [Curriculum authoring](docs/curriculum-authoring.md)
 - [Backend and core integration](docs/integration.md)
 - [Permissions](docs/permissions.md)
 - [Deployment](docs/deployment.md)
@@ -84,8 +88,8 @@ learning-platform-admin/
 
 ## Known limitations
 
-- The backend has no administrative mutation RPCs in 0.2.0.
-- Curriculum/activity authoring, certification workflows, external monitoring ingestion and deployment integrations remain deferred.
+- The backend has no administrative mutation RPCs in 0.2.0. Authoring drafts are local/exportable only.
+- Publication, GitHub curriculum automation, hosted curriculum writes, certification workflows, external monitoring ingestion and Weeks 2–19 authoring remain deferred.
 - Demo-mode people, group, enrolment, assignment and attempt records are synthetic fixtures.
 - A hosted live release still requires approved environment configuration, Auth redirect URLs and hosted RLS integration validation.
 
