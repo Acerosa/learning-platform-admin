@@ -244,7 +244,7 @@ function AuditPage({ data }: { data: AdminDataSnapshot }) {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data } = useAdminPortal();
+  const { data, session } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   if (!data) return null;
   const openPending = (action: PendingAction) => setPendingAction(action);
@@ -254,7 +254,7 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
     case "dashboard": content = <DashboardPage data={data} />; break;
     case "hubs": content = <HubRegistryPage data={data} openPending={openPending} />; break;
     case "courses": content = <CoursesPage links={data.hubCourseLinks} openPending={openPending} />; break;
-    case "curriculum": content = <CurriculumAuthoringPage hubs={data.hubs} links={data.hubCourseLinks} />; break;
+    case "curriculum": content = <CurriculumAuthoringPage hubs={data.hubs} links={data.hubCourseLinks} actor={session.displayName} />; break;
     case "activities": content = <DeferredLearningPage moduleId="activities" openPending={openPending} />; break;
     case "learners": content = <LearnersPage data={data} openPending={openPending} />; break;
     case "teachers": content = <TeachersPage data={data} openPending={openPending} />; break;

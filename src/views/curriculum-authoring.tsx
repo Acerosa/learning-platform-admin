@@ -3,10 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import type { HubCourseLinkRecord, HubRecord } from "../api/admin-api";
 import { ActivityComposer } from "../components/authoring/activity-composer";
+import { ArchivePanel } from "../components/authoring/archive-panel";
+import { ComparePanel } from "../components/authoring/compare-panel";
 import { DiagnosticsList } from "../components/authoring/diagnostics-list";
+import { HistoryPanel } from "../components/authoring/history-panel";
 import { ImportPanel } from "../components/authoring/import-panel";
+import { LifecycleBanner, lifecycleTone } from "../components/authoring/lifecycle-banner";
 import { PreviewPane } from "../components/authoring/preview-pane";
+import { PublicationPanel } from "../components/authoring/publication-panel";
+import { ReviewPanel } from "../components/authoring/review-panel";
 import { SessionForm } from "../components/authoring/session-form";
+import { VersionsPanel } from "../components/authoring/versions-panel";
 import { WeekForm } from "../components/authoring/week-form";
 import { StatusBadge } from "../components/status-badge";
 import {
@@ -14,15 +21,43 @@ import {
   deleteDraft,
   duplicateDraft,
   loadDrafts,
+  persistDrafts,
   saveDraft,
   touchDraft,
 } from "../content/draft-store";
 import { downloadText, exportActivityPackage, exportDocument, exportPackage } from "../content/export";
 import { syncCurriculumLists, upsertAssignment, upsertOutcome } from "../content/factories";
-import type { AuthoringDraft, ContentActivity, ContentDocument, ContentPackage, DraftStatus } from "../content/types";
+import { isEditableStatus, LIFECYCLE_LABELS } from "../content/lifecycle";
+import { publicationGate } from "../content/publication-gate";
+import type { AuthoringDraft, ContentActivity, ContentDocument, ContentPackage } from "../content/types";
 import { previewActivityHtml, previewWeekHtml, validatePackage } from "../content/validate";
+import {
+  approveRecord,
+  archiveVersion,
+  createWorkingCopy,
+  replaceRecord,
+  restoreAsDraft,
+  returnToDraft,
+  startReview,
+  submitForReview,
+  suggestNextVersion,
+  updateReviewMetadata,
+  publishVersion,
+} from "../content/versioning";
 
-type AuthoringTab = "curriculum" | "weeks" | "sessions" | "activities" | "imports" | "drafts";
+type AuthoringTab =
+  | "curriculum"
+  | "weeks"
+  | "sessions"
+  | "activities"
+  | "imports"
+  | "drafts"
+  | "versions"
+  | "review"
+  | "publication"
+  | "history"
+  | "compare"
+  | "archive";
 
 function applyWeek(pkg: ContentPackage, week: ContentDocument) {
   let next = { ...pkg, weeks: [...pkg.weeks.filter((item) => item.id !== week.id), week] };
@@ -63,9 +98,11 @@ function applySession(pkg: ContentPackage, session: ContentDocument) {
 export function CurriculumAuthoringPage({
   hubs,
   links,
+  actor = "local-author",
 }: {
   hubs: readonly HubRecord[];
   links: readonly HubCourseLinkRecord[];
+  actor?: string;
 }) {
   const defaultHub = hubs[0];
   const defaultLink = links.find((link) => link.hubCode === defaultHub?.hubCode) || links[0];
@@ -75,9 +112,16 @@ export function CurriculumAuthoringPage({
     defaultHub?.hubCode || "authoring-hub",
     defaultHub?.hubName || "Authoring hub",
     defaultLink?.courseKey || "course",
+    actor,
   ));
   const [selectedActivityId, setSelectedActivityId] = useState<string>("");
   const [hydrated, setHydrated] = useState(false);
+  const [message, setMessage] = useState("");
+  const [previewId, setPreviewId] = useState("");
+  const [compareLeft, setCompareLeft] = useState("");
+  const [compareRight, setCompareRight] = useState("");
+  const [publishVersionValue, setPublishVersionValue] = useState("0.1.0");
+  const [publishNotes, setPublishNotes] = useState("");
 
   useEffect(() => {
     const stored = loadDrafts();
@@ -86,24 +130,59 @@ export function CurriculumAuthoringPage({
     if (stored[0]) {
       setDraft(stored[0]);
       setSelectedActivityId(stored[0].package.activities[0]?.id || "");
+      setPreviewId(stored[0].id);
+      setCompareLeft(stored[0].id);
+      setCompareRight(stored[1]?.id || stored[0].id);
+      setPublishVersionValue(suggestNextVersion(stored, stored[0].hubId, stored[0].courseKey));
+      setPublishNotes(stored[0].publicationNotes);
     }
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   const pkg = draft.package;
+  const editable = isEditableStatus(draft.status);
   const validation = useMemo(() => validatePackage(pkg), [pkg]);
-  const selectedActivity = pkg.activities.find((item) => item.id === selectedActivityId) || pkg.activities[0] || null;
+  const gate = useMemo(() => publicationGate(pkg, draft.sourcePackageVersion), [pkg, draft.sourcePackageVersion]);
+  const previewRecord = drafts.find((item) => item.id === previewId) || draft;
+  const selectedActivity = previewRecord.package.activities.find((item) => item.id === selectedActivityId)
+    || previewRecord.package.activities[0]
+    || null;
   const previewHtml = selectedActivity
     ? previewActivityHtml(selectedActivity)
-    : pkg.weeks[0]
-      ? previewWeekHtml(pkg, pkg.weeks[0].id)
+    : previewRecord.package.weeks[0]
+      ? previewWeekHtml(previewRecord.package, previewRecord.package.weeks[0].id)
       : "<p>Create a week or activity to preview the learner renderer.</p>";
 
-  function updatePackage(nextPkg: ContentPackage, status?: DraftStatus) {
-    const next = touchDraft(draft, syncCurriculumLists(nextPkg), status);
-    setDraft(next);
-    if (hydrated) setDrafts(saveDraft(drafts, next));
+  function showError(error: unknown) {
+    setMessage(error instanceof Error ? error.message : "The requested publication action could not be completed.");
+  }
+
+  function commit(nextDraft: AuthoringDraft, nextRecords = saveDraft(drafts, nextDraft)) {
+    setDraft(nextDraft);
+    setDrafts(nextRecords);
+    setPreviewId(nextDraft.id);
+    setMessage("");
+    return nextRecords;
+  }
+
+  function updatePackage(nextPkg: ContentPackage) {
+    try {
+      const next = touchDraft(draft, syncCurriculumLists(nextPkg));
+      if (hydrated) commit(next);
+      else setDraft(next);
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  function applyRecord(next: AuthoringDraft) {
+    try {
+      if (hydrated) commit(next);
+      else setDraft(next);
+    } catch (error) {
+      showError(error);
+    }
   }
 
   function setHubContext(hubCode: string) {
@@ -133,7 +212,15 @@ export function CurriculumAuthoringPage({
     { id: "activities", label: "Activities" },
     { id: "imports", label: "Imports" },
     { id: "drafts", label: "Drafts" },
+    { id: "versions", label: "Versions" },
+    { id: "review", label: "Review" },
+    { id: "publication", label: "Publication" },
+    { id: "history", label: "History" },
+    { id: "compare", label: "Compare" },
+    { id: "archive", label: "Archive" },
   ];
+
+  const compareRecords = drafts.length ? drafts : [draft];
 
   return (
     <>
@@ -141,16 +228,19 @@ export function CurriculumAuthoringPage({
         <div>
           <p className="eyebrow">Curriculum administration</p>
           <h1>Curriculum authoring</h1>
-          <p>Author the same canonical <code>lp.content.*</code> objects the learner hub renders. Drafts stay local. Publication is not available in this MVP.</p>
+          <p>Admin edits Drafts. Learners consume Published content only. Publication stays in this browser and does not write to the backend or learner hubs.</p>
         </div>
-        <StatusBadge label={draft.status.replaceAll("-", " ")} tone={draft.status === "invalid" ? "danger" : draft.status === "ready-for-review" ? "positive" : "warning"} />
+        <StatusBadge label={LIFECYCLE_LABELS[draft.status]} tone={lifecycleTone(draft.status)} />
       </header>
+
+      <LifecycleBanner record={draft} />
+      {message ? <p className="authoring-alert" role="alert">{message}</p> : null}
 
       <section className="panel">
         <div className="toolbar">
           <div>
             <label htmlFor="authoring-hub">Hub context</label>
-            <select id="authoring-hub" value={pkg.hub.id} onChange={(event) => setHubContext(event.target.value)}>
+            <select id="authoring-hub" value={pkg.hub.id} disabled={!editable} onChange={(event) => setHubContext(event.target.value)}>
               {(hubs.length ? hubs : [{ hubCode: pkg.hub.id, hubName: String(pkg.hub.metadata.name || pkg.hub.id) } as HubRecord]).map((hub) => (
                 <option key={hub.hubCode} value={hub.hubCode}>{hub.hubName}</option>
               ))}
@@ -161,6 +251,7 @@ export function CurriculumAuthoringPage({
             <select
               id="authoring-course"
               value={String(pkg.curriculum.metadata.course || "")}
+              disabled={!editable}
               onChange={(event) => updatePackage({
                 ...pkg,
                 curriculum: { ...pkg.curriculum, metadata: { ...pkg.curriculum.metadata, course: event.target.value } },
@@ -197,13 +288,19 @@ export function CurriculumAuthoringPage({
         {tab === "curriculum" ? (
           <section className="panel">
             <h2>Draft workspace</h2>
-            <p>Statuses are Draft, Valid, Invalid and Ready for Review. There is no Published state because this portal does not write curriculum to the backend.</p>
+            <p>Lifecycle: Draft, Ready for Review, In Review, Approved, Published, Superseded, Archived. Validation is a gate, not a status. Published versions are immutable.</p>
             <div className="toolbar">
               <button className="button button--primary" type="button" onClick={() => {
                 const result = validatePackage(pkg);
-                updatePackage(pkg, result.valid ? "valid" : "invalid");
+                setMessage(result.valid ? "Validation succeeded." : "Validation failed. Publication remains blocked.");
               }}>Validate</button>
-              <button className="button button--secondary" type="button" disabled={!validation.valid} onClick={() => updatePackage(pkg, "ready-for-review")}>Mark ready for review</button>
+              <button className="button button--secondary" type="button" disabled={!editable} onClick={() => {
+                try {
+                  applyRecord(submitForReview(draft));
+                } catch (error) {
+                  showError(error);
+                }
+              }}>Mark ready for review</button>
               <button className="button button--secondary" type="button" onClick={() => downloadText(`${pkg.hub.id}-package.json`, exportPackage(pkg))}>Export package</button>
               <button className="button button--secondary" type="button" disabled={!pkg.activities.length} onClick={() => downloadText(`${selectedActivity?.id || "activity"}.json`, exportActivityPackage(pkg, selectedActivity?.id))}>Export activity package</button>
             </div>
@@ -212,7 +309,8 @@ export function CurriculumAuthoringPage({
         ) : null}
 
         {tab === "weeks" ? (
-          <>
+          <fieldset className="authoring-fieldset" disabled={!editable}>
+            <legend className="sr-only">Week editors</legend>
             <WeekForm existingIds={pkg.weeks.map((item) => item.id)} onCreate={(week) => updatePackage(applyWeek(pkg, week))} />
             <section className="panel">
               <h2>Weeks</h2>
@@ -229,11 +327,12 @@ export function CurriculumAuthoringPage({
                 </ul>
               ) : <p>No weeks in this draft.</p>}
             </section>
-          </>
+          </fieldset>
         ) : null}
 
         {tab === "sessions" ? (
-          <>
+          <fieldset className="authoring-fieldset" disabled={!editable}>
+            <legend className="sr-only">Session editors</legend>
             <SessionForm weeks={pkg.weeks} existingIds={pkg.sessions.map((item) => item.id)} onCreate={(session) => updatePackage(applySession(pkg, session))} />
             <section className="panel">
               <h2>Sessions</h2>
@@ -250,11 +349,12 @@ export function CurriculumAuthoringPage({
                 </ul>
               ) : <p>No sessions in this draft.</p>}
             </section>
-          </>
+          </fieldset>
         ) : null}
 
         {tab === "activities" ? (
-          <>
+          <fieldset className="authoring-fieldset" disabled={!editable}>
+            <legend className="sr-only">Activity editors</legend>
             {pkg.activities.length ? (
               <div className="toolbar">
                 <div>
@@ -267,7 +367,7 @@ export function CurriculumAuthoringPage({
             ) : null}
             <ActivityComposer
               existingIds={pkg.activities.map((item) => item.id)}
-              activity={selectedActivity}
+              activity={pkg.activities.find((item) => item.id === selectedActivityId) || pkg.activities[0] || null}
               onCreate={(activity) => {
                 updatePackage({ ...pkg, activities: [...pkg.activities, activity] });
                 setSelectedActivityId(activity.id);
@@ -279,45 +379,202 @@ export function CurriculumAuthoringPage({
                 });
               }}
             />
-          </>
+          </fieldset>
         ) : null}
 
-        {tab === "imports" ? <ImportPanel pkg={pkg} onImported={(next) => updatePackage(next)} /> : null}
+        {tab === "imports" ? (
+          <fieldset className="authoring-fieldset" disabled={!editable}>
+            <legend className="sr-only">Import tools</legend>
+            <ImportPanel pkg={pkg} onImported={(next) => updatePackage(next)} />
+          </fieldset>
+        ) : null}
 
         {tab === "drafts" ? (
           <section className="panel">
             <h2>Local drafts</h2>
-            <p>These records are browser storage only. They are not backend curriculum.</p>
+            <p>These records are browser storage only. They are not backend curriculum and are never sent to learner hubs.</p>
             <div className="toolbar">
               <button className="button button--primary" type="button" onClick={() => {
-                const next = createDraft(pkg.hub.id, String(pkg.hub.metadata.name || pkg.hub.id), String(pkg.curriculum.metadata.course || "course"));
-                setDraft(next);
-                setDrafts(saveDraft(drafts, next));
+                const next = createDraft(pkg.hub.id, String(pkg.hub.metadata.name || pkg.hub.id), String(pkg.curriculum.metadata.course || "course"), actor);
+                commit(next);
               }}>New draft</button>
-              <button className="button button--secondary" type="button" onClick={() => setDrafts(saveDraft(drafts, draft))}>Save draft</button>
+              <button className="button button--secondary" type="button" onClick={() => commit(draft)}>Save draft</button>
             </div>
             {drafts.length ? (
               <ul className="authoring-list">
                 {drafts.map((item) => (
                   <li key={item.id}>
                     <strong>{item.title}</strong>
-                    <StatusBadge label={item.status.replaceAll("-", " ")} tone={item.status === "invalid" ? "danger" : "warning"} />
-                    <button className="button button--small button--secondary" type="button" onClick={() => setDraft(item)}>Resume</button>
+                    <StatusBadge label={LIFECYCLE_LABELS[item.status]} tone={lifecycleTone(item.status)} />
+                    <button className="button button--small button--secondary" type="button" onClick={() => {
+                      setDraft(item);
+                      setPreviewId(item.id);
+                      setPublishVersionValue(suggestNextVersion(drafts, item.hubId, item.courseKey));
+                      setPublishNotes(item.publicationNotes);
+                    }}>Resume</button>
                     <button className="button button--small button--secondary" type="button" onClick={() => {
                       const copy = duplicateDraft(item);
-                      setDraft(copy);
-                      setDrafts(saveDraft(drafts, copy));
+                      commit(copy);
                     }}>Duplicate</button>
                     <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${item.id}.json`, exportPackage(item.package))}>Export</button>
-                    <button className="button button--small button--secondary" type="button" onClick={() => setDrafts(deleteDraft(drafts, item.id))}>Delete</button>
+                    <button className="button button--small button--secondary" type="button" onClick={() => {
+                      const remaining = deleteDraft(drafts, item.id);
+                      setDrafts(remaining);
+                      if (item.id === draft.id && remaining[0]) setDraft(remaining[0]);
+                    }}>Delete</button>
                   </li>
                 ))}
               </ul>
             ) : <p>No saved drafts yet.</p>}
           </section>
         ) : null}
+
+        {tab === "versions" ? (
+          <VersionsPanel
+            records={compareRecords}
+            current={draft}
+            onSelect={(item) => {
+              setDraft(item);
+              setPreviewId(item.id);
+              setTab("curriculum");
+            }}
+            onWorkingCopy={(published) => {
+              try {
+                const copy = createWorkingCopy(published, actor);
+                commit(copy);
+                setTab("curriculum");
+              } catch (error) {
+                showError(error);
+              }
+            }}
+          />
+        ) : null}
+
+        {tab === "review" ? (
+          <ReviewPanel
+            record={draft}
+            actor={actor}
+            onAuthorChange={(value) => applyRecord(updateReviewMetadata(draft, { author: value }))}
+            onReviewerChange={(value) => applyRecord(updateReviewMetadata(draft, { reviewer: value }))}
+            onApprovalNotes={(value) => applyRecord(updateReviewMetadata(draft, { approvalNotes: value }))}
+            onStartReview={() => {
+              try {
+                applyRecord(startReview(draft, draft.reviewer || actor));
+              } catch (error) {
+                showError(error);
+              }
+            }}
+            onApprove={() => {
+              try {
+                applyRecord(approveRecord(draft, draft.approvalNotes, draft.reviewer || actor));
+              } catch (error) {
+                showError(error);
+              }
+            }}
+            onReturnToDraft={() => {
+              try {
+                applyRecord(returnToDraft(draft));
+              } catch (error) {
+                showError(error);
+              }
+            }}
+          />
+        ) : null}
+
+        {tab === "publication" ? (
+          <PublicationPanel
+            record={draft}
+            version={publishVersionValue}
+            notes={publishNotes}
+            gateOk={gate.ok}
+            issues={gate.issues}
+            suggestedVersion={suggestNextVersion(compareRecords, draft.hubId, draft.courseKey)}
+            onVersionChange={setPublishVersionValue}
+            onNotesChange={setPublishNotes}
+            onPublish={() => {
+              try {
+                const nextRecords = publishVersion(compareRecords, draft, {
+                  version: publishVersionValue || suggestNextVersion(compareRecords, draft.hubId, draft.courseKey),
+                  publishedBy: actor,
+                  notes: publishNotes,
+                });
+                persistDrafts(nextRecords);
+                const published = nextRecords.find((item) => item.id === draft.id);
+                setDrafts(nextRecords);
+                if (published) {
+                  setDraft(published);
+                  setPreviewId(published.id);
+                }
+                setMessage("Published locally. Learner hubs were not updated.");
+              } catch (error) {
+                showError(error);
+              }
+            }}
+          />
+        ) : null}
+
+        {tab === "history" ? (
+          <HistoryPanel
+            records={compareRecords}
+            current={draft}
+            onView={(item) => {
+              setDraft(item);
+              setPreviewId(item.id);
+            }}
+            onCompare={(item) => {
+              setCompareLeft(draft.id);
+              setCompareRight(item.id);
+              setTab("compare");
+            }}
+            onRestore={(item) => {
+              const restored = restoreAsDraft(item, actor);
+              commit(restored);
+              setTab("curriculum");
+            }}
+          />
+        ) : null}
+
+        {tab === "compare" ? (
+          <ComparePanel
+            records={compareRecords}
+            leftId={compareLeft || compareRecords[0]?.id || ""}
+            rightId={compareRight || compareRecords[1]?.id || compareRecords[0]?.id || ""}
+            onLeftChange={setCompareLeft}
+            onRightChange={setCompareRight}
+          />
+        ) : null}
+
+        {tab === "archive" ? (
+          <ArchivePanel
+            records={compareRecords}
+            current={draft}
+            onArchive={(item) => {
+              try {
+                const archived = archiveVersion(item);
+                const next = replaceRecord(compareRecords, archived);
+                persistDrafts(next);
+                setDrafts(next);
+                if (item.id === draft.id) setDraft(archived);
+              } catch (error) {
+                showError(error);
+              }
+            }}
+          />
+        ) : null}
       </div>
 
+      <div className="toolbar">
+        <div>
+          <label htmlFor="preview-version">Preview version</label>
+          <select id="preview-version" value={previewRecord.id} onChange={(event) => setPreviewId(event.target.value)}>
+            {(compareRecords).map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.version || "working copy"} · {LIFECYCLE_LABELS[item.status]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       <PreviewPane title="Preview" html={previewHtml} />
     </>
   );
