@@ -60,7 +60,7 @@ data. Analytics are supplied by backend aggregate views.
 
 Backend 0.2.0 intentionally excludes staff mutation RPCs. All visible write journeys against backend data route through a pending mutation service. The interface explains the required backend work instead of constructing speculative endpoints.
 
-Curriculum authoring is a local exception: drafts persist in the browser and export canonical JSON. They do not call mutation RPCs, write hosted Supabase rows, or publish GitHub files.
+Curriculum authoring is a local exception: drafts and publication records persist in the browser and export canonical JSON. They do not call mutation RPCs, write hosted Supabase rows, or publish GitHub files. Learners never read this store.
 
 A mutation becomes eligible only after the backend defines its role requirement, validation and conflicts, transaction, stable errors, audit event, idempotency where relevant, RLS and integration tests.
 
