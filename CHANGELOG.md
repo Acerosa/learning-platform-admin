@@ -7,10 +7,9 @@ here.
 
 ### Added
 
-- Real Hub Registry registration workflow: import or enter a reviewed
-  `learning-platform-hub.json`, validate, preview, and register through
-  `admin_api.register_hub`. Demo mode keeps a synthetic local action and never
-  calls the live RPC.
+- Real Hub Registry management: register, edit, enable/disable, publication
+  status and informational health. Live mode uses `admin_api.register_hub` and
+  `admin_api.update_hub`. Demo mode keeps synthetic local actions.
 - Publish to Platform after local Publish, with Pending / Publishing / Published / Failed states and backend publication history.
 - Local curriculum publication lifecycle with immutable versions, working copies, review metadata, history, compare and restore.
 - Curriculum authoring module for canonical weeks, sessions, activities and blocks.

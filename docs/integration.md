@@ -22,6 +22,7 @@ The documented administrative boundary is `admin_api` version 0.2.0.
 | Current staff authority | `admin_api.current_staff_context` |
 | Hubs | `admin_api.hubs` |
 | Hub/course associations | `admin_api.hub_course_links` |
+| Courses | `admin_api.courses` |
 | Contracts | `admin_api.platform_contracts` |
 | Staff roles | `admin_api.staff_roles` |
 | Audit | `admin_api.audit_events` |
@@ -35,6 +36,7 @@ The documented administrative boundary is `admin_api` version 0.2.0.
 | Activity analytics | `admin_api.activity_performance` |
 | Curriculum publications | `admin_api.curriculum_publications` |
 | Hub registration | `admin_api.register_hub` |
+| Hub update | `admin_api.update_hub` |
 | Curriculum publication | `admin_api.publish_curriculum` |
 
 All views rely on backend RLS. The portal must use an authenticated staff session and the public browser credential only. A service-role key must never be placed in this application.
