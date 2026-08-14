@@ -1,6 +1,6 @@
 import { clonePackage, deepFreeze } from "./clone.ts";
 import { getContentEngine } from "./engine.ts";
-import { slugify } from "./factories.ts";
+import { slugify, upsertAssignment, upsertOutcome } from "./factories.ts";
 import { isLifecycleStatus, isImmutableStatus } from "./lifecycle.ts";
 import { CONTENT_PACKAGE_VERSION } from "./publication-gate.ts";
 import { sanitizeObject } from "./sanitize.ts";
@@ -149,12 +149,99 @@ export function duplicateDraft(draft: AuthoringDraft): AuthoringDraft {
   };
 }
 
+const SINGLE_DOCUMENT_SCHEMAS = new Set([
+  "lp.content.activity",
+  "lp.content.week",
+  "lp.content.session",
+]);
+
+export function isAssembledPackageGraph(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  if (SINGLE_DOCUMENT_SCHEMAS.has(String(obj.schema || ""))) return false;
+  return Boolean(
+    Array.isArray(obj.weeks)
+    || Array.isArray(obj.sessions)
+    || Array.isArray(obj.activities)
+    || (obj.hub && typeof obj.hub === "object")
+    || (obj.curriculum && typeof obj.curriculum === "object"),
+  );
+}
+
+export function packageContentsSummary(pkg: ContentPackage) {
+  return {
+    weeks: pkg.weeks.map((item) => item.id),
+    sessions: pkg.sessions.map((item) => item.id),
+    activities: pkg.activities.map((item) => item.id),
+    questions: pkg.questions.map((item) => item.id),
+  };
+}
+
+function referencedIds(pkg: ContentPackage) {
+  const outcomes = new Set<string>();
+  const assignments = new Set<string>();
+  const collect = (relationships: Record<string, unknown> | undefined) => {
+    const los = relationships?.learningOutcomes;
+    if (Array.isArray(los)) los.forEach((id) => { if (id) outcomes.add(String(id)); });
+    const assignment = relationships?.assignment;
+    if (assignment) assignments.add(String(assignment));
+  };
+  pkg.weeks.forEach((week) => collect(week.relationships));
+  pkg.activities.forEach((activity) => collect(activity.relationships));
+  return { outcomes, assignments };
+}
+
+function bindImportedGraph(
+  pkg: ContentPackage,
+  fallbackHub: ContentPackage["hub"],
+  fallbackCurriculum: ContentPackage["curriculum"],
+  usedFallbackCurriculum: boolean,
+) {
+  let next = pkg;
+  if (!next.hub) next = { ...next, hub: fallbackHub };
+  if (!next.curriculum) next = { ...next, curriculum: fallbackCurriculum };
+  if (usedFallbackCurriculum) {
+    next = {
+      ...next,
+      hub: {
+        ...next.hub,
+        relationships: { ...next.hub.relationships, curriculum: fallbackCurriculum.id },
+      },
+      curriculum: fallbackCurriculum,
+      weeks: next.weeks.map((week) => ({
+        ...week,
+        relationships: { ...week.relationships, curriculum: fallbackCurriculum.id },
+      })),
+    };
+  }
+  const refs = referencedIds(next);
+  refs.outcomes.forEach((id) => { next = upsertOutcome(next, id); });
+  refs.assignments.forEach((id) => { next = upsertAssignment(next, id); });
+  return next;
+}
+
 export function importToPackage(value: unknown, fallbackHub: ContentPackage["hub"], fallbackCurriculum: ContentPackage["curriculum"]) {
   const engine = getContentEngine();
   const clean = sanitizeObject(value);
   let pkg: ContentPackage;
-  if (clean && typeof clean === "object" && "schema" in (clean as object)) {
+  let usedFallbackCurriculum = false;
+  if (isAssembledPackageGraph(clean)) {
+    const graph = clean as Record<string, unknown>;
+    usedFallbackCurriculum = !(graph.curriculum && typeof graph.curriculum === "object");
+    pkg = engine.loadPackageFromFiles({
+      hub: (graph.hub as ContentPackage["hub"] | undefined) || fallbackHub,
+      curriculum: (graph.curriculum as ContentPackage["curriculum"] | undefined) || fallbackCurriculum,
+      learningOutcomes: graph.learningOutcomes as ContentPackage["learningOutcomes"],
+      assignments: graph.assignments as ContentPackage["assignments"],
+      weeks: graph.weeks as ContentPackage["weeks"],
+      sessions: graph.sessions as ContentPackage["sessions"],
+      activities: graph.activities as ContentPackage["activities"],
+      questions: graph.questions as ContentPackage["questions"],
+      assets: graph.assets as ContentPackage["assets"],
+    });
+  } else if (clean && typeof clean === "object" && "schema" in (clean as object)) {
     const doc = clean as { schema?: string };
+    usedFallbackCurriculum = true;
     if (doc.schema === engine.SCHEMAS.ACTIVITY) {
       pkg = engine.loadPackageFromFiles({
         hub: fallbackHub,
@@ -174,14 +261,13 @@ export function importToPackage(value: unknown, fallbackHub: ContentPackage["hub
         sessions: [clean as ContentDocument],
       });
     } else {
+      usedFallbackCurriculum = false;
       pkg = engine.importJSON(clean);
     }
   } else {
     pkg = engine.importJSON(clean);
   }
-  if (!pkg.hub) pkg.hub = fallbackHub;
-  if (!pkg.curriculum) pkg.curriculum = fallbackCurriculum;
-  return pkg;
+  return bindImportedGraph(pkg, fallbackHub, fallbackCurriculum, usedFallbackCurriculum);
 }
 
 export function mergePackages(base: ContentPackage, incoming: ContentPackage): ContentPackage {

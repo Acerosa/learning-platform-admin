@@ -125,6 +125,8 @@ export function CurriculumAuthoringPage({
   const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState("");
   const [previewId, setPreviewId] = useState("");
+  const [previewWeekId, setPreviewWeekId] = useState("");
+  const [previewMode, setPreviewMode] = useState<"week" | "activity">("week");
   const [compareLeft, setCompareLeft] = useState("");
   const [compareRight, setCompareRight] = useState("");
   const [publishVersionValue, setPublishVersionValue] = useState("0.1.0");
@@ -155,11 +157,17 @@ export function CurriculumAuthoringPage({
   const selectedActivity = previewRecord.package.activities.find((item) => item.id === selectedActivityId)
     || previewRecord.package.activities[0]
     || null;
-  const previewHtml = selectedActivity
+  const weekForPreview = previewRecord.package.weeks.find((week) => week.id === previewWeekId)
+    || previewRecord.package.weeks.find((week) => Array.isArray(week.relationships.sessions) && week.relationships.sessions.length)
+    || previewRecord.package.weeks[0]
+    || null;
+  const previewHtml = previewMode === "activity" && selectedActivity
     ? previewActivityHtml(selectedActivity)
-    : previewRecord.package.weeks[0]
-      ? previewWeekHtml(previewRecord.package, previewRecord.package.weeks[0].id)
-      : "<p>Create a week or activity to preview the learner renderer.</p>";
+    : weekForPreview
+      ? previewWeekHtml(previewRecord.package, weekForPreview.id)
+      : selectedActivity
+        ? previewActivityHtml(selectedActivity)
+        : "<p>Create a week or activity to preview the learner renderer.</p>";
 
   function showError(error: unknown) {
     setMessage(error instanceof Error ? error.message : "The requested publication action could not be completed.");
@@ -196,16 +204,18 @@ export function CurriculumAuthoringPage({
     const hub = hubs.find((item) => item.hubCode === hubCode);
     const link = links.find((item) => item.hubCode === hubCode);
     const courseKey = link?.courseKey || draft.courseKey;
+    const curriculumId = `${hubCode}-curriculum`;
     updatePackage({
       ...pkg,
       hub: {
         ...pkg.hub,
         id: hubCode,
         metadata: { ...pkg.hub.metadata, name: hub?.hubName || hubCode },
+        relationships: { ...pkg.hub.relationships, curriculum: curriculumId },
       },
       curriculum: {
         ...pkg.curriculum,
-        id: `${hubCode}-curriculum`,
+        id: curriculumId,
         metadata: { ...pkg.curriculum.metadata, course: courseKey, title: `${hub?.hubName || hubCode} curriculum` },
         relationships: { ...pkg.curriculum.relationships },
       },
@@ -615,6 +625,40 @@ export function CurriculumAuthoringPage({
             ))}
           </select>
         </div>
+        <div>
+          <label htmlFor="preview-mode">Preview</label>
+          <select id="preview-mode" value={previewMode} onChange={(event) => setPreviewMode(event.target.value as "week" | "activity")}>
+            <option value="week">Week</option>
+            <option value="activity">Activity</option>
+          </select>
+        </div>
+        {previewMode === "week" ? (
+          <div>
+            <label htmlFor="preview-week">Week</label>
+            <select
+              id="preview-week"
+              value={weekForPreview?.id || ""}
+              onChange={(event) => setPreviewWeekId(event.target.value)}
+            >
+              {previewRecord.package.weeks.map((week) => (
+                <option key={week.id} value={week.id}>{String(week.metadata.title || week.id)}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="preview-activity">Activity</label>
+            <select
+              id="preview-activity"
+              value={selectedActivity?.id || ""}
+              onChange={(event) => setSelectedActivityId(event.target.value)}
+            >
+              {previewRecord.package.activities.map((activity) => (
+                <option key={activity.id} value={activity.id}>{activity.id}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
       <PreviewPane title="Preview" html={previewHtml} />
     </>
