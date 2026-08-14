@@ -5,6 +5,7 @@ import type {
   AssignmentRecord,
   AttemptRecord,
   AuditEventRecord,
+  CourseRecord,
   CurrentStaffContextRecord,
   CurriculumPublicationRecord,
   DashboardSummaryRecord,
@@ -80,6 +81,34 @@ export const HUBS: readonly HubRecord[] = Object.freeze([
     active: true,
     certificationState: null,
   },
+  {
+    hubCode: "unit-14-software-engineering-for-business",
+    hubName: "Unit 14 Software Engineering for Business Hub",
+    description: "Learner hub for OCR Level 3 IT Unit 14 Software Engineering for Business.",
+    hubVersion: "0.1.0",
+    manifestVersion: "1.0.0",
+    coreVersion: "0.1.0",
+    learnerApiVersion: "0.1.0",
+    submissionContractVersion: "0.1.0",
+    platformVersion: "0.1.0",
+    subject: "OCR Level 3 IT Unit 14 Software Engineering for Business",
+    repositoryUrl: "https://github.com/Acerosa/unit-14-software-engineering-for-business-hub",
+    deploymentUrl: "https://acerosa.github.io/unit-14-software-engineering-for-business-hub/",
+    curriculumModel: "course/unit/week/session/activity/learning-outcome",
+    activityTypes: ["classification", "diagnostic", "code-reading"],
+    evidenceCapabilities: ["question-level"],
+    features: { authentication: true, onboarding: true, progress: true, codingExercises: false },
+    compatibility: {
+      required: {
+        coreVersion: "0.1.0",
+        learnerApiContractVersion: "0.1.0",
+        submissionContractVersion: "0.1.0",
+      },
+    },
+    status: "testing",
+    active: true,
+    certificationState: null,
+  },
 ]);
 
 export const HUB_COURSE_LINKS: readonly HubCourseLinkRecord[] = Object.freeze([
@@ -96,6 +125,30 @@ export const HUB_COURSE_LINKS: readonly HubCourseLinkRecord[] = Object.freeze([
     courseTitle: "T Level Digital Software Development",
     active: true,
     linkedAt: "2026-08-11T00:00:00Z",
+  },
+  {
+    hubCode: "unit-14-software-engineering-for-business",
+    courseKey: "ocr-level-3-it",
+    courseTitle: "OCR Level 3 IT",
+    active: true,
+    linkedAt: "2026-08-13T00:00:00Z",
+  },
+]);
+
+export const COURSES: readonly CourseRecord[] = Object.freeze([
+  {
+    courseKey: "ocr-level-3-it",
+    courseTitle: "OCR Level 3 IT",
+    code: "OCR-L3-IT",
+    qualificationLevel: "3",
+    active: true,
+  },
+  {
+    courseKey: "t-level-digital-software-development",
+    courseTitle: "T Level Digital Software Development",
+    code: "TLEVEL-DSD",
+    qualificationLevel: "3",
+    active: true,
   },
 ]);
 
@@ -148,8 +201,8 @@ export const ACTIVITY_PERFORMANCE: readonly ActivityPerformanceRecord[] = Object
 ]);
 
 export const DASHBOARD_SUMMARY: DashboardSummaryRecord = Object.freeze({
-  registeredHubs: 2,
-  activeHubs: 2,
+  registeredHubs: 3,
+  activeHubs: 3,
   activeLearners: 2,
   activeGroups: 2,
   activeEnrolments: 2,
@@ -173,10 +226,30 @@ const DEMO_STAFF_CONTEXT: CurrentStaffContextRecord = Object.freeze({
   activeRoles: ["platform_admin"],
 });
 
+export const CURRICULUM_PUBLICATIONS: readonly CurriculumPublicationRecord[] = Object.freeze([
+  {
+    id: "demo-unit-14-publication",
+    hubCode: "unit-14-software-engineering-for-business",
+    courseKey: "ocr-level-3-it",
+    packageVersion: "0.1.0",
+    schemaVersion: "0.1.0",
+    sourcePackageVersion: "0.1.0",
+    status: "published",
+    author: "Ada Author",
+    reviewer: "Riley Reviewer",
+    publicationNotes: "Synthetic catalogue row for hub health.",
+    publishedBy: "DEMO-ADMIN",
+    createdAt: "2026-08-13T00:00:00Z",
+    publishedAt: "2026-08-13T00:01:00Z",
+    contentHash: "b".repeat(64),
+  },
+]);
+
 export const demoAdminService: AdminReadService = Object.freeze({
   async getCurrentStaffContext() { return DEMO_STAFF_CONTEXT; },
   async listHubs() { return HUBS; },
   async listHubCourseLinks() { return HUB_COURSE_LINKS; },
+  async listCourses() { return COURSES; },
   async listContracts() { return CONTRACTS; },
   async listHealth() { return HEALTH; },
   async listLearners() { return LEARNERS; },
@@ -188,12 +261,13 @@ export const demoAdminService: AdminReadService = Object.freeze({
   async listActivityPerformance() { return ACTIVITY_PERFORMANCE; },
   async getDashboardSummary() { return DASHBOARD_SUMMARY; },
   async listAuditEvents() { return AUDIT_EVENTS; },
-  async listCurriculumPublications() { return [] as readonly CurriculumPublicationRecord[]; },
+  async listCurriculumPublications() { return CURRICULUM_PUBLICATIONS; },
 });
 
 export const DEMO_ADMIN_DATA: AdminDataSnapshot = Object.freeze({
   hubs: HUBS,
   hubCourseLinks: HUB_COURSE_LINKS,
+  courses: COURSES,
   contracts: CONTRACTS,
   health: HEALTH,
   learners: LEARNERS,
@@ -205,7 +279,7 @@ export const DEMO_ADMIN_DATA: AdminDataSnapshot = Object.freeze({
   activityPerformance: ACTIVITY_PERFORMANCE,
   dashboardSummary: DASHBOARD_SUMMARY,
   auditEvents: AUDIT_EVENTS,
-  curriculumPublications: [],
+  curriculumPublications: CURRICULUM_PUBLICATIONS,
 });
 
 export const DEMO_DATA_NOTICE = Object.freeze({

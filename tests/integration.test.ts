@@ -16,6 +16,7 @@ import {
   registerAdminAccount,
   registerHub,
   registrationValidationMessage,
+  updateHub,
   type AdminSupabaseClient,
 } from "../src/services/supabase-admin-service.ts";
 import { sessionFromStaffContext } from "../src/stores/admin-session.ts";
@@ -32,6 +33,7 @@ const viewRows: Record<string, readonly Record<string, unknown>[]> = {
   current_staff_context: [{ teacher_id: "teacher-1", staff_reference: "STAFF-1", display_name: "Platform Admin", active: true, active_roles: ["platform_admin"] }],
   hubs: [{ hub_code: "hub-a", hub_name: "Hub A", description: "A reviewed hub", hub_version: "1.0.0", manifest_version: "1.0.0", core_version: "0.1.0", learner_api_version: "0.1.0", submission_contract_version: "0.1.0", platform_version: "0.1.0", subject: null, repository_url: "https://example.invalid/repo", deployment_url: null, curriculum_model: null, activity_types: ["quiz"], evidence_capabilities: ["question-level"], features: { progress: true }, compatibility: {}, status: "testing", active: true, manifest: {} }],
   hub_course_links: [{ hub_code: "hub-a", course_key: "course-a", course_title: "Course A", active: true, linked_at: "2026-08-11T00:00:00Z" }],
+  courses: [{ course_key: "course-a", course_title: "Course A", code: "CA", qualification_level: "3", active: true }],
   platform_contracts: [{ contract_key: "admin-api", version: "0.2.0", status: "draft", compatibility: {}, contract_document: { boundary: "Read-only" } }],
   operational_health: [{ service_key: "database", status: "healthy", checked_at: "2026-08-11T00:00:00Z", valid_until: null, public_message: "Available" }],
   staff_roles: [{ staff_reference: "STAFF-1", display_name: "Platform Admin", role: "platform_admin", revoked_at: null }],
@@ -212,6 +214,7 @@ test("live service reads every MVP surface through admin_api and maps safe rows"
   assert.equal(data.dashboardSummary.recentAttempts, 1);
   assert.equal(data.curriculumPublications[0].packageVersion, "0.1.0");
   assert.equal(data.curriculumPublications[0].status, "published");
+  assert.equal(data.courses[0].courseKey, "course-a");
   assert.ok(fake.schemas.every((schema) => schema === "admin_api"));
   const selected = fake.selections.join("\n");
   assert.doesNotMatch(selected, /response_payload|diagnostics|contact_email|package\b/);
@@ -371,6 +374,74 @@ test("registerHub sends the reviewed manifest through admin_api only", async () 
   assert.deepEqual(
     Object.keys((fake.rpcs[0] as { parameters: Record<string, unknown> }).parameters).sort(),
     ["p_active", "p_manifest", "p_status"],
+  );
+});
+
+test("updateHub sends the documented admin_api arguments", async () => {
+  const manifest = {
+    manifestVersion: "1.0.0",
+    hubId: "hub-a",
+    name: "Hub A",
+    description: "Updated hub",
+    version: "1.1.0",
+    repositoryUrl: "https://example.invalid/repo",
+    deploymentUrl: "https://hub-a.example.invalid",
+    courses: ["course-a"],
+    compatibility: {
+      required: {
+        coreVersion: "0.1.0",
+        learnerApiContractVersion: "0.1.0",
+        submissionContractVersion: "0.1.0",
+      },
+      testedCombinations: [{
+        coreVersion: "0.1.0",
+        learnerApiContractVersion: "0.1.0",
+        submissionContractVersion: "0.1.0",
+      }],
+    },
+    capabilities: {
+      evidence: ["question-level"],
+      activities: ["quiz"],
+    },
+    featureFlags: { progress: true },
+  };
+  const fake = fakeClient({
+    rpc() {
+      return {
+        data: [{
+          hub_code: manifest.hubId,
+          hub_name: manifest.name,
+          description: manifest.description,
+          hub_version: manifest.version,
+          manifest_version: manifest.manifestVersion,
+          core_version: "0.1.0",
+          learner_api_version: "0.1.0",
+          submission_contract_version: "0.1.0",
+          platform_version: "0.1.0",
+          repository_url: manifest.repositoryUrl,
+          deployment_url: manifest.deploymentUrl,
+          activity_types: manifest.capabilities.activities,
+          evidence_capabilities: manifest.capabilities.evidence,
+          features: manifest.featureFlags,
+          compatibility: manifest.compatibility,
+          status: "testing",
+          active: false,
+          course_keys: manifest.courses,
+        }],
+        error: null,
+      };
+    },
+  });
+  const result = await updateHub(fake.client, {
+    manifest,
+    status: "testing",
+    active: false,
+  });
+  assert.equal(result.active, false);
+  assert.equal((fake.rpcs[0] as { name: string }).name, "update_hub");
+  assert.deepEqual(
+    Object.keys((fake.rpcs[0] as { parameters: Record<string, unknown> }).parameters).sort(),
+    ["p_active", "p_hub_code", "p_manifest", "p_status"],
   );
 });
 

@@ -11,7 +11,7 @@ import {
 import type { AdminDataSnapshot, HubRegistrationResult, PlatformPublicationResult } from "../api/admin-api";
 import type { AuthoringDraft } from "../content/types";
 import type { HubRegistrationRequest } from "../content/hub-registration";
-import { registerDemoHub } from "../content/hub-registration";
+import { registerDemoHub, updateDemoHub } from "../content/hub-registration";
 import {
   DEMO_ADMIN_DATA,
   DEMO_DATA_NOTICE,
@@ -31,6 +31,7 @@ import {
   publishCurriculum as publishCurriculumRpc,
   registerAdminAccount,
   registerHub as registerHubRpc,
+  updateHub as updateHubRpc,
   type AdminSupabaseClient,
 } from "../services/supabase-admin-service";
 import {
@@ -66,6 +67,7 @@ interface AdminPortalContextValue {
   requestMagicLink(email: string): Promise<void>;
   claimInitialAdmin(bootstrapToken: string): Promise<void>;
   registerHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
+  updateHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   publishCurriculum(record: AuthoringDraft): Promise<PlatformPublicationResult>;
   signOut(): Promise<void>;
   retry(): Promise<void>;
@@ -98,6 +100,29 @@ function redirectUrl() {
   );
   const path = usesHashRouting ? window.location.pathname : "/";
   return new URL(path, window.location.origin).toString();
+}
+
+function resultFromDemoHub(registered: { result: { hub: NonNullable<AdminDataSnapshot["hubs"][number]>; courseKeys: readonly string[] } }): HubRegistrationResult {
+  return {
+    hubCode: registered.result.hub.hubCode,
+    hubName: registered.result.hub.hubName,
+    description: registered.result.hub.description,
+    hubVersion: registered.result.hub.hubVersion,
+    manifestVersion: registered.result.hub.manifestVersion,
+    coreVersion: registered.result.hub.coreVersion,
+    learnerApiVersion: registered.result.hub.learnerApiVersion,
+    submissionContractVersion: registered.result.hub.submissionContractVersion,
+    platformVersion: registered.result.hub.platformVersion,
+    repositoryUrl: registered.result.hub.repositoryUrl,
+    deploymentUrl: registered.result.hub.deploymentUrl,
+    activityTypes: registered.result.hub.activityTypes,
+    evidenceCapabilities: registered.result.hub.evidenceCapabilities,
+    features: registered.result.hub.features,
+    compatibility: registered.result.hub.compatibility,
+    status: registered.result.hub.status,
+    active: registered.result.hub.active,
+    courseKeys: registered.result.courseKeys,
+  };
 }
 
 export function AdminPortalProvider({ children }: { children: React.ReactNode }) {
@@ -309,26 +334,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
             ? { ...existing, data: registered.snapshot }
             : existing
         ));
-        return {
-          hubCode: registered.result.hub.hubCode,
-          hubName: registered.result.hub.hubName,
-          description: registered.result.hub.description,
-          hubVersion: registered.result.hub.hubVersion,
-          manifestVersion: registered.result.hub.manifestVersion,
-          coreVersion: registered.result.hub.coreVersion,
-          learnerApiVersion: registered.result.hub.learnerApiVersion,
-          submissionContractVersion: registered.result.hub.submissionContractVersion,
-          platformVersion: registered.result.hub.platformVersion,
-          repositoryUrl: registered.result.hub.repositoryUrl,
-          deploymentUrl: registered.result.hub.deploymentUrl,
-          activityTypes: registered.result.hub.activityTypes,
-          evidenceCapabilities: registered.result.hub.evidenceCapabilities,
-          features: registered.result.hub.features,
-          compatibility: registered.result.hub.compatibility,
-          status: registered.result.hub.status,
-          active: registered.result.hub.active,
-          courseKeys: registered.result.courseKeys,
-        } satisfies HubRegistrationResult;
+        return resultFromDemoHub(registered);
       } catch (caught) {
         throw new AdminHubRegistrationError(
           caught instanceof Error ? caught.message : "registration-failed",
@@ -336,6 +342,35 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       }
     }
     const result = await registerHubRpc(client, request);
+    const service = createSupabaseAdminReadService(client);
+    const data = await loadAdminData(service);
+    setState((current) => (
+      current.status === "ready" ? { ...current, data } : current
+    ));
+    return result;
+  }, [client, config.mode, state.data]);
+
+  const updateHub = useCallback(async (request: HubRegistrationRequest) => {
+    if (!client) {
+      if (config.mode !== "demo") {
+        throw new AdminHubRegistrationError("unavailable");
+      }
+      const current = state.data ?? DEMO_ADMIN_DATA;
+      try {
+        const updated = updateDemoHub(current, request);
+        setState((existing) => (
+          existing.status === "ready"
+            ? { ...existing, data: updated.snapshot }
+            : existing
+        ));
+        return resultFromDemoHub(updated);
+      } catch (caught) {
+        throw new AdminHubRegistrationError(
+          caught instanceof Error ? caught.message : "registration-failed",
+        );
+      }
+    }
+    const result = await updateHubRpc(client, request);
     const service = createSupabaseAdminReadService(client);
     const data = await loadAdminData(service);
     setState((current) => (
@@ -414,10 +449,11 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     requestMagicLink,
     claimInitialAdmin,
     registerHub,
+    updateHub,
     publishCurriculum,
     signOut,
     retry: refresh,
-  }), [claimInitialAdmin, config, dataSource, publishCurriculum, refresh, registerHub, requestMagicLink, signIn, signOut, signUp, state]);
+  }), [claimInitialAdmin, config, dataSource, publishCurriculum, refresh, registerHub, requestMagicLink, signIn, signOut, signUp, state, updateHub]);
 
   return (
     <AdminPortalContext.Provider value={value}>

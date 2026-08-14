@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AdminDataSnapshot, HubLifecycle } from "../api/admin-api";
+import type { AdminDataSnapshot, HubLifecycle, HubRecord } from "../api/admin-api";
 import {
   EMPTY_HUB_REGISTRATION_FORM,
   formFromManifest,
   HUB_LIFECYCLES,
   HUB_MANIFEST_FILENAME,
   manifestFromForm,
+  manifestFromHubRecord,
   parseHubManifestJson,
   type HubManifest,
   type HubRegistrationFormState,
@@ -18,6 +19,8 @@ import { DiagnosticsList } from "./authoring/diagnostics-list";
 
 interface RegisterHubDialogProps {
   open: boolean;
+  mode?: "register" | "edit";
+  initialHub?: HubRecord | null;
   data: AdminDataSnapshot;
   demoMode: boolean;
   submitting: boolean;
@@ -28,8 +31,17 @@ interface RegisterHubDialogProps {
 
 type DialogStep = "edit" | "preview";
 
+function formFromHub(hub: HubRecord, data: AdminDataSnapshot): HubRegistrationFormState {
+  const courseKeys = data.hubCourseLinks
+    .filter((link) => link.hubCode === hub.hubCode && link.active)
+    .map((link) => link.courseKey);
+  return formFromManifest(manifestFromHubRecord(hub, courseKeys), hub.status, hub.active);
+}
+
 export function RegisterHubDialog({
   open,
+  mode = "register",
+  initialHub = null,
   data,
   demoMode,
   submitting,
@@ -39,9 +51,15 @@ export function RegisterHubDialog({
 }: RegisterHubDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const editing = mode === "edit";
   const [step, setStep] = useState<DialogStep>("edit");
-  const [form, setForm] = useState<HubRegistrationFormState>(EMPTY_HUB_REGISTRATION_FORM);
-  const [manifestText, setManifestText] = useState("");
+  const [form, setForm] = useState<HubRegistrationFormState>(() => (
+    editing && initialHub ? formFromHub(initialHub, data) : EMPTY_HUB_REGISTRATION_FORM
+  ));
+  const [manifestText, setManifestText] = useState(() => {
+    if (!(editing && initialHub)) return "";
+    return JSON.stringify(manifestFromForm(formFromHub(initialHub, data)), null, 2);
+  });
   const [importIssues, setImportIssues] = useState<readonly ValidationIssue[]>([]);
   const [imported, setImported] = useState(false);
 
@@ -58,8 +76,14 @@ export function RegisterHubDialog({
 
   const candidateManifest = useMemo(() => manifestFromForm(form), [form]);
   const report = useMemo(
-    () => validateHubRegistration(candidateManifest, form.status, form.active, data),
-    [candidateManifest, data, form.active, form.status],
+    () => validateHubRegistration(
+      candidateManifest,
+      form.status,
+      form.active,
+      data,
+      editing ? initialHub?.hubCode : undefined,
+    ),
+    [candidateManifest, data, editing, form.active, form.status, initialHub?.hubCode],
   );
 
   function applyParsedManifest(raw: string) {
@@ -69,7 +93,13 @@ export function RegisterHubDialog({
       setImported(false);
       return;
     }
-    const validated = validateHubRegistration(parsed.manifest, form.status, form.active, data);
+    const validated = validateHubRegistration(
+      parsed.manifest,
+      form.status,
+      form.active,
+      data,
+      editing ? initialHub?.hubCode : undefined,
+    );
     setImportIssues(validated.issues);
     if (!validated.manifest) {
       setImported(false);
@@ -98,6 +128,9 @@ export function RegisterHubDialog({
 
   if (!open) return null;
 
+  const rpcName = editing ? "admin_api.update_hub" : "admin_api.register_hub";
+  const titleId = editing ? "edit-hub-title" : "register-hub-title";
+
   return (
     <dialog
       className="admin-dialog admin-dialog--wide"
@@ -107,25 +140,29 @@ export function RegisterHubDialog({
         if (!submitting) onClose();
       }}
       onClose={onClose}
-      aria-labelledby="register-hub-title"
+      aria-labelledby={titleId}
     >
       <div className="admin-dialog__header">
         <div>
-          <p className="eyebrow">Hub registration</p>
-          <h2 id="register-hub-title">{step === "preview" ? "Confirm hub registration" : "Register a hub"}</h2>
+          <p className="eyebrow">{editing ? "Hub registry" : "Hub registration"}</p>
+          <h2 id={titleId}>
+            {step === "preview"
+              ? (editing ? "Confirm hub update" : "Confirm hub registration")
+              : (editing ? "Edit hub" : "Register a hub")}
+          </h2>
         </div>
-        <button className="icon-button" type="button" onClick={onClose} aria-label="Close register hub dialog" disabled={submitting}>×</button>
+        <button className="icon-button" type="button" onClick={onClose} aria-label="Close hub dialog" disabled={submitting}>×</button>
       </div>
       <div className="admin-dialog__body">
         {demoMode ? (
           <div className="notice-card notice-card--warning">
             <strong>Demo mode</strong>
-            <p>Registration stays in this browser session and does not call <code>admin_api.register_hub</code>.</p>
+            <p>This stays in the browser session and does not call <code>{rpcName}</code>.</p>
           </div>
         ) : (
           <div className="notice-card notice-card--info">
             <strong>Reviewed administrative write</strong>
-            <p>This registers hub metadata through <code>admin_api.register_hub</code>. It does not publish curriculum.</p>
+            <p>This updates hub metadata through <code>{rpcName}</code>. It does not publish curriculum.</p>
           </div>
         )}
 
@@ -169,7 +206,7 @@ export function RegisterHubDialog({
               <div className="authoring-form__grid">
                 <div>
                   <label htmlFor="hub-code">Hub code</label>
-                  <input id="hub-code" value={form.hubId} onChange={field("hubId")} autoComplete="off" />
+                  <input id="hub-code" value={form.hubId} onChange={field("hubId")} autoComplete="off" disabled={editing} />
                 </div>
                 <div>
                   <label htmlFor="hub-name">Hub name</label>
@@ -217,7 +254,7 @@ export function RegisterHubDialog({
                 </div>
                 <div className="authoring-form__span">
                   <label htmlFor="hub-courses">Course associations</label>
-                  <input id="hub-courses" value={form.courses} onChange={field("courses")} placeholder="ocr-level-3-it" />
+                  <input id="hub-courses" value={form.courses} onChange={field("courses")} placeholder={data.courses.filter((course) => course.active).map((course) => course.courseKey).join(", ") || "course-key"} />
                 </div>
                 <div>
                   <label htmlFor="hub-evidence">Evidence capabilities</label>
@@ -239,14 +276,14 @@ export function RegisterHubDialog({
                   checked={form.active}
                   onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))}
                 />
-                {" "}Register as active
+                {" "}{editing ? "Hub is active" : "Register as active"}
               </label>
             </form>
             <DiagnosticsList issues={report.issues} />
           </>
         ) : (
           <section className="dialog-section" aria-labelledby="hub-registration-preview-title">
-            <h3 id="hub-registration-preview-title">Registration preview</h3>
+            <h3 id="hub-registration-preview-title">{editing ? "Update preview" : "Registration preview"}</h3>
             <dl className="detail-grid">
               <div><dt>Hub code</dt><dd><code>{candidateManifest.hubId}</code></dd></div>
               <div><dt>Hub name</dt><dd>{candidateManifest.name}</dd></div>
@@ -258,7 +295,7 @@ export function RegisterHubDialog({
               <div><dt>Contracts</dt><dd>Manifest {candidateManifest.manifestVersion} · Core {candidateManifest.compatibility.required.coreVersion} · API {candidateManifest.compatibility.required.learnerApiContractVersion} · Submission {candidateManifest.compatibility.required.submissionContractVersion}</dd></div>
               <div className="detail-grid__wide"><dt>Courses</dt><dd>{candidateManifest.courses.join(", ")}</dd></div>
             </dl>
-            {error ? <div className="notice-card notice-card--warning" role="alert"><strong>Registration failed</strong><p>{error}</p></div> : null}
+            {error ? <div className="notice-card notice-card--warning" role="alert"><strong>{editing ? "Update failed" : "Registration failed"}</strong><p>{error}</p></div> : null}
           </section>
         )}
       </div>
@@ -271,11 +308,13 @@ export function RegisterHubDialog({
         <button className="button button--secondary" type="button" onClick={onClose} disabled={submitting}>Cancel</button>
         {step === "edit" ? (
           <button className="button button--primary" type="button" onClick={() => setStep("preview")} disabled={!report.valid}>
-            Preview registration
+            {editing ? "Preview update" : "Preview registration"}
           </button>
         ) : (
           <button className="button button--primary" type="button" onClick={() => void handleConfirm()} disabled={submitting || !report.valid}>
-            {submitting ? "Registering…" : "Confirm registration"}
+            {submitting
+              ? (editing ? "Saving…" : "Registering…")
+              : (editing ? "Confirm update" : "Confirm registration")}
           </button>
         )}
       </div>

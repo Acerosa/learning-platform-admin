@@ -89,6 +89,7 @@ export interface HubManifestValidationContext {
   existingHubCodes?: readonly string[];
   existingRepositoryUrls?: readonly string[];
   existingDeploymentUrls?: readonly string[];
+  currentHubCode?: string;
 }
 
 export interface HubManifestValidationReport {
@@ -406,6 +407,9 @@ export function validateHubManifest(
     }
   }
 
+  if (context.currentHubCode && hubId && hubId !== context.currentHubCode) {
+    issues.push(issue("HUB_CODE_MISMATCH", "$.hubId", "the hub code cannot be changed after registration"));
+  }
   if (context.existingHubCodes?.includes(hubId)) {
     issues.push(issue("DUPLICATE_HUB_ID", "$.hubId", "a hub with this code is already registered"));
   }
@@ -469,5 +473,39 @@ export function hubRecordFromManifest(
     status,
     active,
     certificationState,
+  };
+}
+
+export function manifestFromHubRecord(
+  hub: HubRecord,
+  courseKeys: readonly string[],
+): HubManifest {
+  const required = {
+    coreVersion: hub.coreVersion,
+    learnerApiContractVersion: hub.learnerApiVersion,
+    submissionContractVersion: hub.submissionContractVersion,
+  };
+  const compatibility = hub.compatibility as unknown as HubManifest["compatibility"];
+  const tested = Array.isArray(compatibility?.testedCombinations) && compatibility.testedCombinations.length
+    ? compatibility.testedCombinations
+    : [required];
+  return {
+    manifestVersion: hub.manifestVersion,
+    hubId: hub.hubCode,
+    name: hub.hubName,
+    description: hub.description,
+    version: hub.hubVersion,
+    repositoryUrl: hub.repositoryUrl.replace(/\/+$/, ""),
+    deploymentUrl: (hub.deploymentUrl ?? "").replace(/\/+$/, ""),
+    courses: courseKeys,
+    compatibility: {
+      required: compatibility?.required ?? required,
+      testedCombinations: tested,
+    },
+    capabilities: {
+      evidence: [...hub.evidenceCapabilities],
+      activities: [...hub.activityTypes],
+    },
+    featureFlags: { ...hub.features },
   };
 }

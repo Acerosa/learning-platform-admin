@@ -7,6 +7,7 @@ import type {
   AttemptRecord,
   AuditEventRecord,
   CurrentStaffContextRecord,
+  CourseRecord,
   CurriculumPublicationRecord,
   DashboardSummaryRecord,
   EnrolmentRecord,
@@ -55,7 +56,7 @@ export class AdminAuthError extends Error {
 const REGISTRATION_ERROR_MESSAGES: Record<string, string> = {
   unavailable: "Hub registration requires a live administrator session.",
   AUTHENTICATION_REQUIRED: "Sign in with an authorised administrator account to register a hub.",
-  HUB_REGISTRATION_NOT_AUTHORISED: "This account is not authorised to register hubs.",
+  HUB_REGISTRATION_NOT_AUTHORISED: "This account is not authorised to register or update hubs.",
   HUB_MANIFEST_INVALID: "The hub manifest is incomplete or does not match the LHDS contract.",
   HUB_INVALID_URL: "Repository and site URLs must be canonical HTTPS addresses.",
   HUB_STATUS_INVALID: "Choose a supported hub lifecycle status.",
@@ -65,6 +66,9 @@ const REGISTRATION_ERROR_MESSAGES: Record<string, string> = {
   HUB_LEARNER_API_VERSION_UNSUPPORTED: "The backend does not accept this learner API version.",
   HUB_SUBMISSION_VERSION_UNSUPPORTED: "The backend does not accept this submission contract version.",
   HUB_COURSE_NOT_FOUND: "A declared course is not registered in the platform catalogue.",
+  HUB_COURSE_INACTIVE: "A declared course exists but is inactive.",
+  HUB_CODE_MISMATCH: "The hub code cannot be changed after registration.",
+  HUB_NOT_FOUND: "That hub is not registered in the platform catalogue.",
   HUB_DUPLICATE_CODE: "A hub with this code is already registered.",
   HUB_DUPLICATE_REPOSITORY: "A hub with this repository URL is already registered.",
   HUB_DUPLICATE_DEPLOYMENT: "A hub with this site URL is already registered.",
@@ -83,7 +87,10 @@ export class AdminHubRegistrationError extends Error {
 
 function registrationErrorCode(error: { message?: string } | null) {
   const message = error?.message ?? "";
-  return Object.keys(REGISTRATION_ERROR_MESSAGES).find((code) => message.includes(code))
+  return Object.keys(REGISTRATION_ERROR_MESSAGES)
+    .filter((code) => code !== "unavailable" && code !== "registration-failed")
+    .sort((left, right) => right.length - left.length)
+    .find((code) => message.includes(code))
     ?? "registration-failed";
 }
 
@@ -293,13 +300,33 @@ export async function registerHub(
   client: AdminSupabaseClient,
   request: HubRegistrationRequest,
 ): Promise<HubRegistrationResult> {
+  return mutateRegisteredHub(client, "register_hub", {
+    p_manifest: request.manifest,
+    p_status: request.status,
+    p_active: request.active,
+  });
+}
+
+export async function updateHub(
+  client: AdminSupabaseClient,
+  request: HubRegistrationRequest,
+): Promise<HubRegistrationResult> {
+  return mutateRegisteredHub(client, "update_hub", {
+    p_hub_code: request.manifest.hubId,
+    p_manifest: request.manifest,
+    p_status: request.status,
+    p_active: request.active,
+  });
+}
+
+async function mutateRegisteredHub(
+  client: AdminSupabaseClient,
+  name: "register_hub" | "update_hub",
+  parameters: Record<string, unknown>,
+): Promise<HubRegistrationResult> {
   const { data, error } = await client
     .schema("admin_api")
-    .rpc("register_hub", {
-      p_manifest: request.manifest,
-      p_status: request.status,
-      p_active: request.active,
-    });
+    .rpc(name, parameters);
 
   if (error || !Array.isArray(data) || !data[0]) {
     throw new AdminHubRegistrationError(registrationErrorCode(error));
@@ -408,6 +435,21 @@ export function createSupabaseAdminReadService(
         courseTitle: textValue(row.course_title),
         active: booleanValue(row.active),
         linkedAt: textValue(row.linked_at),
+      }));
+    },
+
+    async listCourses() {
+      const data = await rows(
+        "courses",
+        "course_key,course_title,code,qualification_level,active",
+        { column: "course_title" },
+      );
+      return data.map((row): CourseRecord => ({
+        courseKey: textValue(row.course_key),
+        courseTitle: textValue(row.course_title),
+        code: nullableText(row.code),
+        qualificationLevel: nullableText(row.qualification_level),
+        active: booleanValue(row.active),
       }));
     },
 
@@ -627,6 +669,7 @@ export async function loadAdminData(
   const [
     hubs,
     hubCourseLinks,
+    courses,
     contracts,
     health,
     teachers,
@@ -642,6 +685,7 @@ export async function loadAdminData(
   ] = await Promise.all([
     service.listHubs(),
     service.listHubCourseLinks(),
+    service.listCourses(),
     service.listContracts(),
     service.listHealth(),
     service.listTeachers(),
@@ -659,6 +703,7 @@ export async function loadAdminData(
   return Object.freeze({
     hubs,
     hubCourseLinks,
+    courses,
     contracts,
     health,
     teachers,
