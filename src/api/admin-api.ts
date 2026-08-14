@@ -2,13 +2,14 @@ export const ADMIN_API_CONTRACT = Object.freeze({
   schema: "admin_api",
   version: "0.2.0",
   status: "draft",
-  mode: "read-models-with-curriculum-publication",
+  mode: "read-models-with-hub-registration-and-curriculum-publication",
 });
 
 export const ADMIN_API_VIEWS = Object.freeze({
   currentStaffContext: "admin_api.current_staff_context",
   hubs: "admin_api.hubs",
   hubCourseLinks: "admin_api.hub_course_links",
+  courses: "admin_api.courses",
   platformContracts: "admin_api.platform_contracts",
   staffRoles: "admin_api.staff_roles",
   auditEvents: "admin_api.audit_events",
@@ -21,6 +22,13 @@ export const ADMIN_API_VIEWS = Object.freeze({
   dashboardSummary: "admin_api.dashboard_summary",
   activityPerformance: "admin_api.activity_performance",
   curriculumPublications: "admin_api.curriculum_publications",
+});
+
+export const ADMIN_API_RPCS = Object.freeze({
+  claimInitialPlatformAdmin: "admin_api.claim_initial_platform_admin",
+  registerHub: "admin_api.register_hub",
+  updateHub: "admin_api.update_hub",
+  publishCurriculum: "admin_api.publish_curriculum",
 });
 
 export type HubLifecycle =
@@ -69,6 +77,14 @@ export interface HubCourseLinkRecord {
   courseTitle: string;
   active: boolean;
   linkedAt: string;
+}
+
+export interface CourseRecord {
+  courseKey: string;
+  courseTitle: string;
+  code: string | null;
+  qualificationLevel: string | null;
+  active: boolean;
 }
 
 export interface PlatformContractRecord {
@@ -204,6 +220,27 @@ export interface CurriculumPublicationRecord {
   contentHash: string;
 }
 
+export interface HubRegistrationResult {
+  hubCode: string;
+  hubName: string;
+  description: string;
+  hubVersion: string;
+  manifestVersion: string;
+  coreVersion: string;
+  learnerApiVersion: string;
+  submissionContractVersion: string;
+  platformVersion: string;
+  repositoryUrl: string;
+  deploymentUrl: string | null;
+  activityTypes: readonly string[];
+  evidenceCapabilities: readonly string[];
+  features: Readonly<Record<string, boolean>>;
+  compatibility: Readonly<Record<string, unknown>>;
+  status: HubLifecycle;
+  active: boolean;
+  courseKeys: readonly string[];
+}
+
 export interface PlatformPublicationResult {
   id: string;
   hubCode: string;
@@ -217,6 +254,7 @@ export interface PlatformPublicationResult {
 export interface AdminDataSnapshot {
   hubs: readonly HubRecord[];
   hubCourseLinks: readonly HubCourseLinkRecord[];
+  courses: readonly CourseRecord[];
   contracts: readonly PlatformContractRecord[];
   health: readonly HealthRecord[];
   learners: readonly LearnerRecord[];
@@ -235,6 +273,7 @@ export interface AdminReadService {
   getCurrentStaffContext(): Promise<CurrentStaffContextRecord | null>;
   listHubs(): Promise<readonly HubRecord[]>;
   listHubCourseLinks(): Promise<readonly HubCourseLinkRecord[]>;
+  listCourses(): Promise<readonly CourseRecord[]>;
   listContracts(): Promise<readonly PlatformContractRecord[]>;
   listHealth(): Promise<readonly HealthRecord[]>;
   listTeachers(): Promise<readonly TeacherRecord[]>;
@@ -251,8 +290,8 @@ export interface AdminReadService {
 
 export interface AdminMutationService {
   readonly status: "pending-backend-contract";
-  registerHub(input: unknown): Promise<never>;
-  updateHub(hubCode: string, input: unknown): Promise<never>;
+  registerHub(input: unknown): Promise<HubRegistrationResult>;
+  updateHub(hubCode: string, input: unknown): Promise<HubRegistrationResult>;
   deactivateHub(hubCode: string): Promise<never>;
   updateCurriculum(input: unknown): Promise<never>;
   updateLearner(input: unknown): Promise<never>;
@@ -265,7 +304,7 @@ export interface AdminMutationService {
 export const ADMIN_MUTATION_STATUS = Object.freeze({
   status: "pending-backend-contract" as const,
   reason:
-    "Backend version 0.2.0 exposes curriculum publication only. Other administrative mutation RPCs remain unspecified.",
+    "Hub registration uses admin_api.register_hub and admin_api.update_hub. Other administrative mutation RPCs remain unspecified.",
   requiredBeforeEnablement: [
     "role and permission requirement",
     "validated transactional RPC",

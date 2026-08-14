@@ -14,7 +14,9 @@ This repository is the administration interface for the entire Learning Platform
 - Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.
 - Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
 - Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
-- Write journeys against backend data remain pending except curriculum publication: they explain the missing mutation contract and never invent an endpoint.
+- Write journeys against backend data remain pending except hub registration,
+  hub updates and curriculum publication: they explain the missing mutation
+  contract and never invent an endpoint.
 - Curriculum authoring drafts weeks, sessions and activities locally, validates them with `@learning-platform/content`, publishes immutable local versions, and can publish those snapshots to the backend catalogue. Learner hubs are not updated.
 - No hosted credentials, database migrations or learner-hub source editing live here.
 
@@ -79,6 +81,8 @@ learning-platform-admin/
 
 - [Architecture](docs/architecture.md)
 - [Modules](docs/modules.md)
+- [Hub registration](docs/hub-registration.md)
+- [Platform management](docs/platform-management.md)
 - [Curriculum authoring](docs/curriculum-authoring.md)
 - [Publication workflow](docs/publication-workflow.md)
 - [Backend and core integration](docs/integration.md)
@@ -89,7 +93,10 @@ learning-platform-admin/
 
 ## Known limitations
 
-- The backend has no administrative mutation RPCs in 0.2.0. Authoring drafts and publication records are local/exportable only.
+- The backend has no general administrative mutation RPCs in 0.2.0. Hub
+  registration and hub updates use `admin_api.register_hub` and
+  `admin_api.update_hub`. Authoring drafts remain local until platform
+  publication.
 - GitHub curriculum automation, hosted curriculum writes, certification workflows, external monitoring ingestion and Weeks 2–19 authoring remain deferred.
 - Demo-mode people, group, enrolment, assignment and attempt records are synthetic fixtures.
 - A hosted live release still requires approved environment configuration, Auth redirect URLs and hosted RLS integration validation.

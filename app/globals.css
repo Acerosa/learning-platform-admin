@@ -1453,7 +1453,13 @@ tbody tr:hover {
 .admin-dialog__body > p { color: var(--admin-muted); font-size: 0.8rem; }
 .admin-dialog__body h3 { margin: 1.2rem 0 0.4rem; font-size: 0.82rem; }
 .admin-dialog__subject { color: var(--admin-text) !important; font-weight: 760; }
-.admin-dialog .notice-card { margin-top: 0; }
+.admin-dialog .toolbar { margin-top: 0.75rem; }
+.authoring-form > label[for="hub-active"] {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.authoring-form input[type="checkbox"] { width: auto; }
 
 .check-list {
   display: grid;

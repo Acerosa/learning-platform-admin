@@ -59,11 +59,22 @@ data. Analytics are supplied by backend aggregate views.
 
 ## Administrative writes
 
-Backend 0.2.0 keeps general staff mutations pending. Curriculum publication is
-the documented exception: after a local Approved/Published snapshot exists, the
-live client calls `admin_api.publish_curriculum` from the admin service. The
-authoring view never issues `.rpc(` itself and never queries `learning` or
-`platform`.
+Backend 0.2.0 keeps general staff mutations pending. Documented exceptions
+exist:
+
+- Hub registration: the Hub Registry calls `admin_api.register_hub` with a
+  reviewed `learning-platform-hub.json` object.
+- Hub updates: the same registry calls `admin_api.update_hub` to edit metadata,
+  course links and enablement. Hub codes cannot be changed.
+- Curriculum publication: after a local Approved/Published snapshot exists, the
+  live client calls `admin_api.publish_curriculum`. See [Backend publication](backend-publication.md).
+
+See [Hub registration](hub-registration.md) and
+[Platform management](platform-management.md). The Hub Registry derives
+publication status and health from existing reads; it does not publish.
+
+The authoring view never issues `.rpc(` itself and never queries `learning` or
+`platform`. Demo mode never calls live mutation RPCs.
 
 Other write journeys still route through the pending mutation service. GitHub
 publication and learner-hub deployment remain out of scope.

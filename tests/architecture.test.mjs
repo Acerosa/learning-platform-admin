@@ -34,11 +34,11 @@ test("module registry has 16 unique hub-agnostic modules", async () => {
 
 test("admin API names match the documented backend surface", async () => {
   const source = await readFile(new URL("src/api/admin-api.ts", root), "utf8");
-  for (const view of ["current_staff_context", "hubs", "hub_course_links", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "dashboard_summary", "activity_performance", "curriculum_publications"]) {
+  for (const view of ["current_staff_context", "hubs", "hub_course_links", "courses", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "dashboard_summary", "activity_performance", "curriculum_publications"]) {
     assert.match(source, new RegExp(`admin_api\\.${view}`));
   }
   assert.match(source, /status: "draft"/);
-  assert.match(source, /mode: "read-models-with-curriculum-publication"/);
+  assert.match(source, /mode: "read-models-with-hub-registration-and-curriculum-publication"/);
   assert.match(source, /pending-backend-contract/);
   assert.doesNotMatch(source, /\/rest\/v1|supabase\.co|service_role/i);
 });
@@ -59,6 +59,8 @@ test("live integration uses Supabase Auth and the admin_api schema only", async 
   assert.match(service, /auth\.signUp/);
   assert.match(service, /claim_initial_platform_admin/);
   assert.match(service, /publish_curriculum/);
+  assert.match(service, /register_hub/);
+  assert.match(service, /update_hub/);
   assert.match(accessGate, /Create account/);
   assert.match(accessGate, /Confirm password/);
   assert.match(accessGate, /One-time setup code/);
@@ -84,10 +86,19 @@ test("shared theme service is used instead of a duplicate theme store", async ()
 });
 
 test("required documentation exists", async () => {
-  for (const file of ["README.md", "docs/architecture.md", "docs/modules.md", "docs/integration.md", "docs/permissions.md", "docs/deployment.md", "docs/testing.md", "docs/curriculum-authoring.md", "docs/publication-workflow.md", "docs/backend-publication.md"]) {
+  for (const file of ["README.md", "docs/architecture.md", "docs/modules.md", "docs/integration.md", "docs/permissions.md", "docs/deployment.md", "docs/testing.md", "docs/curriculum-authoring.md", "docs/publication-workflow.md", "docs/backend-publication.md", "docs/hub-registration.md", "docs/platform-management.md"]) {
     const content = await readFile(new URL(file, root), "utf8");
     assert.ok(content.length > 300, `${file} should be substantive`);
   }
+});
+
+test("hub registry uses the real registration dialog rather than the pending placeholder", async () => {
+  const source = await readFile(new URL("src/views/module-content.tsx", root), "utf8");
+  assert.match(source, /RegisterHubDialog/);
+  assert.match(source, /actionLabel="Register hub"/);
+  assert.doesNotMatch(source, /openPending\(\{ title: "Register a hub"/);
+  assert.doesNotMatch(source, /openPending\(\{ title: "Edit hub"/);
+  assert.doesNotMatch(source, /openPending\(\{ title: "Deactivate hub"/);
 });
 
 test("curriculum authoring keeps updateCurriculum pending and isolates the publication RPC", async () => {
@@ -98,7 +109,9 @@ test("curriculum authoring keeps updateCurriculum pending and isolates the publi
   ]);
   assert.match(mutations, /updateCurriculum: pending/);
   assert.match(service, /\.rpc\("publish_curriculum"/);
-  assert.doesNotMatch(service, /\.rpc\("(?:update_|create_|save_)/);
+  assert.match(service, /"register_hub"/);
+  assert.match(service, /"update_hub"/);
+  assert.doesNotMatch(service, /\.rpc\("(?:create_|save_)/);
   assert.doesNotMatch(authoring, /schema\("(?:learning|platform)"\)|\.rpc\(/);
   assert.match(authoring, /local drafts/i);
 });

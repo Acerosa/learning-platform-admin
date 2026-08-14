@@ -3,26 +3,31 @@
 import { useMemo, useState } from "react";
 import type {
   AdminDataSnapshot,
-  HubCourseLinkRecord,
   HubRecord,
 } from "../api/admin-api";
 import { AdminLink } from "../components/admin-link";
 import { HubDetailDialog } from "../components/hub-detail-dialog";
+import { RegisterHubDialog } from "../components/register-hub-dialog";
 import {
   PendingActionDialog,
   type PendingAction,
 } from "../components/pending-action-dialog";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
+import { loadDrafts } from "../content/draft-store";
+import { hubHealthReport } from "../content/hub-health";
+import { manifestFromHubRecord } from "../content/hub-manifest";
+import { hubPublicationStatus } from "../content/hub-publication";
 import { getAdminModule, type AdminModuleId } from "../router/modules";
+import { AdminHubRegistrationError } from "../services/supabase-admin-service";
 import { useAdminPortal } from "../stores/admin-portal";
 import { formatDate } from "../utils/format";
 import { CurriculumAuthoringPage } from "./curriculum-authoring";
 
 function toneForStatus(status: string): BadgeTone {
-  if (["active", "healthy", "certified", "open", "production", "completed", "succeeded"].includes(status)) return "positive";
-  if (["testing", "partial", "draft", "degraded", "maintenance"].includes(status)) return "warning";
-  if (["unavailable", "failed", "inactive", "denied"].includes(status)) return "danger";
-  if (["pending", "unknown", "retired", "archived"].includes(status)) return "neutral";
+  if (["active", "healthy", "certified", "open", "production", "completed", "succeeded", "published", "pass"].includes(status)) return "positive";
+  if (["testing", "partial", "draft", "degraded", "maintenance", "ready-for-review", "in-review", "approved", "warn"].includes(status)) return "warning";
+  if (["unavailable", "failed", "inactive", "denied", "fail"].includes(status)) return "danger";
+  if (["pending", "unknown", "retired", "archived", "superseded", "none"].includes(status)) return "neutral";
   return "info";
 }
 
@@ -148,10 +153,17 @@ function DashboardPage({ data }: { data: AdminDataSnapshot }) {
   );
 }
 
-function HubRegistryPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
+function HubRegistryPage({ data, actionError, onRegister, onEdit, onToggleActive }: {
+  data: AdminDataSnapshot;
+  actionError: string | null;
+  onRegister: () => void;
+  onEdit: (hub: HubRecord) => void;
+  onToggleActive: (hub: HubRecord) => void;
+}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-  const [selectedHub, setSelectedHub] = useState<HubRecord | null>(null);
+  const [selectedHubCode, setSelectedHubCode] = useState<string | null>(null);
+  const localDrafts = typeof window === "undefined" ? [] : loadDrafts();
   const visibleHubs = useMemo(() => {
     const normalised = query.trim().toLowerCase();
     return data.hubs.filter((hub) => {
@@ -159,35 +171,60 @@ function HubRegistryPage({ data, openPending }: { data: AdminDataSnapshot; openP
       return matchesQuery && (status === "all" || hub.status === status);
     });
   }, [data.hubs, query, status]);
+
+  const selectedHub = selectedHubCode
+    ? data.hubs.find((hub) => hub.hubCode === selectedHubCode) ?? null
+    : null;
+
   const selectedLinks = selectedHub
     ? data.hubCourseLinks.filter((link) => link.hubCode === selectedHub.hubCode)
+    : [];
+  const selectedPublication = selectedHub ? hubPublicationStatus(selectedHub, data, localDrafts) : null;
+  const selectedHealth = selectedHub ? hubHealthReport(selectedHub, data, localDrafts) : null;
+  const selectedHistory = selectedHub
+    ? data.auditEvents.filter((event) => event.entityType === "hub" && event.entityKey === selectedHub.hubCode)
     : [];
 
   return (
     <>
-      <PageHeader moduleId="hubs" actionLabel="Register hub" onAction={() => openPending({ title: "Register a hub" })} />
+      <PageHeader moduleId="hubs" actionLabel="Register hub" onAction={onRegister} />
       <section className="panel">
         <div className="toolbar">
           <div className="toolbar__search"><label htmlFor="hub-search">Search hubs</label><input id="hub-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, code or description" /></div>
-          <div><label htmlFor="hub-status">Lifecycle</label><select id="hub-status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All states</option><option value="testing">Testing</option><option value="production">Production</option><option value="maintenance">Maintenance</option><option value="archived">Archived</option></select></div>
+          <div><label htmlFor="hub-status">Lifecycle</label><select id="hub-status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All states</option><option value="planned">Planned</option><option value="development">Development</option><option value="testing">Testing</option><option value="production">Production</option><option value="maintenance">Maintenance</option><option value="archived">Archived</option></select></div>
           <span className="toolbar__count" role="status">{visibleHubs.length} of {data.hubs.length} hubs</span>
         </div>
-        {visibleHubs.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Hub</th><th scope="col">Version</th><th scope="col">Contracts</th><th scope="col">Courses</th><th scope="col">Status</th><th scope="col">Certification</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{visibleHubs.map((hub) => {
+        {visibleHubs.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Hub</th><th scope="col">Version</th><th scope="col">Courses</th><th scope="col">Curriculum</th><th scope="col">Health</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead><tbody>{visibleHubs.map((hub) => {
           const links = data.hubCourseLinks.filter((link) => link.hubCode === hub.hubCode && link.active);
-          return <tr key={hub.hubCode}><th scope="row"><span className="hub-cell"><span className="hub-cell__mark" aria-hidden="true">{hub.hubName.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><span><span className="table-primary">{hub.hubName}</span><code>{hub.hubCode}</code></span></span></th><td>{hub.hubVersion}</td><td><span className="table-primary">Core {hub.coreVersion}</span><small>API {hub.learnerApiVersion} · Submission {hub.submissionContractVersion}</small></td><td>{links.map((link) => link.courseTitle).join(", ") || "No active link"}</td><td><StatusBadge label={hub.status} tone={toneForStatus(hub.status)} /></td><td><StatusBadge label={hub.certificationState ?? "not recorded"} tone={hub.certificationState === "certified" ? "positive" : "neutral"} /></td><td><button className="button button--small button--secondary" type="button" onClick={() => setSelectedHub(hub)}>View</button></td></tr>;
+          const publication = hubPublicationStatus(hub, data, localDrafts);
+          const health = hubHealthReport(hub, data, localDrafts);
+          return <tr key={hub.hubCode}><th scope="row"><span className="hub-cell"><span className="hub-cell__mark" aria-hidden="true">{hub.hubName.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><span><span className="table-primary">{hub.hubName}</span><code>{hub.hubCode}</code></span></span></th><td>{hub.hubVersion}</td><td>{links.map((link) => link.courseTitle).join(", ") || "No active link"}</td><td><StatusBadge label={publication.displayLabel} tone={toneForStatus(publication.displayStatus)} /></td><td><StatusBadge label={health.summary} tone={toneForStatus(health.status)} /></td><td><StatusBadge label={hub.active ? hub.status : `${hub.status} · inactive`} tone={toneForStatus(hub.active ? hub.status : "inactive")} /></td><td><button className="button button--small button--secondary" type="button" onClick={() => setSelectedHubCode(hub.hubCode)}>View</button></td></tr>;
         })}</tbody></table></div> : <EmptyState title="No hubs match" body="Change the search or lifecycle filter." />}
       </section>
-      <HubDetailDialog hub={selectedHub} courseLinks={selectedLinks} onClose={() => setSelectedHub(null)} onEdit={(hub) => { setSelectedHub(null); openPending({ title: "Edit hub", subject: hub.hubName }); }} onDeactivate={(hub) => { setSelectedHub(null); openPending({ title: "Deactivate hub", subject: hub.hubName }); }} />
+      <HubDetailDialog
+        hub={selectedHub}
+        courseLinks={selectedLinks}
+        publication={selectedPublication}
+        health={selectedHealth}
+        history={selectedHistory}
+        actionError={actionError}
+        onClose={() => setSelectedHubCode(null)}
+        onEdit={(hub) => { setSelectedHubCode(null); onEdit(hub); }}
+        onToggleActive={onToggleActive}
+      />
     </>
   );
 }
 
-function CoursesPage({ links, openPending }: { links: readonly HubCourseLinkRecord[]; openPending: (action: PendingAction) => void }) {
+function CoursesPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
   return (
     <>
       <PageHeader moduleId="courses" actionLabel="Create course" onAction={() => openPending({ title: "Create a course" })} />
-      {links.length ? <div className="card-grid card-grid--2">{links.map((link) => <article className="record-card" key={`${link.hubCode}-${link.courseKey}`}><div className="record-card__header"><span className="record-card__mark" aria-hidden="true">CR</span><StatusBadge label={link.active ? "active" : "inactive"} tone={link.active ? "positive" : "neutral"} /></div><h2>{link.courseTitle}</h2><code>{link.courseKey}</code><dl><div><dt>Registered hub</dt><dd>{link.hubCode}</dd></div><div><dt>Linked</dt><dd>{formatDate(link.linkedAt)}</dd></div></dl></article>)}</div> : <EmptyState title="No course links" body="No hub-to-course relationships are registered." />}
-      <section className="notice-card notice-card--info"><strong>Read-only course projection</strong><p>The MVP displays authoritative <code>admin_api.hub_course_links</code>. A dedicated course mutation contract remains deferred.</p></section>
+      {data.courses.length ? <div className="card-grid card-grid--2">{data.courses.map((course) => {
+        const links = data.hubCourseLinks.filter((link) => link.courseKey === course.courseKey);
+        return <article className="record-card" key={course.courseKey}><div className="record-card__header"><span className="record-card__mark" aria-hidden="true">CR</span><StatusBadge label={course.active ? "active" : "inactive"} tone={course.active ? "positive" : "neutral"} /></div><h2>{course.courseTitle}</h2><code>{course.courseKey}</code><dl><div><dt>Code</dt><dd>{course.code ?? "Not recorded"}</dd></div><div><dt>Linked hubs</dt><dd>{links.length ? links.map((link) => link.hubCode).join(", ") : "None"}</dd></div></dl></article>;
+      })}</div> : <EmptyState title="No courses" body="No course catalogue rows are available." />}
+      <section className="notice-card notice-card--info"><strong>Course catalogue</strong><p>The MVP displays <code>admin_api.courses</code> and hub associations. Creating or editing a course remains deferred.</p></section>
     </>
   );
 }
@@ -244,16 +281,49 @@ function AuditPage({ data }: { data: AdminDataSnapshot }) {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, publishCurriculum } = useAdminPortal();
+  const { data, session, dataSource, publishCurriculum, registerHub, updateHub } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
   if (!data) return null;
   const openPending = (action: PendingAction) => setPendingAction(action);
+  const hubDialogOpen = registerOpen || Boolean(editingHub);
   let content: React.ReactNode;
 
   switch (moduleId) {
     case "dashboard": content = <DashboardPage data={data} />; break;
-    case "hubs": content = <HubRegistryPage data={data} openPending={openPending} />; break;
-    case "courses": content = <CoursesPage links={data.hubCourseLinks} openPending={openPending} />; break;
+    case "hubs": content = (
+      <HubRegistryPage
+        data={data}
+        actionError={editingHub ? null : registerError}
+        onRegister={() => { setEditingHub(null); setRegisterError(null); setRegisterOpen(true); }}
+        onEdit={(hub) => { setRegisterOpen(false); setRegisterError(null); setEditingHub(hub); }}
+        onToggleActive={async (hub) => {
+          const courseKeys = data.hubCourseLinks
+            .filter((link) => link.hubCode === hub.hubCode && link.active)
+            .map((link) => link.courseKey);
+          setRegisterError(null);
+          try {
+            await updateHub({
+              manifest: manifestFromHubRecord(hub, courseKeys),
+              status: hub.status,
+              active: !hub.active,
+            });
+          } catch (caught) {
+            setRegisterError(
+              caught instanceof AdminHubRegistrationError
+                ? caught.message
+                : caught instanceof Error
+                  ? caught.message
+                  : "The hub could not be updated.",
+            );
+          }
+        }}
+      />
+    ); break;
+    case "courses": content = <CoursesPage data={data} openPending={openPending} />; break;
     case "curriculum": content = (
       <CurriculumAuthoringPage
         hubs={data.hubs}
@@ -279,5 +349,49 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
     default: content = <DashboardPage data={data} />;
   }
 
-  return <>{content}<PendingActionDialog action={pendingAction} onClose={() => setPendingAction(null)} /></>;
+  return (
+    <>
+      {content}
+      <PendingActionDialog action={pendingAction} onClose={() => setPendingAction(null)} />
+      {hubDialogOpen ? (
+        <RegisterHubDialog
+          key={editingHub ? `edit:${editingHub.hubCode}` : "register"}
+          open={hubDialogOpen}
+          mode={editingHub ? "edit" : "register"}
+          initialHub={editingHub}
+          data={data}
+          demoMode={dataSource.mode === "demo"}
+          submitting={registering}
+          error={registerError}
+          onClose={() => {
+            if (!registering) {
+              setRegisterOpen(false);
+              setEditingHub(null);
+              setRegisterError(null);
+            }
+          }}
+          onConfirm={async (request) => {
+            setRegistering(true);
+            setRegisterError(null);
+            try {
+              if (editingHub) await updateHub(request);
+              else await registerHub(request);
+              setRegisterOpen(false);
+              setEditingHub(null);
+            } catch (caught) {
+              setRegisterError(
+                caught instanceof AdminHubRegistrationError
+                  ? caught.message
+                  : caught instanceof Error
+                    ? caught.message
+                    : editingHub ? "The hub could not be updated." : "The hub could not be registered.",
+              );
+            } finally {
+              setRegistering(false);
+            }
+          }}
+        />
+      ) : null}
+    </>
+  );
 }
