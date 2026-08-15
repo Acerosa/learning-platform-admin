@@ -51,7 +51,7 @@ export function PublicationPanel({
   return (
     <section className="panel">
       <h2>Publication</h2>
-      <p>Local Publish freezes an immutable Admin snapshot. Publish to Platform then sends that snapshot to the backend catalogue. It does not commit to GitHub or update learner hubs.</p>
+      <p>Local Publish freezes an immutable Admin snapshot. Publish to Platform stores that snapshot in Supabase. Learner hubs load it from there. A GitHub commit or Pages redeploy is not required for curriculum changes.</p>
       <dl className="authoring-meta">
         <div>
           <dt>Version</dt>
@@ -118,6 +118,9 @@ export function PublicationPanel({
         <p role="status">Publish to Platform requires a live administrator session.</p>
       ) : null}
       {record.platformPublicationError ? <p role="alert">{record.platformPublicationError}</p> : null}
+      {record.platformPublicationState === "published" ? (
+        <p role="status">Learner hubs load this published package from Supabase. A GitHub Pages redeploy is not required for curriculum changes.</p>
+      ) : null}
       <DiagnosticsList issues={issues} />
       <h3>Platform publication history</h3>
       {history.length ? (

@@ -2,18 +2,20 @@
 
 Admin remains the authoring system. After a local Published snapshot exists,
 staff can send it to the platform backend. The backend is the authoritative
-published catalogue. Learner hubs are not updated by this step and never
-receive Draft or Review data.
+published catalogue. Learner hubs load that published package at runtime and
+never receive Draft or Review data.
 
 ```text
 Admin Draft → Review → Approved → local Published snapshot
         → Publish to Platform
             → admin_api.publish_curriculum
                 → platform.curriculum_publications
-                    → api.published_curriculum metadata
+                → delivery catalogue projection
+                    → api.published_curriculum_package
 ```
 
-There is no GitHub automation and no write into learner repositories.
+There is no GitHub automation and no write into learner repositories. A
+GitHub Pages redeploy is not required for normal curriculum publication.
 
 ## Admin responsibilities
 
@@ -39,5 +41,6 @@ publish a new version. Existing published rows are never edited or deleted.
 
 ## Future learner-hub consumption
 
-`api.published_curriculum()` exposes current package metadata. Wiring a hub
-renderer to that catalogue is later work. Unit 14 rendering is unchanged.
+Learner hubs fetch `api.published_curriculum_package`. Wiring a hub renderer
+to Admin localStorage is prohibited. Unit 14 loads the published package at
+runtime and uses the bundled snapshot only as fallback.
