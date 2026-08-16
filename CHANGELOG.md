@@ -7,6 +7,8 @@ here.
 
 ### Added
 
+- Results / Markbook module consuming `admin_api` and `@learning-platform/results`.
+
 - Real Hub Registry management: register, edit, enable/disable, publication
   status and informational health. Live mode uses `admin_api.register_hub` and
   `admin_api.update_hub`. Demo mode keeps synthetic local actions.

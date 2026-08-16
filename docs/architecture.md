@@ -1,14 +1,22 @@
 # Architecture
 
+The platform-wide pattern is **Contract-First Modular Hub Architecture**,
+documented in `learning-platform-backend` `docs/architecture.md`. This file
+describes only the Central Admin Portal.
+
 ## Purpose and boundary
 
-The portal is a presentation-layer client of the shared Learning Platform. It does not own platform data, learner activities, authentication implementation, database migrations, RLS or API contracts.
+The portal is the platform **control plane**: a presentation-layer client of
+the shared Learning Platform. It does not own platform data, learner
+activities, authentication implementation, database migrations, RLS or API
+contracts, and it does not edit learner-hub source code.
 
 ```text
 Central Admin Portal
        │
        ├── shared theme service and tokens ──> learning-platform-core
        ├── canonical content engine ─────────> learning-platform-content
+       ├── educational interpretation ───────> learning-platform-results
        │
        └── authenticated staff reads and
            curriculum publication RPC ───────> admin_api
@@ -54,8 +62,8 @@ The portal supports three explicit modes:
 2. **Demo** — explicit development mode using synthetic fixtures.
 3. **Unavailable** — live configuration, authentication or reads failed.
 
-The interface labels these states. A failed live read never substitutes demo
-data. Analytics are supplied by backend aggregate views.
+Analytics are supplied by backend aggregate views. Results / Markbook
+interpretation is supplied by `@learning-platform/results` from those views.
 
 ## Administrative writes
 

@@ -41,7 +41,8 @@ const viewRows: Record<string, readonly Record<string, unknown>[]> = {
   groups: [{ group_code: "G-1", group_name: "Group One", year_group: "Year 1", registration_open: true, active: true, academic_year: "2026-27", course_key: "course-a", course_title: "Course A", active_learner_count: 1 }],
   enrolments: [{ student_number: "S-1", group_code: "G-1", joined_on: "2026-09-01", left_on: null, status: "active" }],
   assignments: [{ group_code: "G-1", activity_key: "activity-a", activity_version: "1.0.0", opens_at: null, due_at: null, required: true, active: true }],
-  attempts: [{ attempt_id: "attempt-1", student_number: "S-1", group_code: "G-1", activity_key: "activity-a", activity_version: "1.0.0", attempt_number: 1, status: "completed", score: 8, max_score: 10, marking_source: "server", evidence_level: "summary_only", received_at: "2026-08-11T00:00:00Z", completed_at: "2026-08-11T00:01:00Z" }],
+  attempts: [{ attempt_id: "attempt-1", student_number: "S-1", group_code: "G-1", activity_key: "activity-a", activity_version: "1.0.0", attempt_number: 1, status: "completed", score: 8, max_score: 10, marking_source: "server", evidence_level: "summary_only", received_at: "2026-08-11T00:00:00Z", completed_at: "2026-08-11T00:01:00Z", requires_review: false, question_count: 2 }],
+  responses: [{ response_id: "response-1", attempt_id: "attempt-1", student_number: "S-1", group_code: "G-1", activity_key: "activity-a", question_key: "q1", question_type: "single", section_key: "topic-a", section_title: "Topic A", ordinal: 1, topic_keys: ["topic-a"], skill_keys: [], response_payload: { optionId: "a" }, awarded_score: 1, max_score: 1, is_correct: true, requires_review: false, marking_source: "server", marked_at: "2026-08-11T00:01:00Z" }],
   activity_performance: [{ group_code: "G-1", activity_key: "activity-a", activity_version: "1.0.0", completed_attempts: 1, learner_count: 1, average_score_percentage: 80, best_score_percentage: 80, first_completed_at: "2026-08-11T00:01:00Z", latest_completed_at: "2026-08-11T00:01:00Z" }],
   dashboard_summary: [{ registered_hubs: 1, active_hubs: 1, active_learners: 1, active_groups: 1, active_enrolments: 1, assignments: 1, recent_attempts: 1, completed_attempts: 1, average_score_percentage: 80, healthy_services: 1, service_count: 1, active_contracts: 0, contract_count: 1 }],
   audit_events: [{ event_key: "admin.read", actor_type: "staff", entity_type: "hub", entity_key: "hub-a", outcome: "succeeded", occurred_at: "2026-08-11T00:02:00Z" }],
@@ -210,6 +211,8 @@ test("live service reads every MVP surface through admin_api and maps safe rows"
   assert.equal(data.enrolments[0].groupCode, "G-1");
   assert.equal(data.assignments[0].activityKey, "activity-a");
   assert.equal(data.attempts[0].score, 8);
+  assert.equal(data.attempts[0].requiresReview, false);
+  assert.equal(data.responses[0].questionKey, "q1");
   assert.equal(data.activityPerformance[0].averageScorePercentage, 80);
   assert.equal(data.dashboardSummary.recentAttempts, 1);
   assert.equal(data.curriculumPublications[0].packageVersion, "0.1.0");
@@ -217,7 +220,8 @@ test("live service reads every MVP surface through admin_api and maps safe rows"
   assert.equal(data.courses[0].courseKey, "course-a");
   assert.ok(fake.schemas.every((schema) => schema === "admin_api"));
   const selected = fake.selections.join("\n");
-  assert.doesNotMatch(selected, /response_payload|diagnostics|contact_email|package\b/);
+  assert.match(selected, /responses:.*response_payload/);
+  assert.doesNotMatch(selected, /contact_email|diagnostics/);
 });
 
 test("a live read failure becomes unavailable and never invokes demo fallback", async () => {

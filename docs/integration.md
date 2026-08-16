@@ -11,7 +11,28 @@ It consumes:
 - `createThemeService()` for persisted system/light/dark behaviour;
 - `applyBranding()` for administration-specific platform colours.
 
-It deliberately does not reuse learner header, learner account, learner onboarding, learner progress or learner activity components. Those surfaces belong in learner hubs.
+## learning-platform-results
+
+The Results module maps `admin_api` rows through `@learning-platform/results`.
+Admin does not reimplement scoring, progress, diagnostics or markbook maths.
+
+Data flow:
+
+```text
+admin_api.attempts + admin_api.responses
+        │
+        ▼
+@learning-platform/results
+        │
+        ▼
+Admin Results / Markbook presentation
+```
+
+## Markbook workflow
+
+Staff open Results, choose a group, inspect learners and activities, open an
+attempt, then view evidence, automatic feedback and the requires-review queue.
+Editing and exports are out of scope.
 
 ## learning-platform-backend
 
@@ -32,6 +53,7 @@ The documented administrative boundary is `admin_api` version 0.2.0.
 | Enrolments | `admin_api.enrolments` |
 | Assignments | `admin_api.assignments` |
 | Attempts | `admin_api.attempts` |
+| Responses | `admin_api.responses` |
 | Dashboard counts | `admin_api.dashboard_summary` |
 | Activity analytics | `admin_api.activity_performance` |
 | Curriculum publications | `admin_api.curriculum_publications` |

@@ -24,17 +24,17 @@ test("package is the 0.2.0 administration repository and consumes platform core"
   assert.equal(pkg.dependencies["drizzle-orm"], undefined);
 });
 
-test("module registry has 16 unique hub-agnostic modules", async () => {
+test("module registry has 17 unique hub-agnostic modules", async () => {
   const source = await readFile(new URL("src/router/modules.ts", root), "utf8");
   const ids = [...source.matchAll(/^\s+"([a-z-]+)",$/gm)].map((match) => match[1]);
-  assert.equal(ids.length, 16);
-  assert.equal(new Set(ids).size, 16);
-  assert.deepEqual(ids, ["dashboard", "hubs", "courses", "curriculum", "activities", "learners", "teachers", "groups", "enrolments", "assignments", "attempts", "analytics", "monitoring", "certification", "configuration", "audit"]);
+  assert.equal(ids.length, 17);
+  assert.equal(new Set(ids).size, 17);
+  assert.deepEqual(ids, ["dashboard", "hubs", "courses", "curriculum", "activities", "learners", "teachers", "groups", "enrolments", "assignments", "results", "attempts", "analytics", "monitoring", "certification", "configuration", "audit"]);
 });
 
 test("admin API names match the documented backend surface", async () => {
   const source = await readFile(new URL("src/api/admin-api.ts", root), "utf8");
-  for (const view of ["current_staff_context", "hubs", "hub_course_links", "courses", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "dashboard_summary", "activity_performance", "curriculum_publications"]) {
+  for (const view of ["current_staff_context", "hubs", "hub_course_links", "courses", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "responses", "dashboard_summary", "activity_performance", "curriculum_publications"]) {
     assert.match(source, new RegExp(`admin_api\\.${view}`));
   }
   assert.match(source, /status: "draft"/);
@@ -52,7 +52,6 @@ test("live integration uses Supabase Auth and the admin_api schema only", async 
   assert.match(service, /schema\("admin_api"\)/);
   assert.match(service, /current_staff_context/);
   assert.doesNotMatch(service, /schema\("(?:learning|platform)"\)/);
-  assert.doesNotMatch(service, /response_payload|diagnostics/);
   assert.match(portal, /signInWithPassword/);
   assert.match(portal, /signInWithOtp/);
   assert.match(portal, /onAuthStateChange/);

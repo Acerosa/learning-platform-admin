@@ -1,0 +1,203 @@
+import {
+  buildDiagnostics,
+  buildFeedback,
+  buildMarkbook,
+  buildReviewQueue,
+  createActivitySummary,
+  createAutomaticFeedback,
+  createEvidenceFromPayload,
+  createGroupResultSummary,
+  createLearnerProgress,
+  interpretAttempt,
+  mapStoredMarkingSource,
+  summariseMarking,
+} from "@learning-platform/results";
+import type { AdminDataSnapshot, AttemptRecord, ResponseRecord } from "../api/admin-api";
+
+export function progressForLearnerActivity(
+  data: AdminDataSnapshot,
+  learnerNumber: string,
+  activityKey: string,
+) {
+  const attempts = data.attempts
+    .filter((attempt) => attempt.learnerNumber === learnerNumber && attempt.activityKey === activityKey)
+    .map((attempt) => ({
+      attemptNumber: attempt.attemptNumber,
+      completed: attempt.status === "completed",
+      score: attempt.score,
+      maxScore: attempt.maxScore,
+      requiresReview: attempt.requiresReview,
+    }));
+  return createLearnerProgress({
+    learnerId: learnerNumber,
+    activityKey,
+    attempts,
+  });
+}
+
+export function groupResultSummaries(data: AdminDataSnapshot) {
+  return data.groups.map((group) => {
+    const learners = data.learners.filter((learner) => learner.groupCodes.includes(group.groupCode));
+    const activityKeys = [...new Set(data.attempts.filter((attempt) => attempt.groupCode === group.groupCode).map((attempt) => attempt.activityKey))];
+    const progress = learners.flatMap((learner) =>
+      (activityKeys.length ? activityKeys : ["unassigned"]).map((activityKey) =>
+        progressForLearnerActivity(data, learner.studentNumber, activityKey),
+      ),
+    );
+    return {
+      group,
+      summary: createGroupResultSummary({ groupId: group.groupCode, learners: progress }),
+    };
+  });
+}
+
+export function activityResultSummaries(data: AdminDataSnapshot) {
+  const keys = [...new Set([
+    ...data.attempts.map((attempt) => attempt.activityKey),
+    ...data.assignments.map((assignment) => assignment.activityKey),
+  ])];
+  return keys.map((activityKey) => {
+    const learners = [...new Set(data.attempts.filter((attempt) => attempt.activityKey === activityKey).map((attempt) => attempt.learnerNumber))]
+      .map((learnerNumber) => progressForLearnerActivity(data, learnerNumber, activityKey));
+    const rows = data.attempts.filter((attempt) => attempt.activityKey === activityKey);
+    const marking = summariseMarking(rows.map((attempt) => ({
+      markingSource: attempt.markingSource,
+      requiresReview: attempt.requiresReview,
+    })));
+    return {
+      activityKey,
+      questionCount: rows[0]?.questionCount ?? null,
+      summary: createActivitySummary({ activityKey, learners }),
+      marking,
+    };
+  });
+}
+
+export function resultsDashboard(data: AdminDataSnapshot) {
+  const marking = summariseMarking(data.attempts.map((attempt) => ({
+    markingSource: attempt.markingSource,
+    requiresReview: attempt.requiresReview,
+  })));
+  const completed = data.attempts.filter((attempt) => attempt.status === "completed");
+  const latest = [...data.attempts].sort((left, right) => right.completedAt.localeCompare(left.completedAt))[0] ?? null;
+  return {
+    attemptCount: data.attempts.length,
+    completedCount: completed.length,
+    averageScore: data.dashboardSummary.averageScorePercentage,
+    latestActivity: latest?.activityKey ?? null,
+    marking,
+  };
+}
+
+export function markbookForGroup(data: AdminDataSnapshot, groupCode: string | null) {
+  const learners = data.learners
+    .filter((learner) => !groupCode || learner.groupCodes.includes(groupCode))
+    .map((learner) => ({
+      id: learner.studentNumber,
+      displayName: learner.displayName,
+      learnerNumber: learner.studentNumber,
+      groupId: groupCode,
+    }));
+  const activities = [...new Set(data.assignments
+    .filter((assignment) => !groupCode || assignment.groupCode === groupCode)
+    .map((assignment) => assignment.activityKey))]
+    .map((key) => ({ key }));
+  const attempts = data.attempts
+    .filter((attempt) => !groupCode || attempt.groupCode === groupCode)
+    .map((attempt) => ({
+      learnerId: attempt.learnerNumber,
+      activityKey: attempt.activityKey,
+      attemptNumber: attempt.attemptNumber,
+      completed: attempt.status === "completed",
+      score: attempt.score,
+      maxScore: attempt.maxScore,
+      requiresReview: attempt.requiresReview,
+    }));
+  const group = groupCode
+    ? {
+        id: groupCode,
+        name: data.groups.find((item) => item.groupCode === groupCode)?.groupName ?? groupCode,
+        learnerIds: learners.map((learner) => learner.id),
+      }
+    : null;
+  return buildMarkbook({ learners, activities, attempts, group });
+}
+
+export function interpretStoredAttempt(attempt: AttemptRecord, responses: readonly ResponseRecord[]) {
+  const items = responses.map((response) =>
+    createEvidenceFromPayload(response.questionKey, response.questionType, response.responsePayload),
+  );
+  const marks = responses.map((response) => ({
+    questionKey: response.questionKey,
+    score: response.score,
+    maxScore: response.maxScore,
+    isCorrect: response.isCorrect,
+    requiresReview: response.requiresReview,
+    markingSource: mapStoredMarkingSource(response.markingSource),
+  }));
+  return interpretAttempt({
+    activityKey: attempt.activityKey,
+    items,
+    marks,
+  });
+}
+
+export function diagnosticsFromResponses(responses: readonly ResponseRecord[]) {
+  return buildDiagnostics(
+    responses.flatMap((response) => {
+      const result = {
+        isCorrect: response.isCorrect,
+        requiresReview: response.requiresReview,
+      };
+      const topics = response.topicKeys.length ? response.topicKeys : [response.sectionKey].filter(Boolean);
+      const skills = response.skillKeys;
+      if (!topics.length && !skills.length) {
+        return [{ questionKey: response.questionKey, result }];
+      }
+      return [
+        ...topics.map((topicKey) => ({ questionKey: response.questionKey, topicKey, result })),
+        ...skills.map((skillKey) => ({ questionKey: response.questionKey, skillKey, result })),
+      ];
+    }),
+  );
+}
+
+export function feedbackForResponses(responses: readonly ResponseRecord[]) {
+  return buildFeedback(
+    responses.map((response) =>
+      createAutomaticFeedback({
+        questionKey: response.questionKey,
+        isCorrect: response.isCorrect,
+        requiresReview: response.requiresReview,
+      }),
+    ),
+  );
+}
+
+export function reviewQueue(responses: readonly ResponseRecord[]) {
+  return buildReviewQueue(
+    responses.map((response) => ({
+      questionKey: response.questionKey,
+      score: response.score,
+      maxScore: response.maxScore,
+      isCorrect: response.isCorrect,
+      requiresReview: response.requiresReview,
+      markingSource: mapStoredMarkingSource(response.markingSource),
+    })),
+  ).map((item) => {
+    const response = responses.find((entry) => entry.questionKey === item.questionKey);
+    return { ...item, attemptId: response?.attemptId ?? null, learnerNumber: response?.learnerNumber ?? null };
+  });
+}
+
+export function formatEvidenceValue(value: unknown): string {
+  if (!value || typeof value !== "object") return String(value ?? "");
+  const record = value as Record<string, unknown>;
+  if (typeof record.optionId === "string") return record.optionId;
+  if (Array.isArray(record.optionIds)) return record.optionIds.join(", ");
+  if (typeof record.text === "string") return record.text;
+  if (typeof record.sourceCode === "string") return record.sourceCode;
+  if (typeof record.categoryId === "string") return record.categoryId;
+  if (typeof record.artefactId === "string") return record.artefactId;
+  return JSON.stringify(record);
+}

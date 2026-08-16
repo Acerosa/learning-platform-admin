@@ -19,6 +19,7 @@ export const ADMIN_API_VIEWS = Object.freeze({
   enrolments: "admin_api.enrolments",
   assignments: "admin_api.assignments",
   attempts: "admin_api.attempts",
+  responses: "admin_api.responses",
   dashboardSummary: "admin_api.dashboard_summary",
   activityPerformance: "admin_api.activity_performance",
   curriculumPublications: "admin_api.curriculum_publications",
@@ -164,6 +165,30 @@ export interface AttemptRecord {
   evidenceLevel: string;
   receivedAt: string;
   completedAt: string;
+  requiresReview: boolean;
+  questionCount: number | null;
+}
+
+export interface ResponseRecord {
+  responseId: string;
+  attemptId: string;
+  learnerNumber: string;
+  groupCode: string;
+  activityKey: string;
+  questionKey: string;
+  questionType: string;
+  sectionKey: string | null;
+  sectionTitle: string | null;
+  ordinal: number;
+  topicKeys: readonly string[];
+  skillKeys: readonly string[];
+  responsePayload: Readonly<Record<string, unknown>>;
+  score: number | null;
+  maxScore: number;
+  isCorrect: boolean | null;
+  requiresReview: boolean;
+  markingSource: string;
+  markedAt: string;
 }
 
 export interface ActivityPerformanceRecord {
@@ -263,6 +288,7 @@ export interface AdminDataSnapshot {
   enrolments: readonly EnrolmentRecord[];
   assignments: readonly AssignmentRecord[];
   attempts: readonly AttemptRecord[];
+  responses: readonly ResponseRecord[];
   activityPerformance: readonly ActivityPerformanceRecord[];
   dashboardSummary: DashboardSummaryRecord;
   auditEvents: readonly AuditEventRecord[];
@@ -282,6 +308,7 @@ export interface AdminReadService {
   listEnrolments(): Promise<readonly EnrolmentRecord[]>;
   listAssignments(): Promise<readonly AssignmentRecord[]>;
   listAttempts(): Promise<readonly AttemptRecord[]>;
+  listResponses(): Promise<readonly ResponseRecord[]>;
   listActivityPerformance(): Promise<readonly ActivityPerformanceRecord[]>;
   getDashboardSummary(): Promise<DashboardSummaryRecord>;
   listAuditEvents(): Promise<readonly AuditEventRecord[]>;
