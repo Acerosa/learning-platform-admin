@@ -22,6 +22,7 @@ import { AdminHubRegistrationError } from "../services/supabase-admin-service";
 import { useAdminPortal } from "../stores/admin-portal";
 import { formatDate } from "../utils/format";
 import { CurriculumAuthoringPage } from "./curriculum-authoring";
+import { ResultsMarkbookPage } from "./results-markbook";
 
 function toneForStatus(status: string): BadgeTone {
   if (["active", "healthy", "certified", "open", "production", "completed", "succeeded", "published", "pass"].includes(status)) return "positive";
@@ -340,6 +341,7 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
     case "groups": content = <GroupsPage data={data} openPending={openPending} />; break;
     case "enrolments": content = <EnrolmentsPage data={data} openPending={openPending} />; break;
     case "assignments": content = <AssignmentsPage data={data} openPending={openPending} />; break;
+    case "results": content = <ResultsMarkbookPage data={data} />; break;
     case "attempts": content = <AttemptsPage data={data} />; break;
     case "analytics": content = <AnalyticsPage data={data} />; break;
     case "monitoring": content = <MonitoringPage data={data} />; break;

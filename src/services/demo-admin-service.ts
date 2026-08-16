@@ -16,6 +16,7 @@ import type {
   HubRecord,
   LearnerRecord,
   PlatformContractRecord,
+  ResponseRecord,
   TeacherRecord,
 } from "../api/admin-api";
 
@@ -191,8 +192,53 @@ export const ASSIGNMENTS: readonly AssignmentRecord[] = Object.freeze([
 ]);
 
 export const ATTEMPTS: readonly AttemptRecord[] = Object.freeze([
-  { attemptId: "demo-attempt-a", learnerNumber: "SYNTH-0001", groupCode: "TEST-GROUP-A", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", attemptNumber: 1, status: "completed", score: 8, maxScore: 10, markingSource: "server", evidenceLevel: "question_level", receivedAt: "2026-08-11T08:50:00Z", completedAt: "2026-08-11T09:00:00Z" },
-  { attemptId: "demo-attempt-b", learnerNumber: "SYNTH-0002", groupCode: "TEST-GROUP-B", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", attemptNumber: 1, status: "completed", score: 6, maxScore: 10, markingSource: "server", evidenceLevel: "question_level", receivedAt: "2026-08-11T09:10:00Z", completedAt: "2026-08-11T09:20:00Z" },
+  { attemptId: "demo-attempt-a", learnerNumber: "SYNTH-0001", groupCode: "TEST-GROUP-A", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", attemptNumber: 1, status: "completed", score: 8, maxScore: 10, markingSource: "server", evidenceLevel: "question_level", receivedAt: "2026-08-11T08:50:00Z", completedAt: "2026-08-11T09:00:00Z", requiresReview: false, questionCount: 2 },
+  { attemptId: "demo-attempt-b", learnerNumber: "SYNTH-0002", groupCode: "TEST-GROUP-B", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", attemptNumber: 1, status: "completed", score: 6, maxScore: 10, markingSource: "server", evidenceLevel: "question_level", receivedAt: "2026-08-11T09:10:00Z", completedAt: "2026-08-11T09:20:00Z", requiresReview: true, questionCount: 2 },
+]);
+
+export const RESPONSES: readonly ResponseRecord[] = Object.freeze([
+  {
+    responseId: "demo-response-a1",
+    attemptId: "demo-attempt-a",
+    learnerNumber: "SYNTH-0001",
+    groupCode: "TEST-GROUP-A",
+    activityKey: "foundations-programming-diagnostic",
+    questionKey: "q-choice",
+    questionType: "single",
+    sectionKey: "variables",
+    sectionTitle: "Variables",
+    ordinal: 1,
+    topicKeys: ["variables"],
+    skillKeys: ["identify"],
+    responsePayload: { optionId: "b" },
+    score: 1,
+    maxScore: 1,
+    isCorrect: true,
+    requiresReview: false,
+    markingSource: "server",
+    markedAt: "2026-08-11T09:00:00Z",
+  },
+  {
+    responseId: "demo-response-b1",
+    attemptId: "demo-attempt-b",
+    learnerNumber: "SYNTH-0002",
+    groupCode: "TEST-GROUP-B",
+    activityKey: "foundations-programming-diagnostic",
+    questionKey: "q-written",
+    questionType: "text",
+    sectionKey: "variables",
+    sectionTitle: "Variables",
+    ordinal: 2,
+    topicKeys: ["variables"],
+    skillKeys: ["explain"],
+    responsePayload: { text: "A variable stores a value." },
+    score: null,
+    maxScore: 4,
+    isCorrect: null,
+    requiresReview: true,
+    markingSource: "server",
+    markedAt: "2026-08-11T09:20:00Z",
+  },
 ]);
 
 export const ACTIVITY_PERFORMANCE: readonly ActivityPerformanceRecord[] = Object.freeze([
@@ -258,6 +304,7 @@ export const demoAdminService: AdminReadService = Object.freeze({
   async listEnrolments() { return ENROLMENTS; },
   async listAssignments() { return ASSIGNMENTS; },
   async listAttempts() { return ATTEMPTS; },
+  async listResponses() { return RESPONSES; },
   async listActivityPerformance() { return ACTIVITY_PERFORMANCE; },
   async getDashboardSummary() { return DASHBOARD_SUMMARY; },
   async listAuditEvents() { return AUDIT_EVENTS; },
@@ -276,6 +323,7 @@ export const DEMO_ADMIN_DATA: AdminDataSnapshot = Object.freeze({
   enrolments: ENROLMENTS,
   assignments: ASSIGNMENTS,
   attempts: ATTEMPTS,
+  responses: RESPONSES,
   activityPerformance: ACTIVITY_PERFORMANCE,
   dashboardSummary: DASHBOARD_SUMMARY,
   auditEvents: AUDIT_EVENTS,

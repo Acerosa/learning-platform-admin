@@ -13,7 +13,7 @@ npm run test:unit
 
 ## Coverage
 
-- **Routing and navigation:** all 16 modules have unique routes, labels and navigation entries.
+- **Routing and navigation:** all 17 modules have unique routes, labels and navigation entries.
 - **Permissions:** source checks reject email-based role logic and document backend authority.
 - **Dashboard and modules:** rendered route tests verify backend-shaped metrics, tables, attempts, analytics and pending states.
 - **Hub registry, curriculum and people:** source/data contract tests verify the reviewed registry and synthetic fixtures.

@@ -20,6 +20,7 @@ import type {
   PlatformContractRecord,
   HubRegistrationResult,
   PlatformPublicationResult,
+  ResponseRecord,
   TeacherRecord,
 } from "../api/admin-api";
 import type { HubRegistrationRequest } from "../content/hub-registration.ts";
@@ -573,7 +574,7 @@ export function createSupabaseAdminReadService(
     async listAttempts() {
       const data = await rows(
         "attempts",
-        "attempt_id,student_number,group_code,activity_key,activity_version,attempt_number,status,score,max_score,marking_source,evidence_level,received_at,completed_at",
+        "attempt_id,student_number,group_code,activity_key,activity_version,attempt_number,status,score,max_score,marking_source,evidence_level,received_at,completed_at,requires_review,question_count",
         { column: "completed_at", ascending: false },
       );
       return data.map((row): AttemptRecord => ({
@@ -590,6 +591,37 @@ export function createSupabaseAdminReadService(
         evidenceLevel: textValue(row.evidence_level),
         receivedAt: textValue(row.received_at),
         completedAt: textValue(row.completed_at),
+        requiresReview: booleanValue(row.requires_review),
+        questionCount: nullableNumber(row.question_count),
+      }));
+    },
+
+    async listResponses() {
+      const data = await rows(
+        "responses",
+        "response_id,attempt_id,student_number,group_code,activity_key,question_key,question_type,section_key,section_title,ordinal,topic_keys,skill_keys,response_payload,awarded_score,max_score,is_correct,requires_review,marking_source,marked_at",
+        { column: "marked_at", ascending: false },
+      );
+      return data.map((row): ResponseRecord => ({
+        responseId: textValue(row.response_id),
+        attemptId: textValue(row.attempt_id),
+        learnerNumber: textValue(row.student_number),
+        groupCode: textValue(row.group_code),
+        activityKey: textValue(row.activity_key),
+        questionKey: textValue(row.question_key),
+        questionType: textValue(row.question_type),
+        sectionKey: nullableText(row.section_key),
+        sectionTitle: nullableText(row.section_title),
+        ordinal: numberValue(row.ordinal),
+        topicKeys: stringArray(row.topic_keys),
+        skillKeys: stringArray(row.skill_keys),
+        responsePayload: objectValue(row.response_payload),
+        score: nullableNumber(row.awarded_score),
+        maxScore: numberValue(row.max_score),
+        isCorrect: row.is_correct === null ? null : booleanValue(row.is_correct),
+        requiresReview: booleanValue(row.requires_review),
+        markingSource: textValue(row.marking_source),
+        markedAt: textValue(row.marked_at),
       }));
     },
 
@@ -678,6 +710,7 @@ export async function loadAdminData(
     enrolments,
     assignments,
     attempts,
+    responses,
     activityPerformance,
     dashboardSummary,
     auditEvents,
@@ -694,6 +727,7 @@ export async function loadAdminData(
     service.listEnrolments(),
     service.listAssignments(),
     service.listAttempts(),
+    service.listResponses(),
     service.listActivityPerformance(),
     service.getDashboardSummary(),
     service.listAuditEvents(),
@@ -712,6 +746,7 @@ export async function loadAdminData(
     enrolments,
     assignments,
     attempts,
+    responses,
     activityPerformance,
     dashboardSummary,
     auditEvents,

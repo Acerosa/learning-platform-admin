@@ -10,10 +10,11 @@ This repository is the administration interface for the entire Learning Platform
 
 - The portal consumes the shared theme service and semantic tokens from `@learning-platform/core`.
 - Curriculum authoring consumes `@learning-platform/content` 0.1.0 from [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content) for schemas, validation, import and preview.
+- Results / Markbook consumes `@learning-platform/results` for interpretation and `admin_api.attempts` / `admin_api.responses` for data.
 - The backend `admin_api` contract is version `0.2.0`, draft, with read models and curriculum publication.
 - Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.
 - Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
-- Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
+- Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, results, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
 - Write journeys against backend data remain pending except hub registration,
   hub updates and curriculum publication: they explain the missing mutation
   contract and never invent an endpoint.
