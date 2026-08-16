@@ -8,6 +8,7 @@ import {
   createEvidenceFromPayload,
   createGroupResultSummary,
   createLearnerProgress,
+  createTeacherFeedback,
   interpretAttempt,
   mapStoredMarkingSource,
   summariseMarking,
@@ -164,30 +165,54 @@ export function diagnosticsFromResponses(responses: readonly ResponseRecord[]) {
 
 export function feedbackForResponses(responses: readonly ResponseRecord[]) {
   return buildFeedback(
-    responses.map((response) =>
-      createAutomaticFeedback({
-        questionKey: response.questionKey,
-        isCorrect: response.isCorrect,
-        requiresReview: response.requiresReview,
-      }),
-    ),
+    responses.flatMap((response) => {
+      const items = [
+        createAutomaticFeedback({
+          questionKey: response.questionKey,
+          isCorrect: response.isCorrect,
+          requiresReview: response.requiresReview,
+        }),
+      ];
+      if (response.feedbackSummary) {
+        items.push(
+          createTeacherFeedback({
+            questionKey: response.questionKey,
+            summary: response.feedbackSummary,
+            nextStep: response.feedbackNextStep,
+          }),
+        );
+      }
+      return items;
+    }),
   );
 }
 
 export function reviewQueue(responses: readonly ResponseRecord[]) {
-  return buildReviewQueue(
-    responses.map((response) => ({
-      questionKey: response.questionKey,
-      score: response.score,
-      maxScore: response.maxScore,
-      isCorrect: response.isCorrect,
-      requiresReview: response.requiresReview,
-      markingSource: mapStoredMarkingSource(response.markingSource),
-    })),
-  ).map((item) => {
-    const response = responses.find((entry) => entry.questionKey === item.questionKey);
-    return { ...item, attemptId: response?.attemptId ?? null, learnerNumber: response?.learnerNumber ?? null };
-  });
+  return responses
+    .filter((response) => response.requiresReview)
+    .map((response) => {
+      const reason = buildReviewQueue([{
+        questionKey: response.questionKey,
+        score: response.score,
+        maxScore: response.maxScore,
+        isCorrect: response.isCorrect,
+        requiresReview: response.requiresReview,
+        markingSource: mapStoredMarkingSource(response.markingSource),
+      }])[0]?.reason ?? "needs-marking";
+      return {
+        responseId: response.responseId,
+        attemptId: response.attemptId,
+        learnerNumber: response.learnerNumber,
+        groupCode: response.groupCode,
+        activityKey: response.activityKey,
+        questionKey: response.questionKey,
+        reason,
+        markingSource: mapStoredMarkingSource(response.markingSource),
+        maxScore: response.maxScore,
+        score: response.score,
+        isCorrect: response.isCorrect,
+      };
+    });
 }
 
 export function formatEvidenceValue(value: unknown): string {

@@ -7,6 +7,10 @@ here.
 
 ### Added
 
+- Teacher review workflow in Results: open queue item, inspect evidence, award
+  score, record feedback, confirm, and refresh markbook/queue without a full
+  reload. Uses `admin_api.review_response`.
+
 - Results / Markbook module consuming `admin_api` and `@learning-platform/results`.
 
 - Real Hub Registry management: register, edit, enable/disable, publication

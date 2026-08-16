@@ -13,6 +13,7 @@ test("demo results consume shared interpretation rather than local scoring", () 
   assert.equal(dashboard.marking.reviewCount, 1);
   const queue = reviewQueue(DEMO_ADMIN_DATA.responses);
   assert.equal(queue[0]?.reason, "needs-marking");
+  assert.equal(queue[0]?.responseId, "demo-response-b1");
   const interpreted = interpretStoredAttempt(
     DEMO_ADMIN_DATA.attempts[0],
     DEMO_ADMIN_DATA.responses.filter((response) => response.attemptId === DEMO_ADMIN_DATA.attempts[0].attemptId),

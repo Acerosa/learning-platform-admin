@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { AdminDataSnapshot, AttemptRecord } from "../api/admin-api";
+import type { AdminDataSnapshot, AttemptRecord, ResponseRecord, ReviewResponseRequest } from "../api/admin-api";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import { getAdminModule } from "../router/modules";
 import {
@@ -16,8 +16,9 @@ import {
   resultsDashboard,
   reviewQueue,
 } from "../results/from-admin-snapshot";
-import { createEvidenceFromPayload } from "@learning-platform/results";
+import { createEvidenceFromPayload, validateReviewDecision, validateTeacherFeedback } from "@learning-platform/results";
 import { formatDate } from "../utils/format";
+import { AdminReviewError } from "../services/supabase-admin-service";
 
 type ResultsPane =
   | "dashboard"
@@ -31,7 +32,7 @@ type ResultsPane =
   | "diagnostics";
 
 function toneForStatus(status: string): BadgeTone {
-  if (["completed", "correct", "automatic"].includes(status)) return "positive";
+  if (["completed", "correct", "automatic", "reviewed"].includes(status)) return "positive";
   if (["requires-review", "needs-marking", "teacher-feedback-required", "awaiting-moderation"].includes(status)) return "warning";
   if (["incorrect"].includes(status)) return "danger";
   return "info";
@@ -41,13 +42,28 @@ function percentageLabel(value: number | null) {
   return value === null ? "—" : `${value.toFixed(1)}%`;
 }
 
-export function ResultsMarkbookPage({ data }: { data: AdminDataSnapshot }) {
+export function ResultsMarkbookPage({
+  data,
+  onReviewResponse,
+}: {
+  data: AdminDataSnapshot;
+  onReviewResponse: (request: ReviewResponseRequest) => Promise<unknown>;
+}) {
   const currentModule = getAdminModule("results");
   const [pane, setPane] = useState<ResultsPane>("dashboard");
   const [groupCode, setGroupCode] = useState<string | null>(null);
   const [learnerNumber, setLearnerNumber] = useState<string | null>(null);
   const [activityKey, setActivityKey] = useState<string | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [reviewResponseId, setReviewResponseId] = useState<string | null>(null);
+  const [awardedScore, setAwardedScore] = useState("0");
+  const [isCorrect, setIsCorrect] = useState<"true" | "false" | "unknown">("unknown");
+  const [feedbackSummary, setFeedbackSummary] = useState("");
+  const [feedbackNextStep, setFeedbackNextStep] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const dashboard = resultsDashboard(data);
   const groups = groupResultSummaries(data);
@@ -59,6 +75,7 @@ export function ResultsMarkbookPage({ data }: { data: AdminDataSnapshot }) {
   const attemptResponses = data.responses.filter((response) => response.attemptId === attemptId);
   const interpreted = selectedAttempt ? interpretStoredAttempt(selectedAttempt, attemptResponses) : null;
   const feedback = feedbackForResponses(attemptResponses.length ? attemptResponses : data.responses);
+  const selectedReview = data.responses.find((response) => response.responseId === reviewResponseId) ?? null;
 
   const learnerRows = useMemo(() => data.learners.map((learner) => {
     const keys = [...new Set(data.attempts.filter((attempt) => attempt.learnerNumber === learner.studentNumber).map((attempt) => attempt.activityKey))];
@@ -72,6 +89,65 @@ export function ResultsMarkbookPage({ data }: { data: AdminDataSnapshot }) {
     setActivityKey(attempt.activityKey);
     setGroupCode(attempt.groupCode);
     setPane("attempts");
+  }
+
+  function openReview(response: ResponseRecord) {
+    setReviewResponseId(response.responseId);
+    setAttemptId(response.attemptId);
+    setLearnerNumber(response.learnerNumber);
+    setActivityKey(response.activityKey);
+    setGroupCode(response.groupCode);
+    setAwardedScore(String(response.score ?? 0));
+    setIsCorrect(response.isCorrect === true ? "true" : response.isCorrect === false ? "false" : "unknown");
+    setFeedbackSummary(response.feedbackSummary ?? "");
+    setFeedbackNextStep(response.feedbackNextStep ?? "");
+    setConfirmOpen(false);
+    setMessage(null);
+    setError(null);
+    setPane("review");
+  }
+
+  async function submitReview() {
+    if (!selectedReview) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const decision = validateReviewDecision({
+        awardedScore: Number(awardedScore),
+        maxScore: selectedReview.maxScore,
+        isCorrect: isCorrect === "unknown" ? null : isCorrect === "true",
+      });
+      const feedback = validateTeacherFeedback({
+        summary: feedbackSummary,
+        nextStep: feedbackNextStep,
+      });
+      if (!confirmOpen) {
+        setConfirmOpen(true);
+        return;
+      }
+      setBusy(true);
+      await onReviewResponse({
+        responseId: selectedReview.responseId,
+        awardedScore: decision.awardedScore,
+        isCorrect: decision.isCorrect,
+        feedbackSummary: feedback.summary,
+        feedbackNextStep: feedback.nextStep,
+      });
+      setConfirmOpen(false);
+      setMessage("Review saved. Queue, attempt totals and markbook will refresh from the latest snapshot.");
+      setReviewResponseId(null);
+    } catch (caught) {
+      setConfirmOpen(false);
+      if (caught instanceof AdminReviewError) {
+        setError(caught.message);
+      } else if (caught instanceof Error) {
+        setError(caught.message.replace(/^REVIEW_[A-Z_]+:\s*/, ""));
+      } else {
+        setError("The review could not be saved.");
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -126,16 +202,16 @@ export function ResultsMarkbookPage({ data }: { data: AdminDataSnapshot }) {
           <div className="panel__header"><div><p className="eyebrow">Directory</p><h2>Learner results</h2></div></div>
           <div className="table-wrap"><table><thead><tr><th>Learner</th><th>Assignments</th><th>Attempts</th><th>Best</th><th>Latest</th><th>Progress</th><th>Completion</th><th>Feedback</th></tr></thead><tbody>
             {learnerRows.map(({ learner, progress }) => {
-              const latest = progress.at(-1);
+              const latest = progress[0] ?? null;
               return (
                 <tr key={learner.studentNumber}>
-                  <th scope="row">{learner.displayName}<code>{learner.studentNumber}</code></th>
+                  <th scope="row"><code>{learner.displayName}</code><br /><code>{learner.studentNumber}</code></th>
                   <td>{progress.length}</td>
                   <td>{progress.reduce((sum, item) => sum + item.attemptCount, 0)}</td>
                   <td>{percentageLabel(latest?.percentage ?? null)}</td>
                   <td>{latest?.latestAttempt?.attemptNumber ?? "—"}</td>
                   <td>{latest?.completionStatus ?? "not-started"}</td>
-                  <td><StatusBadge label={latest?.completed ? "completed" : "in progress"} tone={latest?.completed ? "positive" : "neutral"} /></td>
+                  <td>{progress.filter((item) => item.completionStatus === "completed" || item.completionStatus === "requires-review").length}</td>
                   <td>{progress.some((item) => item.completionStatus === "requires-review") ? "Review" : "Automatic"}</td>
                 </tr>
               );
@@ -149,11 +225,11 @@ export function ResultsMarkbookPage({ data }: { data: AdminDataSnapshot }) {
           <div className="table-wrap"><table><thead><tr><th>Activity</th><th>Attempts</th><th>Average</th><th>Completion</th><th>Questions</th><th>Requires review</th><th>Automatic</th><th>Teacher</th></tr></thead><tbody>
             {activities.map((row) => (
               <tr key={row.activityKey}>
-                <th scope="row"><code>{row.activityKey}</code></th>
+                <th scope="row"><button className="text-link" type="button" onClick={() => { setActivityKey(row.activityKey); setPane("attempts"); }}>{row.activityKey}</button></th>
                 <td>{row.summary.attemptCount}</td>
                 <td>{percentageLabel(row.summary.averagePercentage)}</td>
-                <td>{row.summary.completedCount}/{row.summary.learnerCount}</td>
-                <td>{row.questionCount ?? "—"}</td>
+                <td>{row.summary.completedCount}</td>
+                <td>{row.questionCount}</td>
                 <td>{row.marking.reviewCount}</td>
                 <td>{row.marking.automaticCount}</td>
                 <td>{row.marking.teacherCount}</td>
@@ -186,7 +262,10 @@ export function ResultsMarkbookPage({ data }: { data: AdminDataSnapshot }) {
                   const evidence = createEvidenceFromPayload(response.questionKey, response.questionType, response.responsePayload);
                   return (
                     <li key={response.responseId}>
-                      <code>{response.questionKey}</code> · {evidence.evidenceType} · {formatEvidenceValue(evidence.value)} · {response.requiresReview ? "review" : response.isCorrect == null ? "unmarked" : response.isCorrect ? "correct" : "incorrect"}
+                      <button className="text-link" type="button" onClick={() => openReview(response)}>
+                        <code>{response.questionKey}</code>
+                      </button>
+                      {" "}· {evidence.evidenceType} · {formatEvidenceValue(evidence.value)} · {response.requiresReview ? "review" : response.isCorrect == null ? "unmarked" : response.isCorrect ? "correct" : "incorrect"}
                     </li>
                   );
                 })}
@@ -198,25 +277,123 @@ export function ResultsMarkbookPage({ data }: { data: AdminDataSnapshot }) {
       {pane === "review" ? (
         <section className="panel">
           <div className="panel__header"><div><p className="eyebrow">Queue</p><h2>Requires review</h2></div><span className="count-chip">{queue.length}</span></div>
-          {queue.length ? <div className="table-wrap"><table><thead><tr><th>Learner</th><th>Question</th><th>Reason</th></tr></thead><tbody>
-            {queue.map((item, index) => (
-              <tr key={`${item.questionKey}-${index}`}>
+          {queue.length ? <div className="table-wrap"><table><thead><tr><th>Learner</th><th>Activity</th><th>Question</th><th>Reason</th><th>Action</th></tr></thead><tbody>
+            {queue.map((item) => (
+              <tr key={item.responseId}>
                 <th scope="row"><code>{item.learnerNumber}</code></th>
+                <td>{item.activityKey}</td>
                 <td>{item.questionKey}</td>
                 <td><StatusBadge label={item.reason} tone={toneForStatus(item.reason)} /></td>
+                <td>
+                  <button
+                    className="button button--small button--secondary"
+                    type="button"
+                    onClick={() => {
+                      const response = data.responses.find((entry) => entry.responseId === item.responseId);
+                      if (response) openReview(response);
+                    }}
+                  >
+                    Open
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody></table></div> : <p>No responses currently require review.</p>}
-          <section className="notice-card notice-card--info"><strong>Moderation is out of scope</strong><p>This queue is read-only. Teacher marking edits are not implemented.</p></section>
+
+          {selectedReview ? (
+            <section className="panel" aria-label="Review detail">
+              <div className="panel__header"><div><p className="eyebrow">Teacher judgement</p><h2>Review detail</h2></div></div>
+              <p>
+                <code>{selectedReview.learnerNumber}</code> · {selectedReview.groupCode} · {selectedReview.activityKey} · {selectedReview.questionKey}
+              </p>
+              <p>
+                Evidence: {formatEvidenceValue(createEvidenceFromPayload(selectedReview.questionKey, selectedReview.questionType, selectedReview.responsePayload).value)}
+              </p>
+              <p>
+                Current result: {selectedReview.score ?? "—"} / {selectedReview.maxScore}
+                {" · "}
+                {selectedReview.isCorrect == null ? "unknown correctness" : selectedReview.isCorrect ? "correct" : "incorrect"}
+                {" · "}
+                {selectedReview.markingSource}
+                {" · "}
+                {selectedReview.requiresReview ? "requires review" : "reviewed"}
+              </p>
+              <div className="toolbar">
+                <label htmlFor="review-score">Awarded score</label>
+                <input
+                  id="review-score"
+                  type="number"
+                  min={0}
+                  max={selectedReview.maxScore}
+                  step="0.01"
+                  value={awardedScore}
+                  onChange={(event) => { setConfirmOpen(false); setAwardedScore(event.target.value); }}
+                />
+                <label htmlFor="review-correctness">Correctness</label>
+                <select
+                  id="review-correctness"
+                  value={isCorrect}
+                  onChange={(event) => { setConfirmOpen(false); setIsCorrect(event.target.value as typeof isCorrect); }}
+                >
+                  <option value="unknown">Not applicable / unknown</option>
+                  <option value="true">Correct</option>
+                  <option value="false">Incorrect</option>
+                </select>
+              </div>
+              <label htmlFor="review-feedback">Feedback</label>
+              <textarea
+                id="review-feedback"
+                rows={4}
+                value={feedbackSummary}
+                onChange={(event) => { setConfirmOpen(false); setFeedbackSummary(event.target.value); }}
+              />
+              <label htmlFor="review-next-step">Next step</label>
+              <input
+                id="review-next-step"
+                type="text"
+                value={feedbackNextStep}
+                onChange={(event) => { setConfirmOpen(false); setFeedbackNextStep(event.target.value); }}
+              />
+              {confirmOpen ? (
+                <section className="notice-card notice-card--warning">
+                  <strong>Confirm review</strong>
+                  <p>
+                    Save score {awardedScore} / {selectedReview.maxScore} with teacher feedback and clear requires-review for this response?
+                    Evidence payload will not change.
+                  </p>
+                </section>
+              ) : null}
+              {error ? <section className="notice-card notice-card--danger"><strong>Review failed</strong><p>{error}</p></section> : null}
+              {message ? <section className="notice-card notice-card--positive"><strong>Review complete</strong><p>{message}</p></section> : null}
+              <div className="toolbar">
+                <button className="button button--primary" type="button" disabled={busy} onClick={() => void submitReview()}>
+                  {confirmOpen ? (busy ? "Saving…" : "Confirm and complete review") : "Review and continue"}
+                </button>
+                {confirmOpen ? (
+                  <button className="button button--secondary" type="button" disabled={busy} onClick={() => setConfirmOpen(false)}>
+                    Cancel confirmation
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : (
+            <section className="notice-card notice-card--info">
+              <strong>Open a queue item</strong>
+              <p>Inspect evidence, award a score within the question maximum, add feedback, then confirm to complete the review.</p>
+            </section>
+          )}
         </section>
       ) : null}
       {pane === "feedback" ? (
         <section className="panel">
           <div className="panel__header"><div><p className="eyebrow">Comments</p><h2>Feedback</h2></div></div>
-          <p>{feedback.summary ?? "No teacher feedback is stored. Automatic summaries are shown from marks."}</p>
+          <p>{feedback.summary ?? "No teacher feedback is stored yet. Automatic summaries are shown from marks."}</p>
           <ul>
+            {feedback.teacher.map((item) => (
+              <li key={`teacher-${item.questionKey}-${item.summary}`}><code>{item.questionKey}</code> · Teacher · {item.summary}{item.nextSteps.length ? ` · Next: ${item.nextSteps.join("; ")}` : ""}</li>
+            ))}
             {feedback.automatic.map((item) => (
-              <li key={`${item.questionKey}-${item.summary}`}><code>{item.questionKey}</code> · {item.summary}</li>
+              <li key={`auto-${item.questionKey}-${item.summary}`}><code>{item.questionKey}</code> · Automatic · {item.summary}</li>
             ))}
           </ul>
         </section>

@@ -217,6 +217,8 @@ export const RESPONSES: readonly ResponseRecord[] = Object.freeze([
     requiresReview: false,
     markingSource: "server",
     markedAt: "2026-08-11T09:00:00Z",
+    feedbackSummary: null,
+    feedbackNextStep: null,
   },
   {
     responseId: "demo-response-b1",
@@ -238,6 +240,8 @@ export const RESPONSES: readonly ResponseRecord[] = Object.freeze([
     requiresReview: true,
     markingSource: "server",
     markedAt: "2026-08-11T09:20:00Z",
+    feedbackSummary: null,
+    feedbackNextStep: null,
   },
 ]);
 

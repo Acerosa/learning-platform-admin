@@ -9,6 +9,7 @@ import {
   AdminHubRegistrationError,
   AdminPublicationError,
   AdminReadError,
+  AdminReviewError,
   claimInitialPlatformAdmin,
   createSupabaseAdminReadService,
   loadAdminData,
@@ -16,6 +17,7 @@ import {
   registerAdminAccount,
   registerHub,
   registrationValidationMessage,
+  reviewResponse,
   updateHub,
   type AdminSupabaseClient,
 } from "../src/services/supabase-admin-service.ts";
@@ -42,7 +44,7 @@ const viewRows: Record<string, readonly Record<string, unknown>[]> = {
   enrolments: [{ student_number: "S-1", group_code: "G-1", joined_on: "2026-09-01", left_on: null, status: "active" }],
   assignments: [{ group_code: "G-1", activity_key: "activity-a", activity_version: "1.0.0", opens_at: null, due_at: null, required: true, active: true }],
   attempts: [{ attempt_id: "attempt-1", student_number: "S-1", group_code: "G-1", activity_key: "activity-a", activity_version: "1.0.0", attempt_number: 1, status: "completed", score: 8, max_score: 10, marking_source: "server", evidence_level: "summary_only", received_at: "2026-08-11T00:00:00Z", completed_at: "2026-08-11T00:01:00Z", requires_review: false, question_count: 2 }],
-  responses: [{ response_id: "response-1", attempt_id: "attempt-1", student_number: "S-1", group_code: "G-1", activity_key: "activity-a", question_key: "q1", question_type: "single", section_key: "topic-a", section_title: "Topic A", ordinal: 1, topic_keys: ["topic-a"], skill_keys: [], response_payload: { optionId: "a" }, awarded_score: 1, max_score: 1, is_correct: true, requires_review: false, marking_source: "server", marked_at: "2026-08-11T00:01:00Z" }],
+  responses: [{ response_id: "response-1", attempt_id: "attempt-1", student_number: "S-1", group_code: "G-1", activity_key: "activity-a", question_key: "q1", question_type: "single", section_key: "topic-a", section_title: "Topic A", ordinal: 1, topic_keys: ["topic-a"], skill_keys: [], response_payload: { optionId: "a" }, awarded_score: 1, max_score: 1, is_correct: true, requires_review: false, marking_source: "server", marked_at: "2026-08-11T00:01:00Z", feedback_summary: null, feedback_next_step: null }],
   activity_performance: [{ group_code: "G-1", activity_key: "activity-a", activity_version: "1.0.0", completed_attempts: 1, learner_count: 1, average_score_percentage: 80, best_score_percentage: 80, first_completed_at: "2026-08-11T00:01:00Z", latest_completed_at: "2026-08-11T00:01:00Z" }],
   dashboard_summary: [{ registered_hubs: 1, active_hubs: 1, active_learners: 1, active_groups: 1, active_enrolments: 1, assignments: 1, recent_attempts: 1, completed_attempts: 1, average_score_percentage: 80, healthy_services: 1, service_count: 1, active_contracts: 0, contract_count: 1 }],
   audit_events: [{ event_key: "admin.read", actor_type: "staff", entity_type: "hub", entity_key: "hub-a", outcome: "succeeded", occurred_at: "2026-08-11T00:02:00Z" }],
@@ -213,6 +215,7 @@ test("live service reads every MVP surface through admin_api and maps safe rows"
   assert.equal(data.attempts[0].score, 8);
   assert.equal(data.attempts[0].requiresReview, false);
   assert.equal(data.responses[0].questionKey, "q1");
+  assert.equal(data.responses[0].feedbackSummary, null);
   assert.equal(data.activityPerformance[0].averageScorePercentage, 80);
   assert.equal(data.dashboardSummary.recentAttempts, 1);
   assert.equal(data.curriculumPublications[0].packageVersion, "0.1.0");
@@ -308,6 +311,69 @@ test("publishCurriculum maps backend validation failures without exposing SQL", 
     () => publishCurriculum(fake.client, publishedSnapshot()),
     (error: unknown) => error instanceof AdminPublicationError
       && error.code === "PUBLICATION_VALIDATION_FAILED"
+      && !error.message.includes("sql"),
+  );
+});
+
+test("reviewResponse sends only the documented admin_api review arguments", async () => {
+  const fake = fakeClient({
+    rpc() {
+      return {
+        data: [{
+          response_id: "response-1",
+          attempt_id: "attempt-1",
+          awarded_score: 3,
+          max_score: 4,
+          is_correct: false,
+          requires_review: false,
+          marking_source: "teacher",
+          feedback_summary: "Add an example.",
+          feedback_next_step: "Revise notes",
+          marked_at: "2026-08-16T12:00:00Z",
+          attempt_score: 3,
+          attempt_marking_source: "teacher",
+          idempotent: false,
+        }],
+        error: null,
+      };
+    },
+  });
+  const result = await reviewResponse(fake.client, {
+    responseId: "response-1",
+    awardedScore: 3,
+    isCorrect: false,
+    feedbackSummary: "Add an example.",
+    feedbackNextStep: "Revise notes",
+  });
+  assert.equal(result.markingSource, "teacher");
+  assert.equal(result.feedbackSummary, "Add an example.");
+  assert.deepEqual(fake.rpcs[0], {
+    name: "review_response",
+    parameters: {
+      p_response_id: "response-1",
+      p_awarded_score: 3,
+      p_is_correct: false,
+      p_feedback_summary: "Add an example.",
+      p_feedback_next_step: "Revise notes",
+    },
+  });
+});
+
+test("reviewResponse maps denied reviews without exposing SQL", async () => {
+  const fake = fakeClient({
+    rpc() {
+      return { data: null, error: { message: "REVIEW_NOT_AUTHORISED" } };
+    },
+  });
+  await assert.rejects(
+    () => reviewResponse(fake.client, {
+      responseId: "response-1",
+      awardedScore: 1,
+      isCorrect: true,
+      feedbackSummary: "Denied",
+    }),
+    (error: unknown) => error instanceof AdminReviewError
+      && error.code === "REVIEW_NOT_AUTHORISED"
       && !error.message.includes("sql"),
   );
 });

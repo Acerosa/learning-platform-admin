@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { AdminDataSnapshot, HubRegistrationResult, PlatformPublicationResult } from "../api/admin-api";
+import type { AdminDataSnapshot, HubRegistrationResult, PlatformPublicationResult, ReviewResponseRequest, ReviewResponseResult } from "../api/admin-api";
 import type { AuthoringDraft } from "../content/types";
 import type { HubRegistrationRequest } from "../content/hub-registration";
 import { registerDemoHub, updateDemoHub } from "../content/hub-registration";
@@ -24,6 +24,7 @@ import {
   AdminHubRegistrationError,
   AdminPublicationError,
   AdminReadError,
+  AdminReviewError,
   claimInitialPlatformAdmin,
   createSupabaseAdminClient,
   createSupabaseAdminReadService,
@@ -31,6 +32,7 @@ import {
   publishCurriculum as publishCurriculumRpc,
   registerAdminAccount,
   registerHub as registerHubRpc,
+  reviewResponse as reviewResponseRpc,
   updateHub as updateHubRpc,
   type AdminSupabaseClient,
 } from "../services/supabase-admin-service";
@@ -69,6 +71,7 @@ interface AdminPortalContextValue {
   registerHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   updateHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   publishCurriculum(record: AuthoringDraft): Promise<PlatformPublicationResult>;
+  reviewResponse(request: ReviewResponseRequest): Promise<ReviewResponseResult>;
   signOut(): Promise<void>;
   retry(): Promise<void>;
 }
@@ -392,6 +395,67 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     return result;
   }, [client]);
 
+  const reviewResponse = useCallback(async (request: ReviewResponseRequest) => {
+    if (config.mode === "demo") {
+      if (!state.data) throw new AdminReviewError("unavailable");
+      const current = state.data.responses.find((response) => response.responseId === request.responseId);
+      if (!current) throw new AdminReviewError("REVIEW_RESPONSE_NOT_FOUND");
+      const markedAt = new Date().toISOString();
+      const responses = state.data.responses.map((response) => (
+        response.responseId === request.responseId
+          ? {
+              ...response,
+              score: request.awardedScore,
+              isCorrect: request.isCorrect,
+              requiresReview: false,
+              markingSource: "teacher",
+              markedAt,
+              feedbackSummary: request.feedbackSummary,
+              feedbackNextStep: request.feedbackNextStep ?? null,
+            }
+          : response
+      ));
+      const attemptResponses = responses.filter((response) => response.attemptId === current.attemptId);
+      const attemptScore = attemptResponses.reduce((sum, response) => sum + (response.score ?? 0), 0);
+      const attempts = state.data.attempts.map((attempt) => (
+        attempt.attemptId === current.attemptId
+          ? {
+              ...attempt,
+              score: attemptScore,
+              markingSource: "teacher",
+              requiresReview: attemptResponses.some((response) => response.requiresReview),
+            }
+          : attempt
+      ));
+      const data = { ...state.data, responses, attempts };
+      setState((portal) => (portal.status === "ready" ? { ...portal, data } : portal));
+      return {
+        responseId: request.responseId,
+        attemptId: current.attemptId,
+        awardedScore: request.awardedScore,
+        maxScore: current.maxScore,
+        isCorrect: request.isCorrect,
+        requiresReview: false,
+        markingSource: "teacher",
+        feedbackSummary: request.feedbackSummary,
+        feedbackNextStep: request.feedbackNextStep ?? null,
+        markedAt,
+        attemptScore,
+        attemptMarkingSource: "teacher",
+        idempotent: false,
+      } satisfies ReviewResponseResult;
+    }
+
+    if (!client) throw new AdminReviewError("unavailable");
+    const result = await reviewResponseRpc(client, request);
+    const service = createSupabaseAdminReadService(client);
+    const data = await loadAdminData(service);
+    setState((current) => (
+      current.status === "ready" ? { ...current, data } : current
+    ));
+    return result;
+  }, [client, config.mode, state.data]);
+
   const signOut = useCallback(async () => {
     if (!client) return;
     await client.auth.signOut();
@@ -451,9 +515,10 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     registerHub,
     updateHub,
     publishCurriculum,
+    reviewResponse,
     signOut,
     retry: refresh,
-  }), [claimInitialAdmin, config, dataSource, publishCurriculum, refresh, registerHub, requestMagicLink, signIn, signOut, signUp, state, updateHub]);
+  }), [claimInitialAdmin, config, dataSource, publishCurriculum, refresh, registerHub, requestMagicLink, reviewResponse, signIn, signOut, signUp, state, updateHub]);
 
   return (
     <AdminPortalContext.Provider value={value}>
