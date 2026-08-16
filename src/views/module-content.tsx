@@ -282,7 +282,7 @@ function AuditPage({ data }: { data: AdminDataSnapshot }) {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, publishCurriculum, registerHub, updateHub } = useAdminPortal();
+  const { data, session, dataSource, publishCurriculum, registerHub, updateHub, reviewResponse } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
@@ -341,7 +341,7 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
     case "groups": content = <GroupsPage data={data} openPending={openPending} />; break;
     case "enrolments": content = <EnrolmentsPage data={data} openPending={openPending} />; break;
     case "assignments": content = <AssignmentsPage data={data} openPending={openPending} />; break;
-    case "results": content = <ResultsMarkbookPage data={data} />; break;
+    case "results": content = <ResultsMarkbookPage data={data} onReviewResponse={reviewResponse} />; break;
     case "attempts": content = <AttemptsPage data={data} />; break;
     case "analytics": content = <AnalyticsPage data={data} />; break;
     case "monitoring": content = <MonitoringPage data={data} />; break;

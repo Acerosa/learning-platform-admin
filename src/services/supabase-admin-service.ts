@@ -21,6 +21,8 @@ import type {
   HubRegistrationResult,
   PlatformPublicationResult,
   ResponseRecord,
+  ReviewResponseRequest,
+  ReviewResponseResult,
   TeacherRecord,
 } from "../api/admin-api";
 import type { HubRegistrationRequest } from "../content/hub-registration.ts";
@@ -126,6 +128,36 @@ function publicationErrorCode(error: { message?: string } | null) {
   const message = error?.message ?? "";
   return Object.keys(PUBLICATION_ERROR_MESSAGES).find((code) => message.includes(code))
     ?? "publication-failed";
+}
+
+const REVIEW_ERROR_MESSAGES: Record<string, string> = {
+  unavailable: "Teacher review requires a live administrator session.",
+  AUTHENTICATION_REQUIRED: "Sign in with an authorised staff account to review responses.",
+  REVIEW_NOT_AUTHORISED: "This account is not authorised to review that learner response.",
+  REVIEW_RESPONSE_REQUIRED: "Select a response to review.",
+  REVIEW_RESPONSE_NOT_FOUND: "That response could not be found.",
+  REVIEW_ATTEMPT_NOT_FOUND: "The attempt for that response could not be found.",
+  REVIEW_SCORE_INVALID: "Enter a score between 0 and the question maximum.",
+  REVIEW_FEEDBACK_REQUIRED: "Enter feedback before completing the review.",
+  REVIEW_FEEDBACK_TOO_LONG: "Feedback must be 2000 characters or fewer.",
+  REVIEW_NEXT_STEP_TOO_LONG: "Next step must be 500 characters or fewer.",
+  "review-failed": "The review could not be saved.",
+};
+
+export class AdminReviewError extends Error {
+  readonly code: string;
+
+  constructor(code: string) {
+    super(REVIEW_ERROR_MESSAGES[code] ?? REVIEW_ERROR_MESSAGES["review-failed"]);
+    this.name = "AdminReviewError";
+    this.code = code;
+  }
+}
+
+function reviewErrorCode(error: { message?: string } | null) {
+  const message = error?.message ?? "";
+  return Object.keys(REVIEW_ERROR_MESSAGES).find((code) => message.includes(code))
+    ?? "review-failed";
 }
 
 export function registrationValidationMessage(
@@ -380,6 +412,42 @@ export async function publishCurriculum(
   };
 }
 
+export async function reviewResponse(
+  client: AdminSupabaseClient,
+  request: ReviewResponseRequest,
+): Promise<ReviewResponseResult> {
+  const { data, error } = await client
+    .schema("admin_api")
+    .rpc("review_response", {
+      p_response_id: request.responseId,
+      p_awarded_score: request.awardedScore,
+      p_is_correct: request.isCorrect,
+      p_feedback_summary: request.feedbackSummary,
+      p_feedback_next_step: request.feedbackNextStep ?? null,
+    });
+
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new AdminReviewError(reviewErrorCode(error));
+  }
+
+  const row = data[0] as AdminRow;
+  return {
+    responseId: textValue(row.response_id),
+    attemptId: textValue(row.attempt_id),
+    awardedScore: numberValue(row.awarded_score),
+    maxScore: numberValue(row.max_score),
+    isCorrect: row.is_correct === null ? null : booleanValue(row.is_correct),
+    requiresReview: booleanValue(row.requires_review),
+    markingSource: textValue(row.marking_source),
+    feedbackSummary: nullableText(row.feedback_summary),
+    feedbackNextStep: nullableText(row.feedback_next_step),
+    markedAt: textValue(row.marked_at),
+    attemptScore: numberValue(row.attempt_score),
+    attemptMarkingSource: textValue(row.attempt_marking_source),
+    idempotent: booleanValue(row.idempotent),
+  };
+}
+
 export function createSupabaseAdminReadService(
   client: AdminSupabaseClient,
 ): AdminReadService {
@@ -599,7 +667,7 @@ export function createSupabaseAdminReadService(
     async listResponses() {
       const data = await rows(
         "responses",
-        "response_id,attempt_id,student_number,group_code,activity_key,question_key,question_type,section_key,section_title,ordinal,topic_keys,skill_keys,response_payload,awarded_score,max_score,is_correct,requires_review,marking_source,marked_at",
+        "response_id,attempt_id,student_number,group_code,activity_key,question_key,question_type,section_key,section_title,ordinal,topic_keys,skill_keys,response_payload,awarded_score,max_score,is_correct,requires_review,marking_source,marked_at,feedback_summary,feedback_next_step",
         { column: "marked_at", ascending: false },
       );
       return data.map((row): ResponseRecord => ({
@@ -622,6 +690,8 @@ export function createSupabaseAdminReadService(
         requiresReview: booleanValue(row.requires_review),
         markingSource: textValue(row.marking_source),
         markedAt: textValue(row.marked_at),
+        feedbackSummary: nullableText(row.feedback_summary),
+        feedbackNextStep: nullableText(row.feedback_next_step),
       }));
     },
 

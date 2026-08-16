@@ -38,7 +38,7 @@ test("admin API names match the documented backend surface", async () => {
     assert.match(source, new RegExp(`admin_api\\.${view}`));
   }
   assert.match(source, /status: "draft"/);
-  assert.match(source, /mode: "read-models-with-hub-registration-and-curriculum-publication"/);
+  assert.match(source, /mode: "read-models-with-hub-registration-curriculum-publication-and-teacher-review"/);
   assert.match(source, /pending-backend-contract/);
   assert.doesNotMatch(source, /\/rest\/v1|supabase\.co|service_role/i);
 });
@@ -58,6 +58,7 @@ test("live integration uses Supabase Auth and the admin_api schema only", async 
   assert.match(service, /auth\.signUp/);
   assert.match(service, /claim_initial_platform_admin/);
   assert.match(service, /publish_curriculum/);
+  assert.match(service, /review_response/);
   assert.match(service, /register_hub/);
   assert.match(service, /update_hub/);
   assert.match(accessGate, /Create account/);

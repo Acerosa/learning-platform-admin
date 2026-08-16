@@ -2,7 +2,7 @@ export const ADMIN_API_CONTRACT = Object.freeze({
   schema: "admin_api",
   version: "0.2.0",
   status: "draft",
-  mode: "read-models-with-hub-registration-and-curriculum-publication",
+  mode: "read-models-with-hub-registration-curriculum-publication-and-teacher-review",
 });
 
 export const ADMIN_API_VIEWS = Object.freeze({
@@ -30,6 +30,7 @@ export const ADMIN_API_RPCS = Object.freeze({
   registerHub: "admin_api.register_hub",
   updateHub: "admin_api.update_hub",
   publishCurriculum: "admin_api.publish_curriculum",
+  reviewResponse: "admin_api.review_response",
 });
 
 export type HubLifecycle =
@@ -189,6 +190,8 @@ export interface ResponseRecord {
   requiresReview: boolean;
   markingSource: string;
   markedAt: string;
+  feedbackSummary: string | null;
+  feedbackNextStep: string | null;
 }
 
 export interface ActivityPerformanceRecord {
@@ -273,6 +276,30 @@ export interface PlatformPublicationResult {
   packageVersion: string;
   status: string;
   publishedAt: string;
+  idempotent: boolean;
+}
+
+export interface ReviewResponseRequest {
+  responseId: string;
+  awardedScore: number;
+  isCorrect: boolean | null;
+  feedbackSummary: string;
+  feedbackNextStep?: string | null;
+}
+
+export interface ReviewResponseResult {
+  responseId: string;
+  attemptId: string;
+  awardedScore: number;
+  maxScore: number;
+  isCorrect: boolean | null;
+  requiresReview: boolean;
+  markingSource: string;
+  feedbackSummary: string | null;
+  feedbackNextStep: string | null;
+  markedAt: string;
+  attemptScore: number;
+  attemptMarkingSource: string;
   idempotent: boolean;
 }
 
