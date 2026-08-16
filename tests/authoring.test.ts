@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import XLSX from "xlsx";
-import { createDraft, deleteDraft, duplicateDraft, importToPackage, loadDrafts, mergePackages, saveDraft } from "../src/content/draft-store.ts";
+import { createDraft, deleteDraft, duplicateDraft, importToPackage, loadDrafts, mergePackages, packageContentsSummary, saveDraft } from "../src/content/draft-store.ts";
 import { exportActivityPackage, exportDocument, exportPackage } from "../src/content/export.ts";
 import { applyWorkbookExtensions, parseJsonImport, sheetsFromWorkbook } from "../src/content/import-files.ts";
 import { createActivity, createBlock, createSession, createWeek, duplicateBlock, emptyPackage, nextStableId, syncCurriculumLists } from "../src/content/factories.ts";
 import type { ContentBlock } from "../src/content/types.ts";
 import { containsUnsafeMarkup, sanitizeImportedText, sanitizeObject } from "../src/content/sanitize.ts";
-import { previewActivityHtml, validateDocument, validatePackage } from "../src/content/validate.ts";
+import { previewActivityHtml, previewWeekHtml, validateDocument, validatePackage } from "../src/content/validate.ts";
 import { getContentEngine } from "../src/content/engine.ts";
 
 test("week session and activity factories emit canonical envelopes", () => {
@@ -195,4 +195,93 @@ test("export emits canonical json accepted by the local validator", () => {
 test("session kinds come from the schema contract", () => {
   const engine = getContentEngine();
   assert.deepEqual([...engine.SESSION_KINDS], ["session", "independent-study", "homework", "revision", "retrieval"]);
+});
+
+test("complete week graph imports merge validates and previews", () => {
+  const base = emptyPackage("authoring-hub", "Authoring hub", "ocr-level-3-it");
+  const existingWeek = createWeek({ id: "week-1", teachingWeek: 1, title: "Existing week", learningOutcomes: ["LO1"], sessions: ["week-1-session-1"] });
+  const existingSession = createSession({ id: "week-1-session-1", title: "Session 1", kind: "session", weekId: "week-1", activities: ["week-1-keep"] });
+  const existingActivity = createActivity({ id: "week-1-keep", title: "Keep me", learningOutcomes: ["LO1"], assignment: "A1" });
+  existingActivity.blocks = [createBlock(existingActivity.id, "paragraph", [])];
+  const seeded = syncCurriculumLists({
+    ...base,
+    weeks: [existingWeek],
+    sessions: [existingSession],
+    activities: [existingActivity],
+  });
+
+  const week = createWeek({
+    id: "week-2",
+    teachingWeek: 2,
+    title: "Imported week",
+    status: "available",
+    learningOutcomes: ["LO1"],
+    assignment: "A1",
+    sessions: ["week-2-session-1", "week-2-session-2", "week-2-independent-study"],
+  });
+  week.relationships.curriculum = "u14-curriculum";
+  const session1 = createSession({
+    id: "week-2-session-1",
+    title: "Session 1",
+    kind: "session",
+    weekId: "week-2",
+    activities: ["week-2-activity-a"],
+    sortOrder: 1,
+    defaultOpen: true,
+  });
+  const session2 = createSession({
+    id: "week-2-session-2",
+    title: "Session 2",
+    kind: "session",
+    weekId: "week-2",
+    activities: ["week-2-activity-b"],
+    sortOrder: 2,
+  });
+  const independent = createSession({
+    id: "week-2-independent-study",
+    title: "Directed independent study",
+    kind: "independent-study",
+    weekId: "week-2",
+    activities: ["week-2-activity-c"],
+    sortOrder: 3,
+  });
+  const activityA = createActivity({ id: "week-2-activity-a", title: "Activity A", status: "available", learningOutcomes: ["LO1"], assignment: "A1" });
+  activityA.blocks = [createBlock(activityA.id, "heading", [])];
+  const activityB = createActivity({ id: "week-2-activity-b", title: "Activity B", status: "available", learningOutcomes: ["LO1"], assignment: "A1" });
+  activityB.blocks = [createBlock(activityB.id, "paragraph", [])];
+  const activityC = createActivity({ id: "week-2-activity-c", title: "Activity C", status: "available", learningOutcomes: ["LO1"], assignment: "A1" });
+  activityC.blocks = [createBlock(activityC.id, "reflection", [])];
+
+  const incoming = importToPackage({
+    schema: "lp.content.package",
+    schemaVersion: "0.1.0",
+    weeks: [week],
+    sessions: [session1, session2, independent],
+    activities: [activityA, activityB, activityC],
+  }, seeded.hub, seeded.curriculum);
+  const summary = packageContentsSummary(incoming);
+  assert.deepEqual(summary.weeks, ["week-2"]);
+  assert.equal(summary.sessions.length, 3);
+  assert.equal(summary.activities.length, 3);
+  assert.equal(incoming.weeks[0].relationships.curriculum, seeded.curriculum.id);
+  assert.equal(incoming.learningOutcomes.some((item) => item.id === "LO1"), true);
+  assert.equal(incoming.assignments.some((item) => item.id === "A1"), true);
+
+  const merged = mergePackages(seeded, incoming);
+  const result = validatePackage(merged);
+  assert.equal(result.valid, true, result.issues.map((issue) => `${issue.code} ${issue.path}`).join("\n"));
+  assert.equal(merged.activities.some((item) => item.id === "week-1-keep"), true);
+  const importedWeek = merged.weeks.find((item) => item.id === "week-2");
+  const importedSessions = importedWeek?.relationships.sessions;
+  assert.ok(Array.isArray(importedSessions));
+  assert.equal(importedSessions.length, 3);
+  assert.equal(merged.sessions.find((item) => item.id === "week-2-session-1")?.relationships.week, "week-2");
+  assert.equal(merged.sessions.find((item) => item.id === "week-2-independent-study")?.metadata.kind, "independent-study");
+
+  const html = previewWeekHtml(merged, "week-2");
+  assert.match(html, /data-lp-week="week-2"/);
+  assert.match(html, /Session 1/);
+  assert.match(html, /Directed independent study/);
+  assert.match(html, /Activity A/);
+  assert.doesNotMatch(html, /<script/i);
 });

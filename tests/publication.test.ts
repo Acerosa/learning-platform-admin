@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { comparePackages, hasStructuredChanges } from "../src/content/compare.ts";
 import { migrateRecord } from "../src/content/draft-store.ts";
-import { createActivity, createBlock, createWeek, syncCurriculumLists } from "../src/content/factories.ts";
+import { createActivity, createBlock, createSession, createWeek, syncCurriculumLists } from "../src/content/factories.ts";
 import { canTransition, LIFECYCLE_LABELS, LifecycleError, publicationRecord, reviewMetadata, transitionRecord } from "../src/content/lifecycle.ts";
 import { publicationGate } from "../src/content/publication-gate.ts";
 import {
@@ -247,4 +247,46 @@ test("platform publication payload accepts only approved or published snapshots"
   assert.equal(args.p_schema_version, published.schemaVersion);
   assert.equal(args.p_source_package_version, published.sourcePackageVersion);
   assert.equal(args.p_package, published.package);
+});
+
+test("an imported week graph can pass the publication gate and local publish", () => {
+  const draft = withContent();
+  const week = createWeek({
+    id: "week-2",
+    teachingWeek: 2,
+    title: "Imported week",
+    status: "available",
+    learningOutcomes: [],
+    sessions: ["week-2-session-1"],
+  });
+  const session = createSession({
+    id: "week-2-session-1",
+    title: "Session 1",
+    kind: "session",
+    weekId: "week-2",
+    activities: ["week-2-lab"],
+  });
+  const activity = createActivity({ id: "week-2-lab", title: "Lab", status: "available" });
+  activity.blocks = [createBlock(activity.id, "paragraph", [])];
+  const ready = {
+    ...draft,
+    package: syncCurriculumLists({
+      ...draft.package,
+      weeks: [...draft.package.weeks, week],
+      sessions: [session],
+      activities: [...draft.package.activities, activity],
+    }),
+  };
+  assert.equal(publicationGate(ready.package).ok, true);
+  const published = publishVersion([throughApproval(ready)], throughApproval(ready), {
+    version: "0.2.0",
+    publishedBy: "Ada Author",
+    notes: "Week graph snapshot.",
+  })[0];
+  assert.equal(published.status, "published");
+  assert.equal(published.version, "0.2.0");
+  assert.equal(published.package.weeks.some((item) => item.id === "week-2"), true);
+  const args = platformPublicationArgs(published);
+  assert.equal(args.p_package_version, "0.2.0");
+  assert.equal(args.p_package.sessions[0].id, "week-2-session-1");
 });

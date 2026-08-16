@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getContentEngine } from "../../content/engine";
-import { importToPackage, mergePackages } from "../../content/draft-store";
+import { importToPackage, mergePackages, packageContentsSummary } from "../../content/draft-store";
 import { applyWorkbookExtensions, parseJsonImport, sheetsFromWorkbook } from "../../content/import-files";
 import { sanitizeObject } from "../../content/sanitize";
 import type { ContentPackage } from "../../content/types";
@@ -16,6 +16,7 @@ export function ImportPanel({
 }) {
   const [issues, setIssues] = useState(validatePackage(pkg).issues);
   const [message, setMessage] = useState("");
+  const [contents, setContents] = useState<ReturnType<typeof packageContentsSummary> | null>(null);
 
   async function handleJson(file: File) {
     try {
@@ -24,6 +25,7 @@ export function ImportPanel({
       const merged = mergePackages(pkg, incoming);
       const result = validatePackage(merged);
       setIssues(result.issues);
+      setContents(packageContentsSummary(incoming));
       setMessage(result.valid ? "JSON imported and valid." : "JSON imported with validation issues.");
       onImported(merged);
     } catch (error) {
@@ -49,6 +51,7 @@ export function ImportPanel({
       const merged = mergePackages(pkg, incoming);
       const result = validatePackage(merged);
       setIssues(result.issues);
+      setContents(packageContentsSummary(incoming));
       setMessage(result.valid ? "Excel imported and valid." : "Excel imported with validation issues.");
       onImported(merged);
     } catch (error) {
@@ -85,6 +88,18 @@ export function ImportPanel({
         <a className="text-link" href="/templates/lp-content-activity-import.xlsx">Download Excel activity template</a>
       </p>
       {message ? <p role="status">{message}</p> : null}
+      {contents ? (
+        <section aria-labelledby="import-contents-title">
+          <h3 id="import-contents-title">Package contents</h3>
+          <p>
+            {contents.weeks.length} weeks · {contents.sessions.length} sessions · {contents.activities.length} activities
+            {contents.questions.length ? ` · ${contents.questions.length} questions` : ""}
+          </p>
+          {contents.weeks.length ? <p>Weeks: {contents.weeks.join(", ")}</p> : null}
+          {contents.sessions.length ? <p>Sessions: {contents.sessions.join(", ")}</p> : null}
+          {contents.activities.length ? <p>Activities: {contents.activities.join(", ")}</p> : null}
+        </section>
+      ) : null}
       <DiagnosticsList issues={issues} />
     </section>
   );
