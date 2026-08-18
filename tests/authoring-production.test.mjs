@@ -28,7 +28,13 @@ test("content library and composition stay registered for production routing", a
   assert.match(library, /callRpc\("search_library"/);
   assert.match(library, /callRpc\("save_library_question"/);
   assert.match(library, /callRpc\("save_library_activity"/);
+  assert.match(library, /callRpc\("publish_library_item"/);
+  assert.match(library, /callRpc\("archive_library_item"/);
   assert.match(composition, /callRpc\("search_library"/);
+  assert.match(composition, /p_status: "published"/);
+  assert.match(composition, /No published activities found/);
+  assert.match(composition, /composition-hub/);
+  assert.match(composition, /Select a real hub and course/);
   assert.match(composition, /saveCurriculumDraft/);
   assert.match(composition, /Save as Curriculum Draft/);
   assert.match(portal, /getCurriculumDraft/);

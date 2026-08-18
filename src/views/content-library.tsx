@@ -5,6 +5,11 @@ import { AuthoringAreaLinks } from "../components/authoring-area-links";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import { useAdminPortal } from "../stores/admin-portal";
 
+function suggestDuplicateKey(stableKey: string, version: string): string {
+  const base = stableKey.replace(/-v\d+(?:\.\d+)*$/, "");
+  return `${base}-v${version.replace(/\./g, "-")}`;
+}
+
 const LIBRARY_TABS = [
   { id: "all", label: "All" },
   { id: "question", label: "Questions" },
@@ -383,6 +388,51 @@ export function ContentLibraryPage() {
     }
   }, [callRpc, fetchItems]);
 
+  const handlePublish = useCallback(async (item: LibraryItem) => {
+    if (item.status !== "draft") return;
+    setActionError(null);
+    try {
+      await callRpc("publish_library_item", { p_library_type: item.libraryType, p_id: item.id });
+      await fetchItems();
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Publish failed.");
+    }
+  }, [callRpc, fetchItems]);
+
+  const handleArchive = useCallback(async (item: LibraryItem) => {
+    if (item.status !== "published") return;
+    setActionError(null);
+    try {
+      await callRpc("archive_library_item", { p_library_type: item.libraryType, p_id: item.id });
+      await fetchItems();
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Archive failed.");
+    }
+  }, [callRpc, fetchItems]);
+
+  const handleDuplicate = useCallback(async (item: LibraryItem) => {
+    if (item.status !== "published" && item.status !== "archived" && item.status !== "superseded") return;
+    const nextVersion = item.version.replace(/^(\d+)\.(\d+)\.(\d+)$/, (_match, major, minor, patch) =>
+      `${major}.${minor}.${Number(patch) + 1}`,
+    );
+    const suggestedKey = suggestDuplicateKey(item.stableKey, nextVersion);
+    const stableKey = window.prompt("New stable key for the draft version:", suggestedKey);
+    if (!stableKey?.trim()) return;
+    setActionError(null);
+    try {
+      await callRpc("duplicate_library_item", {
+        p_library_type: item.libraryType,
+        p_id: item.id,
+        p_stable_key: stableKey.trim(),
+        p_title: `${item.title} (${nextVersion})`,
+        p_version: nextVersion,
+      });
+      await fetchItems();
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Create new version failed.");
+    }
+  }, [callRpc, fetchItems]);
+
   return (
     <>
       <header className="page-header">
@@ -514,13 +564,33 @@ export function ContentLibraryPage() {
                     <td>{item.author}</td>
                     <td>{formatDate(item.updatedAt)}</td>
                     <td>
-                      {item.status === "draft" ? (
-                        <button className="button button--small button--secondary" type="button" onClick={() => void handleDelete(item)}>
-                          Delete draft
-                        </button>
-                      ) : (
-                        <span>{item.usedByCount ? `${item.usedByCount} uses` : "Published"}</span>
-                      )}
+                      <div className="table-actions">
+                        {item.status === "draft" ? (
+                          <>
+                            <button className="button button--small button--primary" type="button" onClick={() => void handlePublish(item)}>
+                              Publish
+                            </button>
+                            <button className="button button--small button--secondary" type="button" onClick={() => void handleDelete(item)}>
+                              Delete draft
+                            </button>
+                          </>
+                        ) : null}
+                        {item.status === "published" ? (
+                          <>
+                            <button className="button button--small button--secondary" type="button" onClick={() => void handleDuplicate(item)}>
+                              New version
+                            </button>
+                            <button className="button button--small button--secondary" type="button" onClick={() => void handleArchive(item)}>
+                              Archive
+                            </button>
+                          </>
+                        ) : null}
+                        {item.status === "archived" || item.status === "superseded" ? (
+                          <button className="button button--small button--secondary" type="button" onClick={() => void handleDuplicate(item)}>
+                            New draft
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}

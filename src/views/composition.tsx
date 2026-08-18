@@ -73,6 +73,7 @@ import { emptyPackage } from "../content/factories.ts";
 import { publicationGate } from "../content/publication-gate.ts";
 import type { AuthoringDraft, ContentActivity, ContentBlock, ContentDocument } from "../content/types.ts";
 import type { LibraryQuestion, LibraryResource } from "../content/library-reuse.ts";
+import type { HubCourseLinkRecord, HubRecord } from "../api/admin-api.ts";
 import { useAdminPortal } from "../stores/admin-portal";
 
 const LOCAL_DRAFT_KEY = "lp.admin.composition.last-draft.v1";
@@ -252,7 +253,11 @@ function InlineLibrarySearch({
         </div>
       )}
       {!loading && query.trim() && !error && results.length === 0 && (
-        <p className="text-muted">No {type} results found.</p>
+        <p className="text-muted">
+          {type === "activity"
+            ? "No published activities found. Publish an item from Content Library first."
+            : `No published ${type} results found.`}
+        </p>
       )}
       {results.length > 0 && (
         <ul className="inline-search__results">
@@ -505,13 +510,23 @@ function RecipeEditor({
 export function CompositionPage() {
   const { data, dataSource, callRpc, saveCurriculumDraft } = useAdminPortal();
   const isLive = dataSource.mode === "live" && dataSource.state === "ready";
+  const hubs = data?.hubs ?? [];
+  const links = data?.hubCourseLinks ?? [];
+  const productionHubs = useMemo(
+    () => hubs.filter((hub) => hub.hubCode !== "composition-preview"),
+    [hubs],
+  );
+  const defaultHub = productionHubs[0] ?? hubs[0] ?? null;
+  const defaultLink = links.find((link) => link.hubCode === defaultHub?.hubCode) ?? links[0] ?? null;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   const [draft, setDraft] = useState<CompositionDraft>(() =>
-    emptyCompositionDraft(emptyPackage("composition-preview", "Composition Preview", "preview")),
+    defaultHub
+      ? emptyCompositionDraft(emptyPackage(defaultHub.hubCode, defaultHub.hubName, defaultLink?.courseKey || "course"))
+      : emptyCompositionDraft(emptyPackage("composition-preview", "Composition Preview", "preview")),
   );
   const [savedDraft, setSavedDraft] = useState<AuthoringDraft | null>(null);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplateRecord[]>([]);
@@ -535,6 +550,45 @@ export function CompositionPage() {
   const [saving, setSaving] = useState(false);
 
   const pkg = draft.package;
+
+  useEffect(() => {
+    if (!defaultHub || pkg.hub.id !== "composition-preview") return;
+    setDraft((current) => ({
+      ...current,
+      package: emptyPackage(defaultHub.hubCode, defaultHub.hubName, defaultLink?.courseKey || "course"),
+    }));
+  }, [defaultHub, defaultLink?.courseKey, pkg.hub.id]);
+
+  const setHubContext = useCallback((hubCode: string) => {
+    const hub = hubs.find((item) => item.hubCode === hubCode);
+    const link = links.find((item) => item.hubCode === hubCode);
+    const courseKey = link?.courseKey || String(pkg.curriculum.metadata.course || "course");
+    const curriculumId = `${hubCode}-curriculum`;
+    setDraft((current) => ({
+      ...current,
+      package: {
+        ...current.package,
+        hub: {
+          ...current.package.hub,
+          id: hubCode,
+          metadata: { ...current.package.hub.metadata, name: hub?.hubName || hubCode },
+          relationships: { ...current.package.hub.relationships, curriculum: curriculumId },
+        },
+        curriculum: {
+          ...current.package.curriculum,
+          id: curriculumId,
+          metadata: {
+            ...current.package.curriculum.metadata,
+            course: courseKey,
+            title: `${hub?.hubName || hubCode} curriculum`,
+          },
+          relationships: { ...current.package.curriculum.relationships },
+        },
+      },
+    }));
+    setSavedDraft(null);
+    setSaveMessage(null);
+  }, [hubs, links, pkg.curriculum.metadata.course]);
 
   useEffect(() => {
     const persistedDraft = readPersistedDraft();
@@ -693,8 +747,13 @@ export function CompositionPage() {
       setSaveMessage("Saving a curriculum draft requires a live platform connection. Composition does not publish.");
       return;
     }
+    const hubId = String(pkg.hub.id);
+    if (hubId === "composition-preview") {
+      setSaving(false);
+      setSaveMessage("Select a real hub and course before saving a curriculum draft.");
+      return;
+    }
     try {
-      const hubId = String(pkg.hub.id);
       const hubName = String(pkg.hub.metadata.name || hubId);
       const courseKey = String(pkg.curriculum.metadata.course || "course");
       const actor = data?.teachers?.[0]?.displayName ?? "author";
@@ -972,10 +1031,59 @@ export function CompositionPage() {
       ) : null}
 
       {saveMessage && (
-        <div className={`notice-card ${/failed|requires a live|conflict|elsewhere/i.test(saveMessage) ? "notice-card--danger" : "notice-card--info"}`}>
+        <div className={`notice-card ${/failed|requires a live|conflict|elsewhere|Select a real hub/i.test(saveMessage) ? "notice-card--danger" : "notice-card--info"}`}>
           <p>{saveMessage}</p>
         </div>
       )}
+
+      <section className="panel">
+        <div className="toolbar">
+          <div>
+            <label htmlFor="composition-hub">Hub context</label>
+            <select
+              id="composition-hub"
+              value={pkg.hub.id}
+              onChange={(event) => setHubContext(event.target.value)}
+            >
+              {(productionHubs.length ? productionHubs : hubs).map((hub: HubRecord) => (
+                <option key={hub.hubCode} value={hub.hubCode}>{hub.hubName}</option>
+              ))}
+              {!productionHubs.length && !hubs.length ? (
+                <option value={pkg.hub.id}>{String(pkg.hub.metadata.name || pkg.hub.id)}</option>
+              ) : null}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="composition-course">Course</label>
+            <select
+              id="composition-course"
+              value={String(pkg.curriculum.metadata.course || "")}
+              onChange={(event) => setDraft((current) => ({
+                ...current,
+                package: {
+                  ...current.package,
+                  curriculum: {
+                    ...current.package.curriculum,
+                    metadata: { ...current.package.curriculum.metadata, course: event.target.value },
+                  },
+                },
+              }))}
+            >
+              {links.filter((link) => link.hubCode === pkg.hub.id).map((link: HubCourseLinkRecord) => (
+                <option key={link.courseKey} value={link.courseKey}>{link.courseTitle}</option>
+              ))}
+              {!links.some((link) => link.hubCode === pkg.hub.id) ? (
+                <option value={String(pkg.curriculum.metadata.course || "course")}>
+                  {String(pkg.curriculum.metadata.course || "course")}
+                </option>
+              ) : null}
+            </select>
+          </div>
+          <span className="toolbar__count" role="status">
+            Target: {pkg.hub.id} / {String(pkg.curriculum.metadata.course || "course")}
+          </span>
+        </div>
+      </section>
 
       {showPreview && (
         <section className="panel">
