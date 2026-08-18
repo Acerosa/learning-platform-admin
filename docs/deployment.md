@@ -2,10 +2,15 @@
 
 ## Current status
 
-Version 0.1.0 is currently published to GitHub Pages from the `main` branch.
-The local Phase 2 changes have not been deployed:
+GitHub Pages publishes Admin from `main`
+(https://acerosa.github.io/learning-platform-admin/).
 
-<https://acerosa.github.io/learning-platform-admin/>
+Curriculum authoring, Content Library and Composition are production Admin
+routes. Hosted Admin correctly denies sessions that are not `platform_admin`.
+The intended administrator is `ricardo.rosa@nhc.ac.uk`.
+
+Teaching-content publication does not use this Pages workflow. Application
+changes do.
 
 ## Build
 

@@ -116,6 +116,9 @@ Each published snapshot stores:
 
 There is no GitHub commit or learner-hub deployment.
 
+Composition output is a normal draft/package. Validate → approve → Publish to
+Platform remains the only learner-visible path.
+
 ## Preview
 
 Preview uses the `@learning-platform/content` renderer against the **selected**

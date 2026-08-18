@@ -4,6 +4,8 @@ export const ADMIN_MODULE_IDS = [
   "courses",
   "curriculum",
   "activities",
+  "content-library",
+  "composition",
   "learners",
   "teachers",
   "groups",
@@ -30,14 +32,17 @@ export interface AdminModuleDefinition {
   description: string;
   capability: string;
   dataState: "available" | "partial" | "pending";
+  visibleInNavigation?: boolean;
 }
 
 export const ADMIN_MODULES: readonly AdminModuleDefinition[] = [
   { id: "dashboard", label: "Dashboard", shortLabel: "DB", group: "Overview", eyebrow: "Platform overview", description: "Operational readiness across hubs, contracts and services.", capability: "dashboard.read", dataState: "available" },
   { id: "hubs", label: "Hub registry", shortLabel: "HB", group: "Overview", eyebrow: "Hub management", description: "Discover, inspect and prepare lifecycle changes for every learner hub.", capability: "hubs.read", dataState: "available" },
   { id: "courses", label: "Courses", shortLabel: "CO", group: "Learning", eyebrow: "Curriculum administration", description: "Review the platform course catalogue and hub associations.", capability: "courses.read", dataState: "partial" },
-  { id: "curriculum", label: "Curriculum authoring", shortLabel: "CU", group: "Learning", eyebrow: "Curriculum administration", description: "Author canonical drafts and manage local publication versions without writing to learner hubs.", capability: "curriculum.author", dataState: "partial" },
-  { id: "activities", label: "Activities", shortLabel: "AC", group: "Learning", eyebrow: "Curriculum administration", description: "Review activity definitions, evidence capabilities and lifecycle state.", capability: "activities.read", dataState: "partial" },
+  { id: "content-library", label: "Content Library", shortLabel: "CL", group: "Learning", eyebrow: "Reusable master assets", description: "Manage reusable questions, activities, templates and resources. This is not publication.", capability: "content-library.read", dataState: "available" },
+  { id: "composition", label: "Composition", shortLabel: "CP", group: "Learning", eyebrow: "Assemble a curriculum draft", description: "Assemble library assets into a standard curriculum draft. Publication happens in Curriculum authoring.", capability: "composition.author", dataState: "available" },
+  { id: "curriculum", label: "Curriculum authoring", shortLabel: "CU", group: "Learning", eyebrow: "Edit and publish a hub curriculum", description: "Open a hub/course package as a draft, edit teaching copy, validate, approve and publish to the platform.", capability: "curriculum.author", dataState: "partial" },
+  { id: "activities", label: "Activity catalogue", shortLabel: "AC", group: "Learning", eyebrow: "Deferred delivery catalogue", description: "Reserved for a future group-delivery activity catalogue. Teaching content is edited in Curriculum authoring or Content Library.", capability: "activities.read", dataState: "pending", visibleInNavigation: false },
   { id: "learners", label: "Learners", shortLabel: "LE", group: "People", eyebrow: "Learner administration", description: "Inspect learner profiles and their platform relationships.", capability: "learners.read", dataState: "available" },
   { id: "teachers", label: "Teachers", shortLabel: "TE", group: "People", eyebrow: "Staff administration", description: "Review teacher profiles, group access and platform roles.", capability: "teachers.read", dataState: "partial" },
   { id: "groups", label: "Groups", shortLabel: "GR", group: "People", eyebrow: "Cohort administration", description: "Review academic groups, registration state and course links.", capability: "groups.read", dataState: "available" },

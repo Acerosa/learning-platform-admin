@@ -31,6 +31,15 @@ export const ADMIN_API_VIEWS = Object.freeze({
   skillPerformance: "admin_api.skill_performance",
   curriculumPublications: "admin_api.curriculum_publications",
   curriculumDrafts: "admin_api.curriculum_drafts",
+  libraryQuestions: "admin_api.library_questions",
+  libraryActivities: "admin_api.library_activities",
+  libraryTemplates: "admin_api.library_templates",
+  libraryResources: "admin_api.library_resources",
+  libraryFeedback: "admin_api.library_feedback",
+  libraryHints: "admin_api.library_hints",
+  compositionReferences: "admin_api.composition_references",
+  compositionTemplates: "admin_api.composition_templates",
+  curriculumRecipes: "admin_api.curriculum_recipes",
 });
 
 export const ADMIN_API_RPCS = Object.freeze({
@@ -43,6 +52,27 @@ export const ADMIN_API_RPCS = Object.freeze({
   discardCurriculumDraft: "admin_api.discard_curriculum_draft",
   currentCurriculumPackage: "admin_api.current_curriculum_package",
   reviewResponse: "admin_api.review_response",
+  searchLibrary: "admin_api.search_library",
+  saveLibraryQuestion: "admin_api.save_library_question",
+  saveLibraryActivity: "admin_api.save_library_activity",
+  deleteLibraryItem: "admin_api.delete_library_item",
+  getLibraryQuestionDetail: "admin_api.get_library_question_detail",
+  saveCompositionReference: "admin_api.save_composition_reference",
+  detachCompositionReference: "admin_api.detach_composition_reference",
+  compositionUpdateCheck: "admin_api.composition_update_check",
+  compositionImpactAnalysis: "admin_api.composition_impact_analysis",
+  saveCompositionTemplate: "admin_api.save_composition_template",
+  archiveCompositionTemplate: "admin_api.archive_composition_template",
+  restoreCompositionTemplate: "admin_api.restore_composition_template",
+  duplicateCompositionTemplate: "admin_api.duplicate_composition_template",
+  listCompositionTemplates: "admin_api.list_composition_templates",
+  saveCurriculumRecipe: "admin_api.save_curriculum_recipe",
+  archiveCurriculumRecipe: "admin_api.archive_curriculum_recipe",
+  restoreCurriculumRecipe: "admin_api.restore_curriculum_recipe",
+  duplicateCurriculumRecipe: "admin_api.duplicate_curriculum_recipe",
+  listCurriculumRecipes: "admin_api.list_curriculum_recipes",
+  saveCompositionDraftState: "admin_api.save_composition_draft_state",
+  getCompositionDraftState: "admin_api.get_composition_draft_state",
 });
 
 export type HubLifecycle =
@@ -381,6 +411,21 @@ export interface CurriculumDraftSaveResult {
   updatedAt: string;
 }
 
+export interface CurriculumDraftSummary {
+  id: string;
+  hubCode: string;
+  courseKey: string;
+  title: string;
+  lifecycleStatus: string;
+  revision: number;
+  basedOnPackageVersion: string | null;
+  updatedAt: string;
+}
+
+export interface CurriculumDraftRecord extends CurriculumDraftSummary {
+  package: Record<string, unknown>;
+}
+
 export interface CurrentCurriculumPackageRecord {
   id: string;
   hubCode: string;
@@ -473,6 +518,7 @@ export interface AdminDataSnapshot {
   dashboardSummary: DashboardSummaryRecord;
   auditEvents: readonly AuditEventRecord[];
   curriculumPublications: readonly CurriculumPublicationRecord[];
+  curriculumDrafts: readonly CurriculumDraftSummary[];
 }
 
 export interface AdminReadService {
@@ -500,6 +546,7 @@ export interface AdminReadService {
   getDashboardSummary(): Promise<DashboardSummaryRecord>;
   listAuditEvents(): Promise<readonly AuditEventRecord[]>;
   listCurriculumPublications(): Promise<readonly CurriculumPublicationRecord[]>;
+  listCurriculumDrafts(): Promise<readonly CurriculumDraftSummary[]>;
 }
 
 export interface AdminMutationService {

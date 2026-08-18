@@ -10,6 +10,8 @@ import type {
   AuditEventRecord,
   CurrentStaffContextRecord,
   CourseRecord,
+  CurriculumDraftRecord,
+  CurriculumDraftSummary,
   CurriculumPublicationRecord,
   DashboardSummaryRecord,
   EnrolmentRecord,
@@ -487,6 +489,31 @@ export async function loadCurrentCurriculumPackage(
     package: (row.package && typeof row.package === "object" ? row.package : {}) as Record<string, unknown>,
     contentHash: textValue(row.content_hash),
     publishedAt: textValue(row.published_at),
+  };
+}
+
+export async function getCurriculumDraft(
+  client: AdminSupabaseClient,
+  draftId: string,
+): Promise<CurriculumDraftRecord> {
+  const { data, error } = await client
+    .schema("admin_api")
+    .rpc("get_curriculum_draft", { p_draft_id: draftId });
+
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new AdminPublicationError(publicationErrorCode(error));
+  }
+  const row = data[0] as AdminRow;
+  return {
+    id: textValue(row.id),
+    hubCode: textValue(row.hub_code),
+    courseKey: textValue(row.course_key),
+    title: textValue(row.title),
+    lifecycleStatus: textValue(row.lifecycle_status),
+    revision: Number(row.revision || 0),
+    package: (row.package && typeof row.package === "object" ? row.package : {}) as Record<string, unknown>,
+    basedOnPackageVersion: row.based_on_package_version ? textValue(row.based_on_package_version) : null,
+    updatedAt: textValue(row.updated_at),
   };
 }
 
@@ -1012,6 +1039,24 @@ export function createSupabaseAdminReadService(
         contentHash: textValue(row.content_hash),
       }));
     },
+
+    async listCurriculumDrafts() {
+      const data = await rows(
+        "curriculum_drafts",
+        "id,hub_code,course_key,title,lifecycle_status,revision,based_on_package_version,updated_at",
+        { column: "updated_at", ascending: false },
+      );
+      return data.map((row): CurriculumDraftSummary => ({
+        id: textValue(row.id),
+        hubCode: textValue(row.hub_code),
+        courseKey: textValue(row.course_key),
+        title: textValue(row.title),
+        lifecycleStatus: textValue(row.lifecycle_status),
+        revision: Number(row.revision || 0),
+        basedOnPackageVersion: row.based_on_package_version ? textValue(row.based_on_package_version) : null,
+        updatedAt: textValue(row.updated_at),
+      }));
+    },
   });
 }
 
@@ -1042,6 +1087,7 @@ export async function loadAdminData(
     dashboardSummary,
     auditEvents,
     curriculumPublications,
+    curriculumDrafts,
   ] = await Promise.all([
     service.listHubs(),
     service.listHubCourseLinks(),
@@ -1066,6 +1112,7 @@ export async function loadAdminData(
     service.getDashboardSummary(),
     service.listAuditEvents(),
     service.listCurriculumPublications(),
+    service.listCurriculumDrafts(),
   ]);
 
   return Object.freeze({
@@ -1092,5 +1139,6 @@ export async function loadAdminData(
     dashboardSummary,
     auditEvents,
     curriculumPublications,
+    curriculumDrafts,
   });
 }

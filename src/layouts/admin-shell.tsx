@@ -36,7 +36,8 @@ export function AdminShell({
     const query = search.trim().toLowerCase();
     if (!query) return [];
     return ADMIN_MODULES.filter((module) =>
-      `${module.label} ${module.description}`.toLowerCase().includes(query),
+      module.visibleInNavigation !== false
+      && `${module.label} ${module.description}`.toLowerCase().includes(query),
     ).slice(0, 6);
   }, [search]);
 
@@ -71,7 +72,7 @@ export function AdminShell({
             <section className="admin-navigation__group" key={group} aria-labelledby={`nav-${group.toLowerCase()}`}>
               <h2 id={`nav-${group.toLowerCase()}`}>{group}</h2>
               <ul>
-                {ADMIN_MODULES.filter((module) => module.group === group).map((module) => (
+                {ADMIN_MODULES.filter((module) => module.group === group && module.visibleInNavigation !== false).map((module) => (
                   <li key={module.id}>
                     <AdminLink
                       href={getModuleHref(module.id)}

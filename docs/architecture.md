@@ -77,6 +77,8 @@ exist:
   course links and enablement. Hub codes cannot be changed.
 - Curriculum publication: after a local Approved/Published snapshot exists, the
   live client calls `admin_api.publish_curriculum`. See [Backend publication](backend-publication.md).
+- Content Library and Composition: live clients call the documented library and
+  composition RPCs. Composition materialises a draft; it does not publish.
 
 See [Hub registration](hub-registration.md) and
 [Platform management](platform-management.md). The Hub Registry derives

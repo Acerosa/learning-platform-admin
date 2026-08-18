@@ -7,7 +7,9 @@ const routes = [
   ["/hubs", "Hub registry"],
   ["/courses", "Courses"],
   ["/curriculum", "Curriculum authoring"],
-  ["/activities", "Activities"],
+  ["/content-library", "Content Library"],
+  ["/composition", "Composition"],
+  ["/activities", "Activity catalogue"],
   ["/learners", "Learners"],
   ["/teachers", "Teachers"],
   ["/groups", "Groups"],
@@ -46,7 +48,7 @@ test("curriculum authoring exposes local draft workspace tabs", async () => {
   assert.match(html, /History/);
   assert.match(html, /Compare/);
   assert.match(html, /Archive/);
-  assert.match(html, /Learners consume Published content/);
+  assert.match(html, /Learners consume published content only/);
 });
 
 test("unknown module routes return not found", async () => {
@@ -67,7 +69,7 @@ test("hub registry exposes safe view and prepared actions", async () => {
   assert.match(html, /Unit 3 Cyber Security Hub/);
   assert.match(html, /T Level Digital Software Development Hub/);
   assert.match(html, /Register hub/);
-  assert.match(html, /not recorded/i);
+  assert.match(html, /No curriculum/);
 });
 
 test("attempt and analytics routes expose summary data without responses", async () => {

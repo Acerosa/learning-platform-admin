@@ -7,8 +7,10 @@ All modules are registered in `src/router/modules.ts`. Their routes and navigati
 | Dashboard | Backend counts, recent attempts, contracts and health | Live read available |
 | Hub Registry | Search, filter, inspect, register, edit, enable/disable, publication status and health | Live read available; `admin_api.register_hub` and `admin_api.update_hub` |
 | Courses | Course catalogue and hub associations | Live `admin_api.courses` read; catalogue mutation pending |
-| Curriculum authoring | Canonical drafts, local publication lifecycle, platform publication | Local records plus `admin_api.publish_curriculum` |
-| Activities | Reviewed manifest counts, evidence/version/lifecycle readiness | Curriculum catalogue view pending |
+| Curriculum authoring | Open published content as a draft, validate, approve and publish | Local records plus hosted `save_curriculum_draft`, `get_curriculum_draft` and `publish_curriculum` |
+| Activity catalogue | Hidden from navigation until a group-delivery catalogue contract exists | Route retained; not the teaching editor |
+| Content Library | Reusable questions, activities, templates, resources | Live `admin_api.search_library` and library RPCs |
+| Composition | Assemble library assets into a standard curriculum draft | Live composition RPCs; publication remains in Curriculum authoring |
 | Learners | Minimised directory and group/enrolment summaries | Live read available |
 | Teachers | Active platform role records and authority boundary | Live role read; full directory deferred |
 | Groups | Academic year, course, registration and learner count | Live read available |
