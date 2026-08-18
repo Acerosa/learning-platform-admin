@@ -544,8 +544,18 @@ code {
   margin-bottom: 1.7rem;
 }
 
-.page-header > div {
-  max-width: 48rem;
+.page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.authoring-area-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0 0 1.1rem;
 }
 
 .eyebrow {

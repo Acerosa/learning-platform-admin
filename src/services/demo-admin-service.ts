@@ -7,6 +7,7 @@ import type {
   AuditEventRecord,
   CourseRecord,
   CurrentStaffContextRecord,
+  CurriculumDraftSummary,
   CurriculumPublicationRecord,
   DashboardSummaryRecord,
   EnrolmentRecord,
@@ -492,6 +493,7 @@ export const demoAdminService: AdminReadService = Object.freeze({
   async getDashboardSummary() { return DASHBOARD_SUMMARY; },
   async listAuditEvents() { return AUDIT_EVENTS; },
   async listCurriculumPublications() { return CURRICULUM_PUBLICATIONS; },
+  async listCurriculumDrafts() { return [] as readonly CurriculumDraftSummary[]; },
 });
 
 export const DEMO_ADMIN_DATA: AdminDataSnapshot = Object.freeze({
@@ -518,6 +520,7 @@ export const DEMO_ADMIN_DATA: AdminDataSnapshot = Object.freeze({
   dashboardSummary: DASHBOARD_SUMMARY,
   auditEvents: AUDIT_EVENTS,
   curriculumPublications: CURRICULUM_PUBLICATIONS,
+  curriculumDrafts: [],
 });
 
 export const DEMO_DATA_NOTICE = Object.freeze({

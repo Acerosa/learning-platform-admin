@@ -163,14 +163,22 @@ Exported JSON must be accepted by `@learning-platform/content` without manual ed
 Interop is covered by `tests/authoring-interop.test.ts` using synthetic
 content. That fixture is not added to live Unit 14 Week 1.
 
+## Composition path
+
+The Composition Builder inserts library objects, applies overrides, detaches,
+reorders, and materialises a canonical `ContentPackage`. That package becomes
+a normal `AuthoringDraft` and then follows this same publication workflow.
+Composition does not publish by itself.
+
 ## Future publishing
 
-Local publication and backend catalogue publication are implemented. Still
-deferred:
+Still deferred:
 
-- GitHub commit automation
-- learner-hub consumption of published metadata
+- GitHub commit automation for teaching copy (must remain unused)
 - collaborative multi-user editing
 - AI generation
 - automatic assignment grading
-- Weeks 2–19 curriculum authoring
+
+Learner hubs already consume published packages from
+`api.published_curriculum_package`. A GitHub Pages rebuild is not required
+for ordinary teaching-copy publication.

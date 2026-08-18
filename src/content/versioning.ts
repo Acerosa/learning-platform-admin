@@ -1,7 +1,7 @@
 import { clonePackage, deepFreeze } from "./clone.ts";
 import { getContentEngine } from "./engine.ts";
 import { emptyPackage } from "./factories.ts";
-import { assertMutable, isImmutableStatus, LifecycleError, transitionRecord } from "./lifecycle.ts";
+import { assertMutable, isImmutableStatus, isLifecycleStatus, LifecycleError, transitionRecord } from "./lifecycle.ts";
 import { CONTENT_PACKAGE_VERSION, publicationGate } from "./publication-gate.ts";
 import { bumpPatch, compareSemver, isSemver } from "./semver.ts";
 import { idlePlatformPublication } from "./types.ts";
@@ -218,6 +218,44 @@ export function createWorkingCopyFromPackage(
     basedOnVersion,
     package: clonePackage(pkg),
   };
+}
+
+export function authoringDraftFromRemote(
+  input: {
+    id: string;
+    title: string;
+    hubCode: string;
+    courseKey: string;
+    lifecycleStatus: string;
+    revision: number;
+    package: ContentPackage;
+    basedOnPackageVersion: string | null;
+    updatedAt: string;
+  },
+  actor = "local-author",
+): AuthoringDraft {
+  const created = createWorkingCopyFromPackage(input.package, actor, input.basedOnPackageVersion);
+  return {
+    ...created,
+    id: input.id,
+    title: input.title,
+    hubId: input.hubCode,
+    courseKey: input.courseKey,
+    status: isLifecycleStatus(input.lifecycleStatus) ? input.lifecycleStatus : "draft",
+    remoteRevision: input.revision,
+    updatedAt: input.updatedAt,
+    basedOnVersion: input.basedOnPackageVersion,
+  };
+}
+
+export function mergeRemoteAuthoringDrafts(local: AuthoringDraft[], remote: AuthoringDraft[]): AuthoringDraft[] {
+  const remoteById = new Map(remote.map((item) => [item.id, item]));
+  const merged = local.map((item) => remoteById.get(item.id) ?? item);
+  const seen = new Set(merged.map((item) => item.id));
+  for (const item of remote) {
+    if (!seen.has(item.id)) merged.push(item);
+  }
+  return merged;
 }
 
 export function restoreAsDraft(source: AuthoringDraft, actor = "local-author"): AuthoringDraft {

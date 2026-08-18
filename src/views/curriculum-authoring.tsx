@@ -12,6 +12,7 @@ import { LifecycleBanner, lifecycleTone } from "../components/authoring/lifecycl
 import { PreviewPane } from "../components/authoring/preview-pane";
 import { PublicationPanel } from "../components/authoring/publication-panel";
 import { ReviewPanel } from "../components/authoring/review-panel";
+import { AuthoringAreaLinks } from "../components/authoring-area-links";
 import { SessionForm } from "../components/authoring/session-form";
 import { VersionsPanel } from "../components/authoring/versions-panel";
 import { WeekForm } from "../components/authoring/week-form";
@@ -38,6 +39,7 @@ import {
   archiveVersion,
   createWorkingCopy,
   createWorkingCopyFromPackage,
+  mergeRemoteAuthoringDrafts,
   replaceRecord,
   restoreAsDraft,
   returnToDraft,
@@ -108,6 +110,7 @@ export function CurriculumAuthoringPage({
   onPublishToPlatform,
   onSaveDraft,
   onLoadPublishedPackage,
+  onLoadRemoteDrafts,
 }: {
   hubs: readonly HubRecord[];
   links: readonly HubCourseLinkRecord[];
@@ -117,6 +120,7 @@ export function CurriculumAuthoringPage({
   onPublishToPlatform?: (record: AuthoringDraft) => Promise<{ id: string; publishedAt: string; idempotent: boolean }>;
   onSaveDraft?: (record: AuthoringDraft) => Promise<{ revision: number }>;
   onLoadPublishedPackage?: (hubCode: string, courseKey: string) => Promise<{ package: ContentPackage; packageVersion: string }>;
+  onLoadRemoteDrafts?: () => Promise<AuthoringDraft[]>;
 }) {
   const defaultHub = hubs[0];
   const defaultLink = links.find((link) => link.hubCode === defaultHub?.hubCode) || links[0];
@@ -140,9 +144,13 @@ export function CurriculumAuthoringPage({
   const [publishNotes, setPublishNotes] = useState("");
   const [saveStatus, setSaveStatus] = useState<"idle" | "unsaved" | "saving" | "saved" | "failed" | "offline">("idle");
   const [loadStatus, setLoadStatus] = useState<"idle" | "loading" | "loaded" | "empty" | "error">("idle");
+  const [editingWeekId, setEditingWeekId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [remoteDraftStatus, setRemoteDraftStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const saveGate = useRef(createSequenceGate());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftRef = useRef(draft);
+  const remoteLoaded = useRef(false);
 
   useEffect(() => {
     const stored = loadDrafts();
@@ -160,6 +168,36 @@ export function CurriculumAuthoringPage({
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || remoteLoaded.current || !platformAvailable || !onLoadRemoteDrafts) return;
+    remoteLoaded.current = true;
+    setRemoteDraftStatus("loading");
+    void onLoadRemoteDrafts()
+      .then((remotes) => {
+        const stored = loadDrafts();
+        const merged = mergeRemoteAuthoringDrafts(stored, remotes);
+        persistDrafts(merged);
+        setDrafts(merged);
+        const preferred = remotes.find((item) => item.hubId === (defaultHub?.hubCode || stored[0]?.hubId))
+          || remotes[0]
+          || merged[0];
+        if (preferred) {
+          setDraft(preferred);
+          setSelectedActivityId(preferred.package.activities[0]?.id || "");
+          setPreviewId(preferred.id);
+          setCompareLeft(preferred.id);
+          setCompareRight(merged.find((item) => item.id !== preferred.id)?.id || preferred.id);
+          setPublishVersionValue(suggestNextVersion(merged, preferred.hubId, preferred.courseKey));
+          setPublishNotes(preferred.publicationNotes);
+        }
+        setRemoteDraftStatus("loaded");
+      })
+      .catch((error) => {
+        setRemoteDraftStatus("error");
+        setMessage(error instanceof Error ? error.message : "Remote curriculum drafts could not be loaded.");
+      });
+  }, [defaultHub?.hubCode, hydrated, onLoadRemoteDrafts, platformAvailable]);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -259,7 +297,8 @@ export function CurriculumAuthoringPage({
     } catch (error) {
       if (!saveGate.current.isCurrent(requestId) && !explicit) return;
       setSaveStatus("failed");
-      if (explicit) showError(error);
+      const conflict = error instanceof Error && /saved elsewhere|DRAFT_REVISION_CONFLICT/i.test(error.message);
+      if (explicit || conflict) showError(error);
     }
   }
 
@@ -325,17 +364,20 @@ export function CurriculumAuthoringPage({
     <>
       <header className="page-header">
         <div>
-          <p className="eyebrow">Curriculum administration</p>
+          <p className="eyebrow">Edit and publish a hub curriculum</p>
           <h1>Curriculum authoring</h1>
-          <p>Admin edits Drafts. Learners consume Published content only. Local Publish stays in this browser; Publish to Platform sends an approved snapshot to the backend catalogue. Learner hubs are not updated.</p>
+          <p>Choose a hub and course, open published content as a draft, then validate, review, approve and publish to the platform. Reusable masters live in Content Library. Assembling those masters into a draft happens in Composition.</p>
         </div>
         <StatusBadge label={LIFECYCLE_LABELS[draft.status]} tone={lifecycleTone(draft.status)} />
       </header>
 
+      <AuthoringAreaLinks current="curriculum" />
       <LifecycleBanner record={draft} />
       <p role="status">Draft save: {saveStatus === "idle" ? "Saved" : saveStatus === "unsaved" ? "Unsaved changes" : saveStatus === "saving" ? "Saving..." : saveStatus === "failed" ? "Save failed" : saveStatus === "offline" ? "Offline — changes not yet saved" : "Saved"}</p>
+      {remoteDraftStatus === "loading" ? <p role="status">Loading remote curriculum draft...</p> : null}
       {loadStatus === "loading" ? <p role="status">Loading published curriculum...</p> : null}
       {loadStatus === "error" ? <p className="authoring-alert" role="alert">Published curriculum could not be loaded. <button type="button" className="button button--small button--secondary" onClick={() => void openPublished()}>Retry</button></p> : null}
+      {remoteDraftStatus === "error" ? <p className="authoring-alert" role="alert">Remote drafts could not be reopened. LocalStorage remains available as a fallback, but the hosted draft is authoritative.</p> : null}
       {message ? <p className="authoring-alert" role="alert">{message}</p> : null}
 
       <section className="panel">
@@ -390,7 +432,7 @@ export function CurriculumAuthoringPage({
         {tab === "curriculum" ? (
           <section className="panel">
             <h2>Draft workspace</h2>
-            <p>Lifecycle: Draft, Ready for Review, In Review, Approved, Published, Superseded, Archived. Validation is a gate, not a status. Published versions are immutable.</p>
+            <p>This workspace edits and publishes a specific hub/course curriculum. Learners consume published content only. Lifecycle: Draft, Ready for Review, In Review, Approved, Published, Superseded, Archived. Validation is a gate, not a status. Local Publish stays in this browser; Publish to Platform sends an approved snapshot to the backend catalogue.</p>
             <div className="toolbar">
               <button className="button button--primary" type="button" onClick={() => {
                 const result = validatePackage(pkg);
@@ -415,7 +457,20 @@ export function CurriculumAuthoringPage({
         {tab === "weeks" ? (
           <fieldset className="authoring-fieldset" disabled={!editable}>
             <legend className="sr-only">Week editors</legend>
-            <WeekForm existingIds={pkg.weeks.map((item) => item.id)} onCreate={(week) => updatePackage(applyWeek(pkg, week))} />
+            <WeekForm
+              key={editingWeekId || "create-week"}
+              existingIds={pkg.weeks.map((item) => item.id)}
+              existing={pkg.weeks.find((item) => item.id === editingWeekId) || null}
+              onCreate={(week) => {
+                updatePackage(applyWeek(pkg, week));
+                setEditingWeekId(null);
+              }}
+            />
+            {editingWeekId ? (
+              <p>
+                <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(null)}>Cancel week edit</button>
+              </p>
+            ) : null}
             <section className="panel">
               <h2>Weeks</h2>
               {pkg.weeks.length ? (
@@ -425,6 +480,7 @@ export function CurriculumAuthoringPage({
                       <strong>{String(week.metadata.title)}</strong>
                       <code>{week.id}</code>
                       <span>Week {String(week.metadata.teachingWeek)}</span>
+                      <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(week.id)}>Edit</button>
                       <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${week.id}.json`, exportDocument(week))}>Export</button>
                     </li>
                   ))}
@@ -437,7 +493,21 @@ export function CurriculumAuthoringPage({
         {tab === "sessions" ? (
           <fieldset className="authoring-fieldset" disabled={!editable}>
             <legend className="sr-only">Session editors</legend>
-            <SessionForm weeks={pkg.weeks} existingIds={pkg.sessions.map((item) => item.id)} onCreate={(session) => updatePackage(applySession(pkg, session))} />
+            <SessionForm
+              key={editingSessionId || "create-session"}
+              weeks={pkg.weeks}
+              existingIds={pkg.sessions.map((item) => item.id)}
+              existing={pkg.sessions.find((item) => item.id === editingSessionId) || null}
+              onCreate={(session) => {
+                updatePackage(applySession(pkg, session));
+                setEditingSessionId(null);
+              }}
+            />
+            {editingSessionId ? (
+              <p>
+                <button className="button button--small button--secondary" type="button" onClick={() => setEditingSessionId(null)}>Cancel session edit</button>
+              </p>
+            ) : null}
             <section className="panel">
               <h2>Sessions</h2>
               {pkg.sessions.length ? (
@@ -447,6 +517,7 @@ export function CurriculumAuthoringPage({
                       <strong>{String(session.metadata.title)}</strong>
                       <code>{session.id}</code>
                       <span>{String(session.metadata.kind)}</span>
+                      <button className="button button--small button--secondary" type="button" onClick={() => setEditingSessionId(session.id)}>Edit</button>
                       <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${session.id}.json`, exportDocument(session))}>Export</button>
                     </li>
                   ))}

@@ -5,6 +5,7 @@ import type {
   AdminDataSnapshot,
   HubRecord,
 } from "../api/admin-api";
+import { AuthoringAreaLinks } from "../components/authoring-area-links";
 import { AdminLink } from "../components/admin-link";
 import { HubDetailDialog } from "../components/hub-detail-dialog";
 import { RegisterHubDialog } from "../components/register-hub-dialog";
@@ -24,6 +25,8 @@ import { formatDate } from "../utils/format";
 import { CurriculumAuthoringPage } from "./curriculum-authoring";
 import { AnalyticsPage } from "./analytics";
 import { ResultsMarkbookPage } from "./results-markbook";
+import { ContentLibraryPage } from "./content-library";
+import { CompositionPage } from "./composition";
 
 function toneForStatus(status: string): BadgeTone {
   if (["active", "healthy", "certified", "open", "production", "completed", "succeeded", "published", "pass"].includes(status)) return "positive";
@@ -231,8 +234,19 @@ function CoursesPage({ data, openPending }: { data: AdminDataSnapshot; openPendi
   );
 }
 
-function DeferredLearningPage({ moduleId, openPending }: { moduleId: "activities"; openPending: (action: PendingAction) => void }) {
-  return <><PageHeader moduleId={moduleId} actionLabel="Create activity" onAction={() => openPending({ title: "Create activity" })} /><section className="panel"><EmptyState title="Administration contract deferred" body="The Phase 2 MVP does not add activity-catalogue authoring or protected-schema reads. Canonical activity composition lives in Curriculum authoring. Existing portal workflow boundaries remain prepared for a reviewed backend contract." /></section></>;
+function DeferredLearningPage({ moduleId }: { moduleId: "activities" }) {
+  return (
+    <>
+      <PageHeader moduleId={moduleId} />
+      <section className="panel">
+        <EmptyState
+          title="Activity catalogue is not the teaching editor"
+          body="This route is reserved for a future group-delivery activity catalogue. Teaching activities are authored in Curriculum authoring. Reusable master activities are managed in Content Library."
+        />
+      </section>
+      <AuthoringAreaLinks />
+    </>
+  );
 }
 
 function LearnersPage({ data, openPending }: { data: AdminDataSnapshot; openPending: (action: PendingAction) => void }) {
@@ -279,7 +293,7 @@ function AuditPage({ data }: { data: AdminDataSnapshot }) {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, publishCurriculum, saveCurriculumDraft, loadCurrentCurriculumPackage, registerHub, updateHub, reviewResponse } = useAdminPortal();
+  const { data, session, dataSource, publishCurriculum, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
@@ -338,9 +352,12 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
             package: published.package as unknown as import("../content/types").ContentPackage,
           };
         }}
+        onLoadRemoteDrafts={async () => Promise.all(data.curriculumDrafts.map((summary) => getCurriculumDraft(summary.id)))}
       />
     ); break;
-    case "activities": content = <DeferredLearningPage moduleId="activities" openPending={openPending} />; break;
+    case "activities": content = <DeferredLearningPage moduleId="activities" />; break;
+    case "content-library": content = <ContentLibraryPage />; break;
+    case "composition": content = <CompositionPage />; break;
     case "learners": content = <LearnersPage data={data} openPending={openPending} />; break;
     case "teachers": content = <TeachersPage data={data} openPending={openPending} />; break;
     case "groups": content = <GroupsPage data={data} openPending={openPending} />; break;

@@ -221,6 +221,9 @@ export function createActivity(input: {
   assignment?: string;
   difficulty?: "foundation" | "standard" | "challenge";
   familyId?: string;
+  estimatedDurationMinutes?: number | null;
+  activityType?: string | null;
+  learningIntent?: string | null;
 }): ContentActivity {
   const engine = getContentEngine();
   return envelope(
@@ -233,6 +236,9 @@ export function createActivity(input: {
       href: null,
       difficulty: input.difficulty || "standard",
       familyId: input.familyId || input.id,
+      estimatedDurationMinutes: input.estimatedDurationMinutes ?? null,
+      activityType: input.activityType ?? null,
+      learningIntent: input.learningIntent ?? null,
     },
     {
       learningOutcomes: input.learningOutcomes || [],

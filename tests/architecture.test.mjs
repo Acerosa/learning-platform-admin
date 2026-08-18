@@ -24,12 +24,12 @@ test("package is the 0.2.0 administration repository and consumes platform core"
   assert.equal(pkg.dependencies["drizzle-orm"], undefined);
 });
 
-test("module registry has 17 unique hub-agnostic modules", async () => {
+test("module registry has 19 unique hub-agnostic modules", async () => {
   const source = await readFile(new URL("src/router/modules.ts", root), "utf8");
   const ids = [...source.matchAll(/^\s+"([a-z-]+)",$/gm)].map((match) => match[1]);
-  assert.equal(ids.length, 17);
-  assert.equal(new Set(ids).size, 17);
-  assert.deepEqual(ids, ["dashboard", "hubs", "courses", "curriculum", "activities", "learners", "teachers", "groups", "enrolments", "assignments", "results", "attempts", "analytics", "monitoring", "certification", "configuration", "audit"]);
+  assert.equal(ids.length, 19);
+  assert.equal(new Set(ids).size, 19);
+  assert.deepEqual(ids, ["dashboard", "hubs", "courses", "curriculum", "activities", "content-library", "composition", "learners", "teachers", "groups", "enrolments", "assignments", "results", "attempts", "analytics", "monitoring", "certification", "configuration", "audit"]);
 });
 
 test("admin API names match the documented backend surface", async () => {
@@ -110,6 +110,7 @@ test("curriculum authoring keeps updateCurriculum pending and isolates the publi
   assert.match(mutations, /updateCurriculum: pending/);
   assert.match(service, /\.rpc\("publish_curriculum"/);
   assert.match(service, /\.rpc\("save_curriculum_draft"/);
+  assert.match(service, /\.rpc\("get_curriculum_draft"/);
   assert.match(service, /\.rpc\("current_curriculum_package"/);
   assert.match(service, /"register_hub"/);
   assert.match(service, /"update_hub"/);

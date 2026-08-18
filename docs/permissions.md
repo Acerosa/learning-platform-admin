@@ -34,7 +34,7 @@ Backend 0.2.0 currently defines `platform_admin`, `curriculum_admin`, `operation
 - No email-address or email-domain role checks.
 - No local-storage permissions.
 - Navigation may reflect backend-granted actions for usability, but backend RLS remains mandatory.
-- Mutation controls remain pending until the backend documents the required role/action, except hub registration through `admin_api.register_hub`, hub updates through `admin_api.update_hub`, and curriculum publication through `admin_api.publish_curriculum`.
+- Mutation controls remain pending until the backend documents the required role/action, except hub registration through `admin_api.register_hub`, hub updates through `admin_api.update_hub`, curriculum publication through `admin_api.publish_curriculum`, Content Library RPCs, and Composition Engine RPCs. Those writes still require the documented backend roles; the UI must not invent extra authority.
 - Access denial must be safe and must not reveal protected data.
 - Demo mode receives an explicit demonstration action snapshot and is never treated as an authenticated session.
 - The browser credential must be a publishable or legacy anon key; service-role and secret keys are rejected.

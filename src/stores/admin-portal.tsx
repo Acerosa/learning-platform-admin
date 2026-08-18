@@ -9,7 +9,8 @@ import {
   useState,
 } from "react";
 import type { AdminDataSnapshot, HubRegistrationResult, PlatformPublicationResult, ReviewResponseRequest, ReviewResponseResult, CurriculumDraftSaveResult, CurrentCurriculumPackageRecord } from "../api/admin-api";
-import type { AuthoringDraft } from "../content/types";
+import type { AuthoringDraft, ContentPackage } from "../content/types";
+import { authoringDraftFromRemote } from "../content/versioning";
 import type { HubRegistrationRequest } from "../content/hub-registration";
 import { registerDemoHub, updateDemoHub } from "../content/hub-registration";
 import {
@@ -32,6 +33,7 @@ import {
   publishCurriculum as publishCurriculumRpc,
   saveCurriculumDraft as saveCurriculumDraftRpc,
   loadCurrentCurriculumPackage as loadCurrentCurriculumPackageRpc,
+  getCurriculumDraft as getCurriculumDraftRpc,
   discardCurriculumDraft as discardCurriculumDraftRpc,
   registerAdminAccount,
   registerHub as registerHubRpc,
@@ -76,8 +78,10 @@ interface AdminPortalContextValue {
   publishCurriculum(record: AuthoringDraft): Promise<PlatformPublicationResult>;
   saveCurriculumDraft(record: AuthoringDraft): Promise<CurriculumDraftSaveResult>;
   loadCurrentCurriculumPackage(hubCode: string, courseKey: string): Promise<CurrentCurriculumPackageRecord>;
+  getCurriculumDraft(draftId: string): Promise<AuthoringDraft>;
   discardCurriculumDraft(draftId: string): Promise<void>;
   reviewResponse(request: ReviewResponseRequest): Promise<ReviewResponseResult>;
+  callRpc(name: string, params: Record<string, unknown>): Promise<unknown[]>;
   signOut(): Promise<void>;
   retry(): Promise<void>;
 }
@@ -411,6 +415,15 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     return loadCurrentCurriculumPackageRpc(client, hubCode, courseKey);
   }, [client]);
 
+  const getCurriculumDraft = useCallback(async (draftId: string) => {
+    if (!client) throw new AdminPublicationError("unavailable");
+    const record = await getCurriculumDraftRpc(client, draftId);
+    return authoringDraftFromRemote({
+      ...record,
+      package: record.package as unknown as ContentPackage,
+    }, state.session.displayName);
+  }, [client, state.session.displayName]);
+
   const discardRemoteCurriculumDraft = useCallback(async (draftId: string) => {
     if (!client) throw new AdminPublicationError("unavailable");
     return discardCurriculumDraftRpc(client, draftId);
@@ -477,6 +490,13 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     return result;
   }, [client, config.mode, state.data]);
 
+  const callRpc = useCallback(async (name: string, params: Record<string, unknown>): Promise<unknown[]> => {
+    if (!client) throw new Error("Platform not connected");
+    const { data: rpcData, error } = await client.schema("admin_api").rpc(name, params);
+    if (error) throw new Error(error.message);
+    return Array.isArray(rpcData) ? rpcData : rpcData ? [rpcData] : [];
+  }, [client]);
+
   const signOut = useCallback(async () => {
     if (!client) return;
     await client.auth.signOut();
@@ -538,11 +558,13 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     publishCurriculum,
     saveCurriculumDraft,
     loadCurrentCurriculumPackage,
+    getCurriculumDraft,
     discardCurriculumDraft: discardRemoteCurriculumDraft,
     reviewResponse,
+    callRpc,
     signOut,
     retry: refresh,
-  }), [claimInitialAdmin, config, dataSource, discardRemoteCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refresh, registerHub, requestMagicLink, reviewResponse, saveCurriculumDraft, signIn, signOut, signUp, state, updateHub]);
+  }), [callRpc, claimInitialAdmin, config, dataSource, discardRemoteCurriculumDraft, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refresh, registerHub, requestMagicLink, reviewResponse, saveCurriculumDraft, signIn, signOut, signUp, state, updateHub]);
 
   return (
     <AdminPortalContext.Provider value={value}>
