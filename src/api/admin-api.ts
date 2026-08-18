@@ -22,7 +22,15 @@ export const ADMIN_API_VIEWS = Object.freeze({
   responses: "admin_api.responses",
   dashboardSummary: "admin_api.dashboard_summary",
   activityPerformance: "admin_api.activity_performance",
+  assessmentOverview: "admin_api.assessment_overview",
+  groupPerformance: "admin_api.group_performance",
+  learnerPerformance: "admin_api.learner_performance",
+  activityAnalytics: "admin_api.activity_analytics",
+  questionPerformance: "admin_api.question_performance",
+  topicPerformance: "admin_api.topic_performance",
+  skillPerformance: "admin_api.skill_performance",
   curriculumPublications: "admin_api.curriculum_publications",
+  curriculumDrafts: "admin_api.curriculum_drafts",
 });
 
 export const ADMIN_API_RPCS = Object.freeze({
@@ -30,6 +38,10 @@ export const ADMIN_API_RPCS = Object.freeze({
   registerHub: "admin_api.register_hub",
   updateHub: "admin_api.update_hub",
   publishCurriculum: "admin_api.publish_curriculum",
+  saveCurriculumDraft: "admin_api.save_curriculum_draft",
+  getCurriculumDraft: "admin_api.get_curriculum_draft",
+  discardCurriculumDraft: "admin_api.discard_curriculum_draft",
+  currentCurriculumPackage: "admin_api.current_curriculum_package",
   reviewResponse: "admin_api.review_response",
 });
 
@@ -222,6 +234,116 @@ export interface DashboardSummaryRecord {
   contractCount: number;
 }
 
+export interface AssessmentOverviewRecord {
+  activeLearners: number;
+  activeGroups: number;
+  attemptCount: number;
+  completedAttempts: number;
+  completionPercentage: number | null;
+  averageScorePercentage: number | null;
+  requiresReviewCount: number;
+  reviewedResponseCount: number;
+  assignmentCount: number;
+  participatingLearnerCount: number;
+  topicLinkCount: number;
+  skillLinkCount: number;
+}
+
+export interface GroupPerformanceRecord {
+  groupCode: string;
+  groupName: string;
+  courseKey: string;
+  activeLearnerCount: number;
+  participatingLearnerCount: number;
+  completedAttempts: number;
+  attemptCount: number;
+  averageScorePercentage: number | null;
+  bestScorePercentage: number | null;
+  latestScorePercentage: number | null;
+  requiresReviewCount: number;
+  reviewedResponseCount: number;
+  assignmentCount: number;
+}
+
+export interface LearnerPerformanceRecord {
+  learnerId: string;
+  studentNumber: string;
+  displayName: string;
+  groupCodes: readonly string[];
+  assignedActivityCount: number;
+  completedActivityCount: number;
+  attemptCount: number;
+  completedAttempts: number;
+  averageScorePercentage: number | null;
+  bestScorePercentage: number | null;
+  latestScorePercentage: number | null;
+  firstScorePercentage: number | null;
+  requiresReviewCount: number;
+  reviewedResponseCount: number;
+  latestCompletedAt: string | null;
+}
+
+export interface ActivityAnalyticsRecord {
+  groupCode: string;
+  courseKey: string;
+  activityKey: string;
+  activityVersion: string;
+  assignedLearnerCount: number;
+  attemptedLearnerCount: number;
+  completedLearnerCount: number;
+  completionPercentage: number | null;
+  attemptCount: number;
+  completedAttempts: number;
+  averageScorePercentage: number | null;
+  bestScorePercentage: number | null;
+  latestScorePercentage: number | null;
+  requiresReviewCount: number;
+  reviewedResponseCount: number;
+  latestCompletedAt: string | null;
+}
+
+export interface QuestionPerformanceRecord {
+  activityKey: string;
+  activityVersion: string;
+  questionKey: string;
+  questionType: string;
+  sectionKey: string | null;
+  topicKeys: readonly string[];
+  skillKeys: readonly string[];
+  responseCount: number;
+  correctCount: number;
+  incorrectCount: number;
+  requiresReviewCount: number;
+  reviewedResponseCount: number;
+  correctnessPercentage: number | null;
+  averageAwardedScore: number | null;
+  averageMaxScore: number | null;
+}
+
+export interface TopicPerformanceRecord {
+  topicKey: string;
+  responseCount: number;
+  attemptCount: number;
+  learnerCount: number;
+  correctCount: number;
+  incorrectCount: number;
+  requiresReviewCount: number;
+  successPercentage: number | null;
+  averageAwardedScore: number | null;
+}
+
+export interface SkillPerformanceRecord {
+  skillKey: string;
+  responseCount: number;
+  attemptCount: number;
+  learnerCount: number;
+  correctCount: number;
+  incorrectCount: number;
+  requiresReviewCount: number;
+  successPercentage: number | null;
+  averageAwardedScore: number | null;
+}
+
 export interface AuditEventRecord {
   eventKey: string;
   actorType: string;
@@ -246,6 +368,30 @@ export interface CurriculumPublicationRecord {
   createdAt: string;
   publishedAt: string;
   contentHash: string;
+}
+
+export interface CurriculumDraftSaveResult {
+  id: string;
+  hubCode: string;
+  courseKey: string;
+  title: string;
+  lifecycleStatus: string;
+  revision: number;
+  basedOnPackageVersion: string | null;
+  updatedAt: string;
+}
+
+export interface CurrentCurriculumPackageRecord {
+  id: string;
+  hubCode: string;
+  courseKey: string;
+  packageVersion: string;
+  schemaVersion: string;
+  sourcePackageVersion: string;
+  status: string;
+  package: Record<string, unknown>;
+  contentHash: string;
+  publishedAt: string;
 }
 
 export interface HubRegistrationResult {
@@ -317,6 +463,13 @@ export interface AdminDataSnapshot {
   attempts: readonly AttemptRecord[];
   responses: readonly ResponseRecord[];
   activityPerformance: readonly ActivityPerformanceRecord[];
+  assessmentOverview: AssessmentOverviewRecord | null;
+  groupPerformance: readonly GroupPerformanceRecord[];
+  learnerPerformance: readonly LearnerPerformanceRecord[];
+  activityAnalytics: readonly ActivityAnalyticsRecord[];
+  questionPerformance: readonly QuestionPerformanceRecord[];
+  topicPerformance: readonly TopicPerformanceRecord[];
+  skillPerformance: readonly SkillPerformanceRecord[];
   dashboardSummary: DashboardSummaryRecord;
   auditEvents: readonly AuditEventRecord[];
   curriculumPublications: readonly CurriculumPublicationRecord[];
@@ -337,6 +490,13 @@ export interface AdminReadService {
   listAttempts(): Promise<readonly AttemptRecord[]>;
   listResponses(): Promise<readonly ResponseRecord[]>;
   listActivityPerformance(): Promise<readonly ActivityPerformanceRecord[]>;
+  getAssessmentOverview(): Promise<AssessmentOverviewRecord | null>;
+  listGroupPerformance(): Promise<readonly GroupPerformanceRecord[]>;
+  listLearnerPerformance(): Promise<readonly LearnerPerformanceRecord[]>;
+  listActivityAnalytics(): Promise<readonly ActivityAnalyticsRecord[]>;
+  listQuestionPerformance(): Promise<readonly QuestionPerformanceRecord[]>;
+  listTopicPerformance(): Promise<readonly TopicPerformanceRecord[]>;
+  listSkillPerformance(): Promise<readonly SkillPerformanceRecord[]>;
   getDashboardSummary(): Promise<DashboardSummaryRecord>;
   listAuditEvents(): Promise<readonly AuditEventRecord[]>;
   listCurriculumPublications(): Promise<readonly CurriculumPublicationRecord[]>;

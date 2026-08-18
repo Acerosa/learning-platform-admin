@@ -1,6 +1,9 @@
 import {
+  buildAssessmentOverview,
+  buildAssessmentReadiness,
   buildDiagnostics,
   buildFeedback,
+  buildInterventionSignals,
   buildMarkbook,
   buildReviewQueue,
   createActivitySummary,
@@ -12,6 +15,7 @@ import {
   interpretAttempt,
   mapStoredMarkingSource,
   summariseMarking,
+  summariseTrend,
 } from "@learning-platform/results";
 import type { AdminDataSnapshot, AttemptRecord, ResponseRecord } from "../api/admin-api";
 
@@ -225,4 +229,76 @@ export function formatEvidenceValue(value: unknown): string {
   if (typeof record.categoryId === "string") return record.categoryId;
   if (typeof record.artefactId === "string") return record.artefactId;
   return JSON.stringify(record);
+}
+
+export function assessmentOverviewFromSnapshot(data: AdminDataSnapshot) {
+  if (!data.assessmentOverview) return null;
+  return buildAssessmentOverview(data.assessmentOverview);
+}
+
+export function assessmentReadinessFromSnapshot(data: AdminDataSnapshot) {
+  const overview = data.assessmentOverview;
+  const learnersWithScores = data.learnerPerformance
+    .map((learner) => learner.latestScorePercentage)
+    .filter((value): value is number => value != null);
+  const trend = summariseTrend(learnersWithScores.slice(0, 2));
+  const linkedResponses = data.responses.filter((response) => response.topicKeys.length > 0).length;
+  const topicCoveragePercentage =
+    data.responses.length === 0
+      ? null
+      : Math.round((linkedResponses / data.responses.length) * 1000) / 10;
+
+  return buildAssessmentReadiness({
+    completionPercentage: overview?.completionPercentage ?? null,
+    averageScorePercentage:
+      overview?.averageScorePercentage ?? data.dashboardSummary.averageScorePercentage,
+    trend,
+    unresolvedReviewCount: overview?.requiresReviewCount ?? data.responses.filter((row) => row.requiresReview).length,
+    topicCoveragePercentage:
+      overview && overview.topicLinkCount === 0 ? null : topicCoveragePercentage,
+  });
+}
+
+export function interventionSignalsFromSnapshot(data: AdminDataSnapshot) {
+  return buildInterventionSignals({
+    assignedNeverAttempted: data.activityAnalytics.map((row) => ({
+      entityKey: `${row.groupCode}:${row.activityKey}`,
+      assignedCount: row.assignedLearnerCount,
+      attemptedCount: row.attemptedLearnerCount,
+    })),
+    repeatedAttemptsNoImprovement: data.learnerPerformance.map((row) => ({
+      entityKey: row.studentNumber,
+      attemptCount: row.attemptCount,
+      firstScore: row.firstScorePercentage,
+      latestScore: row.latestScorePercentage,
+    })),
+    lowCompletion: data.activityAnalytics.map((row) => ({
+      entityKey: `${row.groupCode}:${row.activityKey}`,
+      completionPercentage: row.completionPercentage,
+    })),
+    unresolvedReviewBacklog: data.groupPerformance.map((row) => ({
+      entityKey: row.groupCode,
+      requiresReviewCount: row.requiresReviewCount,
+    })),
+    repeatedLowTopicOrSkill: [
+      ...data.topicPerformance.map((row) => ({
+        entityType: "topic" as const,
+        entityKey: row.topicKey,
+        successPercentage: row.successPercentage,
+        attemptCount: row.responseCount,
+      })),
+      ...data.skillPerformance.map((row) => ({
+        entityType: "skill" as const,
+        entityKey: row.skillKey,
+        successPercentage: row.successPercentage,
+        attemptCount: row.responseCount,
+      })),
+    ],
+    decliningRecentResults: data.learnerPerformance
+      .filter((row) => row.firstScorePercentage != null && row.latestScorePercentage != null)
+      .map((row) => ({
+        entityKey: row.studentNumber,
+        trend: summariseTrend([row.latestScorePercentage!, row.firstScorePercentage!]),
+      })),
+  });
 }

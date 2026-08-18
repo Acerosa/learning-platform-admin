@@ -7,6 +7,16 @@ here.
 
 ### Added
 
+- Database-backed curriculum drafts with debounced autosave, Open published
+  content, Duplicate / Foundation / Challenge variants, and awaited Publish to
+  Platform. Teaching-content publication does not require a GitHub deploy.
+
+- Assessment & Analytics MVP: overview, group/learner/activity/question/topic-skill
+  panes, explainable readiness indicators, and deterministic Needs attention
+  signals. Consumes new `admin_api` analytics views and Results analytics helpers.
+
+### Added
+
 - Teacher review workflow in Results: open queue item, inspect evidence, award
   score, record feedback, confirm, and refresh markbook/queue without a full
   reload. Uses `admin_api.review_response`.

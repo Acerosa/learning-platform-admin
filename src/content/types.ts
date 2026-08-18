@@ -114,6 +114,8 @@ export interface AuthoringDraft {
   platformPublicationError: string | null;
   platformPublishedAt: string | null;
   platformPublicationId: string | null;
+  remoteRevision: number;
+  saveStatus?: "idle" | "unsaved" | "saving" | "saved" | "failed" | "offline";
   package: ContentPackage;
 }
 

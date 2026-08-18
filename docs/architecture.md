@@ -62,8 +62,9 @@ The portal supports three explicit modes:
 2. **Demo** — explicit development mode using synthetic fixtures.
 3. **Unavailable** — live configuration, authentication or reads failed.
 
-Analytics are supplied by backend aggregate views. Results / Markbook
-interpretation is supplied by `@learning-platform/results` from those views.
+Analytics are supplied by backend aggregate views. Results / Markbook and
+Assessment Analytics interpretation is supplied by `@learning-platform/results`
+from those views. Intervention signals stay deterministic and explainable.
 
 ## Administrative writes
 

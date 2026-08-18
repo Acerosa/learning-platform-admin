@@ -50,6 +50,7 @@ export function createDraft(
     schemaVersion: engine.SCHEMA_VERSION,
     basedOnVersionId: null,
     basedOnVersion: null,
+    remoteRevision: 0,
     ...idlePlatformPublication(),
     package: emptyPackage(hubId, hubName, courseKey),
   };
@@ -194,8 +195,28 @@ export function createWorkingCopy(published: AuthoringDraft, actor = "local-auth
     author: defaultActor(actor),
     basedOnVersionId: published.id,
     basedOnVersion: published.version,
+    remoteRevision: 0,
     ...idlePlatformPublication(),
     package: clonePackage(published.package),
+  };
+}
+
+export function createWorkingCopyFromPackage(
+  pkg: ContentPackage,
+  actor = "local-author",
+  basedOnVersion: string | null = null,
+): AuthoringDraft {
+  const created = createDraft(
+    String(pkg.hub.id),
+    String(pkg.hub.metadata.name || pkg.hub.id),
+    String(pkg.curriculum.metadata.course || "course"),
+    actor,
+  );
+  return {
+    ...created,
+    title: `${String(pkg.curriculum.metadata.title || pkg.hub.id)} working copy`,
+    basedOnVersion,
+    package: clonePackage(pkg),
   };
 }
 

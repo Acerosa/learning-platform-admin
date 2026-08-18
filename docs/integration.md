@@ -56,10 +56,23 @@ The documented administrative boundary is `admin_api` version 0.2.0.
 | Responses | `admin_api.responses` |
 | Dashboard counts | `admin_api.dashboard_summary` |
 | Activity analytics | `admin_api.activity_performance` |
+| Assessment overview | `admin_api.assessment_overview` |
+| Group performance | `admin_api.group_performance` |
+| Learner performance | `admin_api.learner_performance` |
+| Activity analytics (assignment-level) | `admin_api.activity_analytics` |
+| Question performance | `admin_api.question_performance` |
+| Topic performance | `admin_api.topic_performance` |
+| Skill performance | `admin_api.skill_performance` |
 | Curriculum publications | `admin_api.curriculum_publications` |
 | Hub registration | `admin_api.register_hub` |
 | Hub update | `admin_api.update_hub` |
 | Curriculum publication | `admin_api.publish_curriculum` |
+| Teacher review | `admin_api.review_response` |
+
+Assessment analytics views expose summary counts and percentages only. They do
+not return response payloads or answer keys. “Needs attention” signals are
+interpreted in `@learning-platform/results` from those aggregates and are never
+clinical/predictive risk scores.
 
 All views rely on backend RLS. The portal must use an authenticated staff session and the public browser credential only. A service-role key must never be placed in this application.
 

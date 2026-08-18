@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { ACTIVITY_DIFFICULTIES, activityDifficulty } from "../../content/activity-variants";
 import { authorableBlockTypes } from "../../content/engine";
 import { createActivity, createBlock, duplicateBlock, slugify } from "../../content/factories";
 import type { ContentActivity, ContentBlock } from "../../content/types";
@@ -9,11 +10,15 @@ export function ActivityComposer({
   activity,
   onCreate,
   onChange,
+  onDuplicate,
+  onCreateVariant,
 }: {
   existingIds: readonly string[];
   activity: ContentActivity | null;
   onCreate: (activity: ContentActivity) => void;
   onChange: (activity: ContentActivity) => void;
+  onDuplicate?: () => void;
+  onCreateVariant?: (difficulty: "foundation" | "standard" | "challenge") => void;
 }) {
   const [blockType, setBlockType] = useState("paragraph");
 
@@ -33,6 +38,7 @@ export function ActivityComposer({
       title,
       summary: String(data.get("summary") || ""),
       status: String(data.get("status") || "planned"),
+      difficulty: String(data.get("difficulty") || "standard") as "foundation" | "standard" | "challenge",
     }));
     event.currentTarget.reset();
   }
@@ -69,6 +75,14 @@ export function ActivityComposer({
               <option value="archived">archived</option>
             </select>
           </div>
+            <div>
+            <label htmlFor="activity-difficulty">difficulty</label>
+            <select id="activity-difficulty" name="difficulty" defaultValue="standard">
+              {ACTIVITY_DIFFICULTIES.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
           <div className="authoring-form__span">
             <label htmlFor="activity-title">title</label>
             <input id="activity-title" name="title" required />
@@ -87,8 +101,47 @@ export function ActivityComposer({
             <div>
               <p className="eyebrow">Composition</p>
               <h3 id="block-composer-title">{activity.metadata.title as string}</h3>
+              <p>
+                Difficulty: {activityDifficulty(activity)}
+                {activity.metadata.familyId ? <> · Family <code>{String(activity.metadata.familyId)}</code></> : null}
+              </p>
             </div>
             <code>{activity.id}</code>
+          </div>
+          <div className="toolbar">
+            <div>
+              <label htmlFor="edit-activity-title">Title</label>
+              <input
+                id="edit-activity-title"
+                value={String(activity.metadata.title || "")}
+                onChange={(event) => onChange({
+                  ...activity,
+                  metadata: { ...activity.metadata, title: event.target.value },
+                })}
+              />
+            </div>
+            <div>
+              <label htmlFor="edit-activity-difficulty">Difficulty</label>
+              <select
+                id="edit-activity-difficulty"
+                value={activityDifficulty(activity)}
+                onChange={(event) => onChange({
+                  ...activity,
+                  metadata: {
+                    ...activity.metadata,
+                    difficulty: event.target.value,
+                    familyId: activity.metadata.familyId || activity.id,
+                  },
+                })}
+              >
+                {ACTIVITY_DIFFICULTIES.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <button className="button button--secondary" type="button" onClick={onDuplicate}>Duplicate</button>
+            <button className="button button--secondary" type="button" onClick={() => onCreateVariant?.("foundation")}>Create Foundation</button>
+            <button className="button button--secondary" type="button" onClick={() => onCreateVariant?.("challenge")}>Create Challenge</button>
           </div>
           <div className="toolbar">
             <div>

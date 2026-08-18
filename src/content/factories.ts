@@ -219,6 +219,8 @@ export function createActivity(input: {
   summary?: string;
   learningOutcomes?: string[];
   assignment?: string;
+  difficulty?: "foundation" | "standard" | "challenge";
+  familyId?: string;
 }): ContentActivity {
   const engine = getContentEngine();
   return envelope(
@@ -229,6 +231,8 @@ export function createActivity(input: {
       status: input.status || "planned",
       summary: input.summary || "",
       href: null,
+      difficulty: input.difficulty || "standard",
+      familyId: input.familyId || input.id,
     },
     {
       learningOutcomes: input.learningOutcomes || [],
