@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { AdminDataSnapshot, HubRegistrationResult, PlatformPublicationResult, ReviewResponseRequest, ReviewResponseResult } from "../api/admin-api";
+import type { AdminDataSnapshot, HubRegistrationResult, PlatformPublicationResult, ReviewResponseRequest, ReviewResponseResult, CurriculumDraftSaveResult, CurrentCurriculumPackageRecord } from "../api/admin-api";
 import type { AuthoringDraft } from "../content/types";
 import type { HubRegistrationRequest } from "../content/hub-registration";
 import { registerDemoHub, updateDemoHub } from "../content/hub-registration";
@@ -30,6 +30,9 @@ import {
   createSupabaseAdminReadService,
   loadAdminData,
   publishCurriculum as publishCurriculumRpc,
+  saveCurriculumDraft as saveCurriculumDraftRpc,
+  loadCurrentCurriculumPackage as loadCurrentCurriculumPackageRpc,
+  discardCurriculumDraft as discardCurriculumDraftRpc,
   registerAdminAccount,
   registerHub as registerHubRpc,
   reviewResponse as reviewResponseRpc,
@@ -71,6 +74,9 @@ interface AdminPortalContextValue {
   registerHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   updateHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   publishCurriculum(record: AuthoringDraft): Promise<PlatformPublicationResult>;
+  saveCurriculumDraft(record: AuthoringDraft): Promise<CurriculumDraftSaveResult>;
+  loadCurrentCurriculumPackage(hubCode: string, courseKey: string): Promise<CurrentCurriculumPackageRecord>;
+  discardCurriculumDraft(draftId: string): Promise<void>;
   reviewResponse(request: ReviewResponseRequest): Promise<ReviewResponseResult>;
   signOut(): Promise<void>;
   retry(): Promise<void>;
@@ -395,6 +401,21 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     return result;
   }, [client]);
 
+  const saveCurriculumDraft = useCallback(async (record: AuthoringDraft) => {
+    if (!client) throw new AdminPublicationError("unavailable");
+    return saveCurriculumDraftRpc(client, record);
+  }, [client]);
+
+  const loadCurrentCurriculumPackage = useCallback(async (hubCode: string, courseKey: string) => {
+    if (!client) throw new AdminPublicationError("unavailable");
+    return loadCurrentCurriculumPackageRpc(client, hubCode, courseKey);
+  }, [client]);
+
+  const discardRemoteCurriculumDraft = useCallback(async (draftId: string) => {
+    if (!client) throw new AdminPublicationError("unavailable");
+    return discardCurriculumDraftRpc(client, draftId);
+  }, [client]);
+
   const reviewResponse = useCallback(async (request: ReviewResponseRequest) => {
     if (config.mode === "demo") {
       if (!state.data) throw new AdminReviewError("unavailable");
@@ -515,10 +536,13 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     registerHub,
     updateHub,
     publishCurriculum,
+    saveCurriculumDraft,
+    loadCurrentCurriculumPackage,
+    discardCurriculumDraft: discardRemoteCurriculumDraft,
     reviewResponse,
     signOut,
     retry: refresh,
-  }), [claimInitialAdmin, config, dataSource, publishCurriculum, refresh, registerHub, requestMagicLink, reviewResponse, signIn, signOut, signUp, state, updateHub]);
+  }), [claimInitialAdmin, config, dataSource, discardRemoteCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refresh, registerHub, requestMagicLink, reviewResponse, saveCurriculumDraft, signIn, signOut, signUp, state, updateHub]);
 
   return (
     <AdminPortalContext.Provider value={value}>

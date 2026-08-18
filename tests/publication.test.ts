@@ -290,3 +290,17 @@ test("an imported week graph can pass the publication gate and local publish", (
   assert.equal(args.p_package_version, "0.2.0");
   assert.equal(args.p_package.sessions[0].id, "week-2-session-1");
 });
+
+test("authoring drafts can be opened for Unit 3 and T Level without a Unit 14 filter", () => {
+  const unit3 = createDraft("unit-3-cyber-security", "Unit 3 Cyber Security Hub", "ocr-level-3-it", "Ada Author");
+  const tlevel = createDraft(
+    "tlevel-software-development",
+    "T Level Digital Software Development Hub",
+    "t-level-digital-software-development",
+    "Ada Author"
+  );
+  assert.equal(unit3.package.hub.id, "unit-3-cyber-security");
+  assert.equal(unit3.courseKey, "ocr-level-3-it");
+  assert.equal(tlevel.package.hub.id, "tlevel-software-development");
+  assert.equal(tlevel.courseKey, "t-level-digital-software-development");
+});

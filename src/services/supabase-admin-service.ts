@@ -1,8 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import type {
+  ActivityAnalyticsRecord,
   ActivityPerformanceRecord,
   AdminDataSnapshot,
   AdminReadService,
+  AssessmentOverviewRecord,
   AssignmentRecord,
   AttemptRecord,
   AuditEventRecord,
@@ -11,19 +13,26 @@ import type {
   CurriculumPublicationRecord,
   DashboardSummaryRecord,
   EnrolmentRecord,
+  GroupPerformanceRecord,
   GroupRecord,
   HealthRecord,
   HubCourseLinkRecord,
   HubLifecycle,
   HubRecord,
+  LearnerPerformanceRecord,
   LearnerRecord,
   PlatformContractRecord,
   HubRegistrationResult,
   PlatformPublicationResult,
+  CurriculumDraftSaveResult,
+  CurrentCurriculumPackageRecord,
+  QuestionPerformanceRecord,
   ResponseRecord,
   ReviewResponseRequest,
   ReviewResponseResult,
+  SkillPerformanceRecord,
   TeacherRecord,
+  TopicPerformanceRecord,
 } from "../api/admin-api";
 import type { HubRegistrationRequest } from "../content/hub-registration.ts";
 import { platformPublicationArgs } from "../content/platform-publication.ts";
@@ -110,6 +119,12 @@ const PUBLICATION_ERROR_MESSAGES: Record<string, string> = {
   COURSE_NOT_FOUND: "The selected course is not linked to that hub.",
   DUPLICATE_VERSION: "That version is already published with different content.",
   PUBLICATION_VERSION_REGRESSION: "The new version must be greater than the latest published version.",
+  PUBLICATION_NOT_FOUND: "No published curriculum exists for that hub and course.",
+  DRAFT_REVISION_CONFLICT: "This draft was saved elsewhere. Reload before overwriting.",
+  DRAFT_NOT_FOUND: "That curriculum draft could not be found.",
+  CURRICULUM_AUTHORING_NOT_AUTHORISED: "This account is not authorised to author curriculum.",
+  DRAFT_PAYLOAD_INVALID: "The draft payload is incomplete.",
+  DRAFT_STATUS_INVALID: "That draft status is not allowed.",
   PUBLISHED_CURRICULUM_IMMUTABLE: "Published platform records cannot be edited.",
   "publication-failed": "Curriculum could not be published to the platform.",
 };
@@ -410,6 +425,81 @@ export async function publishCurriculum(
     publishedAt: textValue(row.published_at),
     idempotent: booleanValue(row.idempotent),
   };
+}
+
+export async function saveCurriculumDraft(
+  client: AdminSupabaseClient,
+  record: AuthoringDraft,
+): Promise<CurriculumDraftSaveResult> {
+  const { data, error } = await client
+    .schema("admin_api")
+    .rpc("save_curriculum_draft", {
+      p_draft_id: record.id,
+      p_hub_code: record.hubId,
+      p_course_key: record.courseKey,
+      p_title: record.title,
+      p_lifecycle_status: record.status === "published" ? "approved" : record.status,
+      p_expected_revision: record.remoteRevision || 0,
+      p_package: record.package,
+      p_based_on_package_version: record.basedOnVersion,
+    });
+
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new AdminPublicationError(publicationErrorCode(error));
+  }
+  const row = data[0] as AdminRow;
+  return {
+    id: textValue(row.id),
+    hubCode: textValue(row.hub_code),
+    courseKey: textValue(row.course_key),
+    title: textValue(row.title),
+    lifecycleStatus: textValue(row.lifecycle_status),
+    revision: Number(row.revision || 0),
+    basedOnPackageVersion: row.based_on_package_version ? textValue(row.based_on_package_version) : null,
+    updatedAt: textValue(row.updated_at),
+  };
+}
+
+export async function loadCurrentCurriculumPackage(
+  client: AdminSupabaseClient,
+  hubCode: string,
+  courseKey: string,
+): Promise<CurrentCurriculumPackageRecord> {
+  const { data, error } = await client
+    .schema("admin_api")
+    .rpc("current_curriculum_package", {
+      p_hub_code: hubCode,
+      p_course_key: courseKey,
+    });
+
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new AdminPublicationError(publicationErrorCode(error));
+  }
+  const row = data[0] as AdminRow;
+  return {
+    id: textValue(row.id),
+    hubCode: textValue(row.hub_code),
+    courseKey: textValue(row.course_key),
+    packageVersion: textValue(row.package_version),
+    schemaVersion: textValue(row.schema_version),
+    sourcePackageVersion: textValue(row.source_package_version),
+    status: textValue(row.status),
+    package: (row.package && typeof row.package === "object" ? row.package : {}) as Record<string, unknown>,
+    contentHash: textValue(row.content_hash),
+    publishedAt: textValue(row.published_at),
+  };
+}
+
+export async function discardCurriculumDraft(
+  client: AdminSupabaseClient,
+  draftId: string,
+): Promise<void> {
+  const { error } = await client
+    .schema("admin_api")
+    .rpc("discard_curriculum_draft", { p_draft_id: draftId });
+  if (error) {
+    throw new AdminPublicationError(publicationErrorCode(error));
+  }
 }
 
 export async function reviewResponse(
@@ -714,6 +804,166 @@ export function createSupabaseAdminReadService(
       }));
     },
 
+    async getAssessmentOverview() {
+      const data = await rows(
+        "assessment_overview",
+        "active_learners,active_groups,attempt_count,completed_attempts,completion_percentage,average_score_percentage,requires_review_count,reviewed_response_count,assignment_count,participating_learner_count,topic_link_count,skill_link_count",
+      );
+      if (!data[0]) return null;
+      const row = data[0];
+      return Object.freeze({
+        activeLearners: numberValue(row.active_learners),
+        activeGroups: numberValue(row.active_groups),
+        attemptCount: numberValue(row.attempt_count),
+        completedAttempts: numberValue(row.completed_attempts),
+        completionPercentage: nullableNumber(row.completion_percentage),
+        averageScorePercentage: nullableNumber(row.average_score_percentage),
+        requiresReviewCount: numberValue(row.requires_review_count),
+        reviewedResponseCount: numberValue(row.reviewed_response_count),
+        assignmentCount: numberValue(row.assignment_count),
+        participatingLearnerCount: numberValue(row.participating_learner_count),
+        topicLinkCount: numberValue(row.topic_link_count),
+        skillLinkCount: numberValue(row.skill_link_count),
+      }) satisfies AssessmentOverviewRecord;
+    },
+
+    async listGroupPerformance() {
+      const data = await rows(
+        "group_performance",
+        "group_code,group_name,course_key,active_learner_count,participating_learner_count,completed_attempts,attempt_count,average_score_percentage,best_score_percentage,latest_score_percentage,requires_review_count,reviewed_response_count,assignment_count",
+        { column: "group_code" },
+      );
+      return data.map((row): GroupPerformanceRecord => ({
+        groupCode: textValue(row.group_code),
+        groupName: textValue(row.group_name),
+        courseKey: textValue(row.course_key),
+        activeLearnerCount: numberValue(row.active_learner_count),
+        participatingLearnerCount: numberValue(row.participating_learner_count),
+        completedAttempts: numberValue(row.completed_attempts),
+        attemptCount: numberValue(row.attempt_count),
+        averageScorePercentage: nullableNumber(row.average_score_percentage),
+        bestScorePercentage: nullableNumber(row.best_score_percentage),
+        latestScorePercentage: nullableNumber(row.latest_score_percentage),
+        requiresReviewCount: numberValue(row.requires_review_count),
+        reviewedResponseCount: numberValue(row.reviewed_response_count),
+        assignmentCount: numberValue(row.assignment_count),
+      }));
+    },
+
+    async listLearnerPerformance() {
+      const data = await rows(
+        "learner_performance",
+        "learner_id,student_number,display_name,group_codes,assigned_activity_count,completed_activity_count,attempt_count,completed_attempts,average_score_percentage,best_score_percentage,latest_score_percentage,first_score_percentage,requires_review_count,reviewed_response_count,latest_completed_at",
+        { column: "student_number" },
+      );
+      return data.map((row): LearnerPerformanceRecord => ({
+        learnerId: textValue(row.learner_id),
+        studentNumber: textValue(row.student_number),
+        displayName: textValue(row.display_name),
+        groupCodes: stringArray(row.group_codes),
+        assignedActivityCount: numberValue(row.assigned_activity_count),
+        completedActivityCount: numberValue(row.completed_activity_count),
+        attemptCount: numberValue(row.attempt_count),
+        completedAttempts: numberValue(row.completed_attempts),
+        averageScorePercentage: nullableNumber(row.average_score_percentage),
+        bestScorePercentage: nullableNumber(row.best_score_percentage),
+        latestScorePercentage: nullableNumber(row.latest_score_percentage),
+        firstScorePercentage: nullableNumber(row.first_score_percentage),
+        requiresReviewCount: numberValue(row.requires_review_count),
+        reviewedResponseCount: numberValue(row.reviewed_response_count),
+        latestCompletedAt: nullableText(row.latest_completed_at),
+      }));
+    },
+
+    async listActivityAnalytics() {
+      const data = await rows(
+        "activity_analytics",
+        "group_code,course_key,activity_key,activity_version,assigned_learner_count,attempted_learner_count,completed_learner_count,completion_percentage,attempt_count,completed_attempts,average_score_percentage,best_score_percentage,latest_score_percentage,requires_review_count,reviewed_response_count,latest_completed_at",
+        { column: "activity_key" },
+      );
+      return data.map((row): ActivityAnalyticsRecord => ({
+        groupCode: textValue(row.group_code),
+        courseKey: textValue(row.course_key),
+        activityKey: textValue(row.activity_key),
+        activityVersion: textValue(row.activity_version),
+        assignedLearnerCount: numberValue(row.assigned_learner_count),
+        attemptedLearnerCount: numberValue(row.attempted_learner_count),
+        completedLearnerCount: numberValue(row.completed_learner_count),
+        completionPercentage: nullableNumber(row.completion_percentage),
+        attemptCount: numberValue(row.attempt_count),
+        completedAttempts: numberValue(row.completed_attempts),
+        averageScorePercentage: nullableNumber(row.average_score_percentage),
+        bestScorePercentage: nullableNumber(row.best_score_percentage),
+        latestScorePercentage: nullableNumber(row.latest_score_percentage),
+        requiresReviewCount: numberValue(row.requires_review_count),
+        reviewedResponseCount: numberValue(row.reviewed_response_count),
+        latestCompletedAt: nullableText(row.latest_completed_at),
+      }));
+    },
+
+    async listQuestionPerformance() {
+      const data = await rows(
+        "question_performance",
+        "activity_key,activity_version,question_key,question_type,section_key,topic_keys,skill_keys,response_count,correct_count,incorrect_count,requires_review_count,reviewed_response_count,correctness_percentage,average_awarded_score,average_max_score",
+        { column: "question_key" },
+      );
+      return data.map((row): QuestionPerformanceRecord => ({
+        activityKey: textValue(row.activity_key),
+        activityVersion: textValue(row.activity_version),
+        questionKey: textValue(row.question_key),
+        questionType: textValue(row.question_type),
+        sectionKey: nullableText(row.section_key),
+        topicKeys: stringArray(row.topic_keys),
+        skillKeys: stringArray(row.skill_keys),
+        responseCount: numberValue(row.response_count),
+        correctCount: numberValue(row.correct_count),
+        incorrectCount: numberValue(row.incorrect_count),
+        requiresReviewCount: numberValue(row.requires_review_count),
+        reviewedResponseCount: numberValue(row.reviewed_response_count),
+        correctnessPercentage: nullableNumber(row.correctness_percentage),
+        averageAwardedScore: nullableNumber(row.average_awarded_score),
+        averageMaxScore: nullableNumber(row.average_max_score),
+      }));
+    },
+
+    async listTopicPerformance() {
+      const data = await rows(
+        "topic_performance",
+        "topic_key,response_count,attempt_count,learner_count,correct_count,incorrect_count,requires_review_count,success_percentage,average_awarded_score",
+        { column: "topic_key" },
+      );
+      return data.map((row): TopicPerformanceRecord => ({
+        topicKey: textValue(row.topic_key),
+        responseCount: numberValue(row.response_count),
+        attemptCount: numberValue(row.attempt_count),
+        learnerCount: numberValue(row.learner_count),
+        correctCount: numberValue(row.correct_count),
+        incorrectCount: numberValue(row.incorrect_count),
+        requiresReviewCount: numberValue(row.requires_review_count),
+        successPercentage: nullableNumber(row.success_percentage),
+        averageAwardedScore: nullableNumber(row.average_awarded_score),
+      }));
+    },
+
+    async listSkillPerformance() {
+      const data = await rows(
+        "skill_performance",
+        "skill_key,response_count,attempt_count,learner_count,correct_count,incorrect_count,requires_review_count,success_percentage,average_awarded_score",
+        { column: "skill_key" },
+      );
+      return data.map((row): SkillPerformanceRecord => ({
+        skillKey: textValue(row.skill_key),
+        responseCount: numberValue(row.response_count),
+        attemptCount: numberValue(row.attempt_count),
+        learnerCount: numberValue(row.learner_count),
+        correctCount: numberValue(row.correct_count),
+        incorrectCount: numberValue(row.incorrect_count),
+        requiresReviewCount: numberValue(row.requires_review_count),
+        successPercentage: nullableNumber(row.success_percentage),
+        averageAwardedScore: nullableNumber(row.average_awarded_score),
+      }));
+    },
+
     async getDashboardSummary() {
       const data = await rows(
         "dashboard_summary",
@@ -782,6 +1032,13 @@ export async function loadAdminData(
     attempts,
     responses,
     activityPerformance,
+    assessmentOverview,
+    groupPerformance,
+    learnerPerformance,
+    activityAnalytics,
+    questionPerformance,
+    topicPerformance,
+    skillPerformance,
     dashboardSummary,
     auditEvents,
     curriculumPublications,
@@ -799,6 +1056,13 @@ export async function loadAdminData(
     service.listAttempts(),
     service.listResponses(),
     service.listActivityPerformance(),
+    service.getAssessmentOverview(),
+    service.listGroupPerformance(),
+    service.listLearnerPerformance(),
+    service.listActivityAnalytics(),
+    service.listQuestionPerformance(),
+    service.listTopicPerformance(),
+    service.listSkillPerformance(),
     service.getDashboardSummary(),
     service.listAuditEvents(),
     service.listCurriculumPublications(),
@@ -818,6 +1082,13 @@ export async function loadAdminData(
     attempts,
     responses,
     activityPerformance,
+    assessmentOverview,
+    groupPerformance,
+    learnerPerformance,
+    activityAnalytics,
+    questionPerformance,
+    topicPerformance,
+    skillPerformance,
     dashboardSummary,
     auditEvents,
     curriculumPublications,

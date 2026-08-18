@@ -22,6 +22,7 @@ import { AdminHubRegistrationError } from "../services/supabase-admin-service";
 import { useAdminPortal } from "../stores/admin-portal";
 import { formatDate } from "../utils/format";
 import { CurriculumAuthoringPage } from "./curriculum-authoring";
+import { AnalyticsPage } from "./analytics";
 import { ResultsMarkbookPage } from "./results-markbook";
 
 function toneForStatus(status: string): BadgeTone {
@@ -258,10 +259,6 @@ function AttemptsPage({ data }: { data: AdminDataSnapshot }) {
   return <><PageHeader moduleId="attempts" /><section className="panel"><div className="panel__header"><div><p className="eyebrow">Summary evidence only</p><h2>Attempt history</h2></div><span className="count-chip">{data.attempts.length} records</span></div>{data.attempts.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Learner</th><th scope="col">Group</th><th scope="col">Activity</th><th scope="col">Attempt</th><th scope="col">Score</th><th scope="col">Marking</th><th scope="col">Evidence</th><th scope="col">Completed</th><th scope="col">Status</th></tr></thead><tbody>{data.attempts.map((attempt) => <tr key={attempt.attemptId}><th scope="row"><code>{attempt.learnerNumber}</code></th><td>{attempt.groupCode}</td><td><span className="table-primary">{attempt.activityKey}</span><small>{attempt.activityVersion}</small></td><td>{attempt.attemptNumber}</td><td>{scoreLabel(attempt.score, attempt.maxScore)}</td><td>{attempt.markingSource}</td><td>{attempt.evidenceLevel.replaceAll("_", " ")}</td><td>{formatDate(attempt.completedAt)}</td><td><StatusBadge label={attempt.status} tone={toneForStatus(attempt.status)} /></td></tr>)}</tbody></table></div> : <EmptyState title="No attempts" body="No summary-level attempt records are available." />}</section><section className="notice-card notice-card--info"><strong>Response payloads excluded</strong><p>This general list intentionally reads no learner response content.</p></section></>;
 }
 
-function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
-  return <><PageHeader moduleId="analytics" /><section className="metrics-grid" aria-label="Backend analytics summary"><MetricCard label="Completed attempts" value={String(data.dashboardSummary.completedAttempts)} detail="Backend aggregate" tone="positive" /><MetricCard label="Average score" value={percentageLabel(data.dashboardSummary.averageScorePercentage)} detail="Across completed attempts" tone="info" /><MetricCard label="Activity groups" value={String(data.activityPerformance.length)} detail="Grouped performance rows" tone="neutral" /></section><section className="panel"><div className="panel__header"><div><p className="eyebrow">Backend-derived aggregates</p><h2>Activity performance</h2></div></div>{data.activityPerformance.length ? <div className="table-wrap"><table><thead><tr><th scope="col">Activity</th><th scope="col">Group</th><th scope="col">Learners</th><th scope="col">Completed</th><th scope="col">Average</th><th scope="col">Best</th><th scope="col">Latest</th></tr></thead><tbody>{data.activityPerformance.map((row) => <tr key={`${row.groupCode}-${row.activityKey}-${row.activityVersion}`}><th scope="row"><span className="table-primary">{row.activityKey}</span><small>{row.activityVersion}</small></th><td>{row.groupCode}</td><td>{row.learnerCount}</td><td>{row.completedAttempts}</td><td>{percentageLabel(row.averageScorePercentage)}</td><td>{percentageLabel(row.bestScorePercentage)}</td><td>{formatDate(row.latestCompletedAt)}</td></tr>)}</tbody></table></div> : <EmptyState title="No completed attempts" body="The backend analytics view has no aggregate rows yet." />}</section></>;
-}
-
 function MonitoringPage({ data }: { data: AdminDataSnapshot }) {
   return <><PageHeader moduleId="monitoring" />{data.health.length ? <div className="card-grid card-grid--4">{data.health.map((health) => <article className="health-card" key={health.serviceKey}><div><span className={`health-dot health-dot--${health.status}`} aria-hidden="true" /><StatusBadge label={health.status} tone={toneForStatus(health.status)} /></div><h2>{health.label}</h2><p>{health.message}</p><small>{health.checkedAt ? `Checked ${formatDate(health.checkedAt)} · ${health.source}` : `No check available · ${health.source}`}</small></article>)}</div> : <section className="panel"><EmptyState title="No health signals" body="No safe health rows are available." /></section>}<section className="notice-card notice-card--info"><strong>Safe operational surface</strong><p>Only public status messages and validity timestamps are selected. Diagnostics, connection details and stack traces are excluded.</p></section></>;
 }
@@ -282,7 +279,7 @@ function AuditPage({ data }: { data: AdminDataSnapshot }) {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, publishCurriculum, registerHub, updateHub, reviewResponse } = useAdminPortal();
+  const { data, session, dataSource, publishCurriculum, saveCurriculumDraft, loadCurrentCurriculumPackage, registerHub, updateHub, reviewResponse } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
@@ -333,6 +330,14 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
         publications={data.curriculumPublications}
         platformAvailable={dataSource.mode === "live" && dataSource.state === "ready"}
         onPublishToPlatform={publishCurriculum}
+        onSaveDraft={saveCurriculumDraft}
+        onLoadPublishedPackage={async (hubCode, courseKey) => {
+          const published = await loadCurrentCurriculumPackage(hubCode, courseKey);
+          return {
+            packageVersion: published.packageVersion,
+            package: published.package as unknown as import("../content/types").ContentPackage,
+          };
+        }}
       />
     ); break;
     case "activities": content = <DeferredLearningPage moduleId="activities" openPending={openPending} />; break;

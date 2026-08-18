@@ -77,6 +77,7 @@ export function migrateRecord(raw: unknown): AuthoringDraft | null {
     platformPublicationError: value.platformPublicationError || null,
     platformPublishedAt: value.platformPublishedAt || null,
     platformPublicationId: value.platformPublicationId || null,
+    remoteRevision: Number.isInteger(value.remoteRevision) ? Number(value.remoteRevision) : 0,
     package: value.package,
   };
 }
@@ -145,6 +146,7 @@ export function duplicateDraft(draft: AuthoringDraft): AuthoringDraft {
     reviewDate: null,
     basedOnVersionId: null,
     basedOnVersion: null,
+    remoteRevision: 0,
     ...idlePlatformPublication(),
   };
 }

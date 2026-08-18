@@ -110,7 +110,7 @@ export function PublicationPanel({
           disabled={!canPublishToPlatform}
           onClick={onPublishToPlatform}
         >
-          Publish to Platform
+          {record.platformPublicationState === "publishing" ? "Publishing..." : "Publish to Platform"}
         </button>
       </div>
       {!gateOk ? <p role="status">Publication is blocked until validation succeeds with a supported schemaVersion and packageVersion.</p> : null}

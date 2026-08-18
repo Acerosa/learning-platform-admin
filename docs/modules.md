@@ -16,7 +16,7 @@ All modules are registered in `src/router/modules.ts`. Their routes and navigati
 | Assignments | Group/activity/version and availability context | Live read available |
 | Results | Group, learner, activity, attempt, evidence, review, feedback, markbook | Live reads + `@learning-platform/results` |
 | Attempts | Summary scores, status, marking/evidence metadata and timestamps | Live read; general list still excludes payloads |
-| Analytics | Backend-derived activity/group performance | Live aggregate available |
+| Analytics | Assessment overview, group/learner/activity/question/topic-skill analytics, readiness and Needs attention signals | Live aggregate available |
 | Monitoring | Safe public status messages and timestamps | Live read; external ingestion deferred |
 | Certification | Hub review matrix and review-history placeholder | Certification model pending |
 | Configuration | Versioned platform contracts | Live read available |

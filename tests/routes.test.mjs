@@ -77,5 +77,7 @@ test("attempt and analytics routes expose summary data without responses", async
   assert.match(attempts.html, /SYNTH-0001/);
   assert.doesNotMatch(attempts.html, /response_payload/i);
   assert.match(analytics.html, /Backend-derived aggregates/);
-  assert.match(analytics.html, /80\.0%/);
+  assert.match(analytics.html, /Assessment overview/);
+  assert.match(analytics.html, /70\.0%/);
+  assert.doesNotMatch(analytics.html, /response_payload/i);
 });

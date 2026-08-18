@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CurriculumPublicationRecord, HubCourseLinkRecord, HubRecord } from "../api/admin-api";
 import { ActivityComposer } from "../components/authoring/activity-composer";
 import { ArchivePanel } from "../components/authoring/archive-panel";
@@ -16,6 +16,8 @@ import { SessionForm } from "../components/authoring/session-form";
 import { VersionsPanel } from "../components/authoring/versions-panel";
 import { WeekForm } from "../components/authoring/week-form";
 import { StatusBadge } from "../components/status-badge";
+import { duplicateIndependentActivity, insertActivityVariant } from "../content/activity-variants";
+import { DRAFT_AUTOSAVE_MS, createSequenceGate } from "../content/async-authoring";
 import {
   createDraft,
   deleteDraft,
@@ -35,6 +37,7 @@ import {
   approveRecord,
   archiveVersion,
   createWorkingCopy,
+  createWorkingCopyFromPackage,
   replaceRecord,
   restoreAsDraft,
   returnToDraft,
@@ -103,6 +106,8 @@ export function CurriculumAuthoringPage({
   publications = [],
   platformAvailable = false,
   onPublishToPlatform,
+  onSaveDraft,
+  onLoadPublishedPackage,
 }: {
   hubs: readonly HubRecord[];
   links: readonly HubCourseLinkRecord[];
@@ -110,6 +115,8 @@ export function CurriculumAuthoringPage({
   publications?: readonly CurriculumPublicationRecord[];
   platformAvailable?: boolean;
   onPublishToPlatform?: (record: AuthoringDraft) => Promise<{ id: string; publishedAt: string; idempotent: boolean }>;
+  onSaveDraft?: (record: AuthoringDraft) => Promise<{ revision: number }>;
+  onLoadPublishedPackage?: (hubCode: string, courseKey: string) => Promise<{ package: ContentPackage; packageVersion: string }>;
 }) {
   const defaultHub = hubs[0];
   const defaultLink = links.find((link) => link.hubCode === defaultHub?.hubCode) || links[0];
@@ -131,6 +138,11 @@ export function CurriculumAuthoringPage({
   const [compareRight, setCompareRight] = useState("");
   const [publishVersionValue, setPublishVersionValue] = useState("0.1.0");
   const [publishNotes, setPublishNotes] = useState("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "unsaved" | "saving" | "saved" | "failed" | "offline">("idle");
+  const [loadStatus, setLoadStatus] = useState<"idle" | "loading" | "loaded" | "empty" | "error">("idle");
+  const saveGate = useRef(createSequenceGate());
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftRef = useRef(draft);
 
   useEffect(() => {
     const stored = loadDrafts();
@@ -148,6 +160,21 @@ export function CurriculumAuthoringPage({
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    function warn(event: BeforeUnloadEvent) {
+      if (saveStatus === "unsaved" || saveStatus === "saving" || saveStatus === "failed") {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [saveStatus]);
 
   const pkg = draft.package;
   const editable = isEditableStatus(draft.status);
@@ -173,12 +200,67 @@ export function CurriculumAuthoringPage({
     setMessage(error instanceof Error ? error.message : "The requested publication action could not be completed.");
   }
 
-  function commit(nextDraft: AuthoringDraft, nextRecords = saveDraft(drafts, nextDraft)) {
+  async function openPublished() {
+    if (!onLoadPublishedPackage) {
+      setLoadStatus("error");
+      setMessage("Opening published content requires a live administrator session.");
+      return;
+    }
+    setLoadStatus("loading");
+    try {
+      const published = await onLoadPublishedPackage(pkg.hub.id, String(pkg.curriculum.metadata.course || draft.courseKey));
+      const working = createWorkingCopyFromPackage(published.package, actor, published.packageVersion);
+      commit(working, saveDraft(drafts, working), false);
+      setSaveStatus("saved");
+      setLoadStatus("loaded");
+      setSelectedActivityId(working.package.activities[0]?.id || "");
+      setTab("activities");
+    } catch (error) {
+      setLoadStatus("error");
+      showError(error);
+    }
+  }
+
+  function commit(nextDraft: AuthoringDraft, nextRecords = saveDraft(drafts, nextDraft), markUnsaved = true) {
     setDraft(nextDraft);
     setDrafts(nextRecords);
     setPreviewId(nextDraft.id);
     setMessage("");
+    if (markUnsaved && hydrated && isEditableStatus(nextDraft.status)) {
+      setSaveStatus("unsaved");
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        void persistRemote(nextDraft);
+      }, DRAFT_AUTOSAVE_MS);
+    }
     return nextRecords;
+  }
+
+  async function persistRemote(nextDraft: AuthoringDraft, explicit = false) {
+    if (!onSaveDraft || !platformAvailable || !isEditableStatus(nextDraft.status)) {
+      setSaveStatus("saved");
+      return;
+    }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setSaveStatus("offline");
+      return;
+    }
+    const requestId = saveGate.current.next();
+    setSaveStatus("saving");
+    try {
+      const result = await onSaveDraft(nextDraft);
+      if (!saveGate.current.isCurrent(requestId)) return;
+      const latest = draftRef.current.id === nextDraft.id
+        ? { ...draftRef.current, remoteRevision: result.revision }
+        : { ...nextDraft, remoteRevision: result.revision };
+      setDraft(latest);
+      setDrafts(saveDraft(drafts, latest));
+      setSaveStatus("saved");
+    } catch (error) {
+      if (!saveGate.current.isCurrent(requestId) && !explicit) return;
+      setSaveStatus("failed");
+      if (explicit) showError(error);
+    }
   }
 
   function updatePackage(nextPkg: ContentPackage) {
@@ -251,6 +333,9 @@ export function CurriculumAuthoringPage({
       </header>
 
       <LifecycleBanner record={draft} />
+      <p role="status">Draft save: {saveStatus === "idle" ? "Saved" : saveStatus === "unsaved" ? "Unsaved changes" : saveStatus === "saving" ? "Saving..." : saveStatus === "failed" ? "Save failed" : saveStatus === "offline" ? "Offline — changes not yet saved" : "Saved"}</p>
+      {loadStatus === "loading" ? <p role="status">Loading published curriculum...</p> : null}
+      {loadStatus === "error" ? <p className="authoring-alert" role="alert">Published curriculum could not be loaded. <button type="button" className="button button--small button--secondary" onClick={() => void openPublished()}>Retry</button></p> : null}
       {message ? <p className="authoring-alert" role="alert">{message}</p> : null}
 
       <section className="panel">
@@ -319,6 +404,8 @@ export function CurriculumAuthoringPage({
                 }
               }}>Mark ready for review</button>
               <button className="button button--secondary" type="button" onClick={() => downloadText(`${pkg.hub.id}-package.json`, exportPackage(pkg))}>Export package</button>
+              <button className="button button--secondary" type="button" disabled={!editable} onClick={() => void persistRemote(draft, true)}>Save draft</button>
+              <button className="button button--secondary" type="button" disabled={!platformAvailable} onClick={() => void openPublished()}>Open published content</button>
               <button className="button button--secondary" type="button" disabled={!pkg.activities.length} onClick={() => downloadText(`${selectedActivity?.id || "activity"}.json`, exportActivityPackage(pkg, selectedActivity?.id))}>Export activity package</button>
             </div>
             <DiagnosticsList issues={validation.issues} />
@@ -395,6 +482,28 @@ export function CurriculumAuthoringPage({
                   activities: pkg.activities.map((item) => item.id === activity.id ? activity : item),
                 });
               }}
+              onDuplicate={() => {
+                try {
+                  const sourceId = selectedActivity?.id || pkg.activities[0]?.id;
+                  if (!sourceId) return;
+                  const next = duplicateIndependentActivity(pkg, sourceId);
+                  updatePackage(next);
+                  setSelectedActivityId(next.activities.at(-1)?.id || sourceId);
+                } catch (error) {
+                  showError(error);
+                }
+              }}
+              onCreateVariant={(difficulty) => {
+                try {
+                  const sourceId = selectedActivity?.id || pkg.activities[0]?.id;
+                  if (!sourceId) return;
+                  const next = insertActivityVariant(pkg, sourceId, difficulty);
+                  updatePackage(next);
+                  setSelectedActivityId(next.activities.at(-1)?.id || sourceId);
+                } catch (error) {
+                  showError(error);
+                }
+              }}
             />
           </fieldset>
         ) : null}
@@ -408,14 +517,14 @@ export function CurriculumAuthoringPage({
 
         {tab === "drafts" ? (
           <section className="panel">
-            <h2>Local drafts</h2>
-            <p>These records are browser storage only. They are not backend curriculum and are never sent to learner hubs.</p>
+            <h2>Local and platform drafts</h2>
+            <p>Browser copies remain available offline. Live mode also autosaves drafts to Supabase. Learners never see drafts.</p>
             <div className="toolbar">
               <button className="button button--primary" type="button" onClick={() => {
                 const next = createDraft(pkg.hub.id, String(pkg.hub.metadata.name || pkg.hub.id), String(pkg.curriculum.metadata.course || "course"), actor);
                 commit(next);
               }}>New draft</button>
-              <button className="button button--secondary" type="button" onClick={() => commit(draft)}>Save draft</button>
+              <button className="button button--primary" type="button" onClick={() => commit(draft)}>Save draft locally</button>
             </div>
             {drafts.length ? (
               <ul className="authoring-list">
@@ -547,8 +656,8 @@ export function CurriculumAuthoringPage({
                   }));
                   setMessage(
                     result.idempotent
-                      ? "This snapshot is already on the platform. Learner hubs were not updated."
-                      : "Published to the platform. Learner hubs were not updated.",
+                      ? "This snapshot is already the active platform publication."
+                      : "Published to the platform. Learner hubs load this version from Supabase without a GitHub deployment.",
                   );
                 } catch (error) {
                   commit(withPlatformPublication(publishing, {

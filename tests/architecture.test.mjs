@@ -34,7 +34,7 @@ test("module registry has 17 unique hub-agnostic modules", async () => {
 
 test("admin API names match the documented backend surface", async () => {
   const source = await readFile(new URL("src/api/admin-api.ts", root), "utf8");
-  for (const view of ["current_staff_context", "hubs", "hub_course_links", "courses", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "responses", "dashboard_summary", "activity_performance", "curriculum_publications"]) {
+  for (const view of ["current_staff_context", "hubs", "hub_course_links", "courses", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "responses", "dashboard_summary", "activity_performance", "assessment_overview", "group_performance", "learner_performance", "activity_analytics", "question_performance", "topic_performance", "skill_performance", "curriculum_publications", "curriculum_drafts"]) {
     assert.match(source, new RegExp(`admin_api\\.${view}`));
   }
   assert.match(source, /status: "draft"/);
@@ -109,9 +109,10 @@ test("curriculum authoring keeps updateCurriculum pending and isolates the publi
   ]);
   assert.match(mutations, /updateCurriculum: pending/);
   assert.match(service, /\.rpc\("publish_curriculum"/);
+  assert.match(service, /\.rpc\("save_curriculum_draft"/);
+  assert.match(service, /\.rpc\("current_curriculum_package"/);
   assert.match(service, /"register_hub"/);
   assert.match(service, /"update_hub"/);
-  assert.doesNotMatch(service, /\.rpc\("(?:create_|save_)/);
   assert.doesNotMatch(authoring, /schema\("(?:learning|platform)"\)|\.rpc\(/);
-  assert.match(authoring, /local drafts/i);
+  assert.match(authoring, /drafts/i);
 });
