@@ -176,6 +176,7 @@ export function RegisterHubDialog({
                 id="hub-manifest-json"
                 rows={8}
                 value={manifestText}
+                placeholder="Paste learning-platform-hub.json here"
                 onChange={(event) => {
                   setManifestText(event.target.value);
                   setImported(false);

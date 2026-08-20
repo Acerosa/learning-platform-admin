@@ -101,6 +101,19 @@ test("hub registry uses the real registration dialog rather than the pending pla
   assert.doesNotMatch(source, /openPending\(\{ title: "Deactivate hub"/);
 });
 
+test("register hub dialog keeps a visible manifest paste textarea", async () => {
+  const [dialog, css] = await Promise.all([
+    readFile(new URL("src/components/register-hub-dialog.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+  assert.match(dialog, /id="hub-manifest-json"/);
+  assert.match(dialog, /Paste learning-platform-hub\.json here/);
+  assert.match(css, /\.dialog-section > textarea/);
+  assert.match(css, /min-height: 10rem/);
+  assert.match(css, /background: var\(--admin-canvas\)/);
+  assert.match(css, /field-sizing: fixed/);
+});
+
 test("curriculum authoring keeps updateCurriculum pending and isolates the publication RPC", async () => {
   const [mutations, service, authoring] = await Promise.all([
     readFile(new URL("src/services/pending-admin-mutations.ts", root), "utf8"),
