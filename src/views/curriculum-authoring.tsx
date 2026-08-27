@@ -16,7 +16,7 @@ import { AuthoringAreaLinks } from "../components/authoring-area-links";
 import { SessionForm } from "../components/authoring/session-form";
 import { VersionsPanel } from "../components/authoring/versions-panel";
 import { WeekForm } from "../components/authoring/week-form";
-import { StatusBadge } from "../components/status-badge";
+import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import { duplicateIndependentActivity, insertActivityVariant } from "../content/activity-variants";
 import { DRAFT_AUTOSAVE_MS, createSequenceGate } from "../content/async-authoring";
 import {
@@ -34,6 +34,15 @@ import { isEditableStatus, LIFECYCLE_LABELS } from "../content/lifecycle";
 import { publicationGate } from "../content/publication-gate";
 import type { AuthoringDraft, ContentActivity, ContentDocument, ContentPackage } from "../content/types";
 import { previewActivityHtml, previewWeekHtml, validatePackage } from "../content/validate";
+import {
+  canPostWeek,
+  canRemoveWeek,
+  postWeek,
+  removeWeek,
+  REMOVE_WEEK_CONFIRM,
+  weekContentStatus,
+  WEEK_VISIBILITY_PUBLISH_REMINDER,
+} from "../content/week-availability";
 import {
   approveRecord,
   archiveVersion,
@@ -99,6 +108,12 @@ function applySession(pkg: ContentPackage, session: ContentDocument) {
     };
   }
   return syncCurriculumLists(next);
+}
+
+function weekStatusTone(status: string): BadgeTone {
+  if (status === "available") return "positive";
+  if (status === "archived") return "neutral";
+  return "warning";
 }
 
 export function CurriculumAuthoringPage({
@@ -473,17 +488,46 @@ export function CurriculumAuthoringPage({
             ) : null}
             <section className="panel">
               <h2>Weeks</h2>
+              <p className="field-hint">Post week sets status to available. Remove week sets status to planned and keeps the week, sessions, and activities. Learners see changes only after Publish to Platform.</p>
               {pkg.weeks.length ? (
                 <ul className="authoring-list">
-                  {pkg.weeks.map((week) => (
-                    <li key={week.id}>
-                      <strong>{String(week.metadata.title)}</strong>
-                      <code>{week.id}</code>
-                      <span>Week {String(week.metadata.teachingWeek)}</span>
-                      <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(week.id)}>Edit</button>
-                      <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${week.id}.json`, exportDocument(week))}>Export</button>
-                    </li>
-                  ))}
+                  {pkg.weeks.map((week) => {
+                    const status = weekContentStatus(week);
+                    return (
+                      <li key={week.id}>
+                        <strong>{String(week.metadata.title)}</strong>
+                        <code>{week.id}</code>
+                        <span>Week {String(week.metadata.teachingWeek)}</span>
+                        <StatusBadge label={status} tone={weekStatusTone(status)} />
+                        <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(week.id)}>Edit</button>
+                        <button
+                          className="button button--small button--primary"
+                          type="button"
+                          disabled={!editable || !canPostWeek(week)}
+                          onClick={() => {
+                            if (!window.confirm(`Post “${String(week.metadata.title)}” as available?`)) return;
+                            updatePackage(postWeek(pkg, week.id));
+                            setMessage(WEEK_VISIBILITY_PUBLISH_REMINDER);
+                          }}
+                        >
+                          Post week
+                        </button>
+                        <button
+                          className="button button--small button--secondary"
+                          type="button"
+                          disabled={!editable || !canRemoveWeek(week)}
+                          onClick={() => {
+                            if (!window.confirm(REMOVE_WEEK_CONFIRM)) return;
+                            updatePackage(removeWeek(pkg, week.id));
+                            setMessage(WEEK_VISIBILITY_PUBLISH_REMINDER);
+                          }}
+                        >
+                          Remove week
+                        </button>
+                        <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${week.id}.json`, exportDocument(week))}>Export</button>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : <p>No weeks in this draft.</p>}
             </section>

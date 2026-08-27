@@ -9,6 +9,7 @@ import type { ContentBlock } from "../src/content/types.ts";
 import { containsUnsafeMarkup, sanitizeImportedText, sanitizeObject } from "../src/content/sanitize.ts";
 import { previewActivityHtml, previewWeekHtml, validateDocument, validatePackage } from "../src/content/validate.ts";
 import { getContentEngine } from "../src/content/engine.ts";
+import { canPostWeek, canRemoveWeek, postWeek, removeWeek, WEEK_VISIBILITY_PUBLISH_REMINDER } from "../src/content/week-availability.ts";
 
 test("week session and activity factories emit canonical envelopes", () => {
   const week = createWeek({ id: "week-20", teachingWeek: 20, title: "Synthetic week", learningOutcomes: [] });
@@ -284,4 +285,47 @@ test("complete week graph imports merge validates and previews", () => {
   assert.match(html, /Directed independent study/);
   assert.match(html, /Activity A/);
   assert.doesNotMatch(html, /<script/i);
+});
+
+test("post week and remove week update package week status without deleting content", () => {
+  const pkg = emptyPackage("authoring-hub", "Authoring hub", "ocr-level-3-it");
+  const week = createWeek({
+    id: "week-7",
+    teachingWeek: 7,
+    title: "Visibility week",
+    status: "planned",
+    learningOutcomes: ["LO1"],
+    sessions: ["week-7-session"],
+  });
+  const session = createSession({
+    id: "week-7-session",
+    title: "Session",
+    kind: "session",
+    weekId: "week-7",
+    activities: ["week-7-activity"],
+  });
+  const activity = createActivity({ id: "week-7-activity", title: "Activity", status: "available" });
+  pkg.weeks.push(week);
+  pkg.sessions.push(session);
+  pkg.activities.push(activity);
+
+  const posted = postWeek(pkg, "week-7");
+  assert.equal(posted.weeks.length, 1);
+  assert.equal(posted.weeks[0].metadata.status, "available");
+  assert.equal(posted.sessions.length, 1);
+  assert.equal(posted.activities.length, 1);
+  assert.deepEqual(posted.weeks[0].relationships.sessions, ["week-7-session"]);
+  assert.equal(canPostWeek(posted.weeks[0]), false);
+  assert.equal(canRemoveWeek(posted.weeks[0]), true);
+
+  const removed = removeWeek(posted, "week-7");
+  assert.equal(removed.weeks.length, 1);
+  assert.equal(removed.weeks[0].id, "week-7");
+  assert.equal(removed.weeks[0].metadata.status, "planned");
+  assert.equal(removed.sessions.some((item) => item.id === "week-7-session"), true);
+  assert.equal(removed.activities.some((item) => item.id === "week-7-activity"), true);
+  assert.equal(canPostWeek(removed.weeks[0]), true);
+  assert.equal(canRemoveWeek(removed.weeks[0]), false);
+  assert.equal(WEEK_VISIBILITY_PUBLISH_REMINDER, "Publish to Platform for learners to see this.");
+  assert.deepEqual([...getContentEngine().STATUSES], ["planned", "available", "archived"]);
 });

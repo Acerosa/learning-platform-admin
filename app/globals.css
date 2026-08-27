@@ -1890,6 +1890,12 @@ tbody tr:hover {
   color: var(--admin-muted);
   font-size: 0.82rem;
 }
+.field-hint {
+  margin: 0.35rem 0 0;
+  color: var(--admin-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
 .authoring-banner,
 .authoring-alert {
   display: flex;
