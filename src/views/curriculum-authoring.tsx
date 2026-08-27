@@ -308,11 +308,19 @@ export function CurriculumAuthoringPage({
     try {
       const published = await onLoadPublishedPackage(pkg.hub.id, String(pkg.curriculum.metadata.course || draft.courseKey));
       const working = createWorkingCopyFromPackage(published.package, actor, published.packageVersion);
+      const weekCount = working.package.weeks.length;
       commit(working, saveDraft(drafts, working), false);
       setSaveStatus("saved");
       setLoadStatus("loaded");
       setSelectedActivityId(working.package.activities[0]?.id || "");
-      setTab("activities");
+      setVisibilityWeekId(working.package.weeks[0]?.id || "");
+      setPublishVersionValue(suggestNextVersion(saveDraft(drafts, working), working.hubId, working.courseKey));
+      setTab("weeks");
+      setMessage(
+        weekCount
+          ? `Opened published ${published.packageVersion}: ${weekCount} week${weekCount === 1 ? "" : "s"} ready on Weeks (Post week & publish).`
+          : `Opened published ${published.packageVersion}, but this package has no weeks.`,
+      );
     } catch (error) {
       setLoadStatus("error");
       showError(error);
@@ -457,6 +465,12 @@ export function CurriculumAuthoringPage({
     const hub = hubs.find((item) => item.hubCode === hubCode);
     const link = links.find((item) => item.hubCode === hubCode);
     const courseKey = link?.courseKey || draft.courseKey;
+    if (!editable) {
+      const next = createDraft(hubCode, hub?.hubName || hubCode, courseKey, actor);
+      commit(next);
+      setMessage(`Switched to ${hub?.hubName || hubCode}. Use Open published content to load the live package.`);
+      return;
+    }
     const curriculumId = `${hubCode}-curriculum`;
     updatePackage({
       ...pkg,
@@ -526,7 +540,7 @@ export function CurriculumAuthoringPage({
         <div className="toolbar">
           <div>
             <label htmlFor="authoring-hub">Hub context</label>
-            <select id="authoring-hub" value={pkg.hub.id} disabled={!editable} onChange={(event) => setHubContext(event.target.value)}>
+            <select id="authoring-hub" value={pkg.hub.id} onChange={(event) => setHubContext(event.target.value)}>
               {(hubs.length ? hubs : [{ hubCode: pkg.hub.id, hubName: String(pkg.hub.metadata.name || pkg.hub.id) } as HubRecord]).map((hub) => (
                 <option key={hub.hubCode} value={hub.hubCode}>{hub.hubName}</option>
               ))}
@@ -605,6 +619,19 @@ export function CurriculumAuthoringPage({
                 Remove week &amp; publish sets status to planned (keeps the week, sessions, and activities) and publishes.
                 Requires a live administrator session.
               </p>
+              <div className="toolbar week-visibility-toolbar">
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={!platformAvailable || visibilityPublishBusy}
+                  onClick={() => void openPublished()}
+                >
+                  Open published content
+                </button>
+                <span className="field-hint" role="status">
+                  Choose the hub above, then open the live published package to fill this week list.
+                </span>
+              </div>
               {weekVisibilityRecoveryAction(draft) === "working-copy" ? (
                 <div className="toolbar week-visibility-toolbar">
                   <p className="field-hint" role="status">{weekVisibilityNextSteps(draft)}</p>
