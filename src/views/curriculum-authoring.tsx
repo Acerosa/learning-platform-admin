@@ -34,6 +34,7 @@ import { isEditableStatus, LIFECYCLE_LABELS } from "../content/lifecycle";
 import {
   afterPlatformPublishGuidance,
   weekVisibilityNextSteps,
+  weekVisibilityRecoveryAction,
 } from "../content/publication-guidance";
 import { publicationGate } from "../content/publication-gate";
 import type { AuthoringDraft, ContentActivity, ContentDocument, ContentPackage } from "../content/types";
@@ -418,7 +419,19 @@ export function CurriculumAuthoringPage({
       </header>
 
       <AuthoringAreaLinks current="curriculum" />
-      <LifecycleBanner record={draft} onCreateWorkingCopy={() => openWorkingCopyFromPublished()} />
+      <LifecycleBanner
+        record={draft}
+        onCreateWorkingCopy={() => openWorkingCopyFromPublished()}
+        onReturnToDraft={() => {
+          try {
+            applyRecord(returnToDraft(draft));
+            setTab("weeks");
+            setMessage("Returned to Draft. Post/Remove weeks here, then Approve → Publish immutable → Publish to Platform.");
+          } catch (error) {
+            showError(error);
+          }
+        }}
+      />
       <p role="status">Draft save: {saveStatus === "idle" ? "Saved" : saveStatus === "unsaved" ? "Unsaved changes" : saveStatus === "saving" ? "Saving..." : saveStatus === "failed" ? "Save failed" : saveStatus === "offline" ? "Offline — changes not yet saved" : "Saved"}</p>
       {remoteDraftStatus === "loading" ? <p role="status">Loading remote curriculum draft...</p> : null}
       {loadStatus === "loading" ? <p role="status">Loading published curriculum...</p> : null}
@@ -501,26 +514,11 @@ export function CurriculumAuthoringPage({
         ) : null}
 
         {tab === "weeks" ? (
-          <fieldset className="authoring-fieldset" disabled={!editable}>
-            <legend className="sr-only">Week editors</legend>
-            <WeekForm
-              key={editingWeekId || "create-week"}
-              existingIds={pkg.weeks.map((item) => item.id)}
-              existing={pkg.weeks.find((item) => item.id === editingWeekId) || null}
-              onCreate={(week) => {
-                updatePackage(applyWeek(pkg, week));
-                setEditingWeekId(null);
-              }}
-            />
-            {editingWeekId ? (
-              <p>
-                <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(null)}>Cancel week edit</button>
-              </p>
-            ) : null}
+          <>
             <section className="panel">
-              <h2>Weeks</h2>
+              <h2>Week visibility</h2>
               <p className="field-hint">Post week sets status to available. Remove week sets status to planned and keeps the week, sessions, and activities. Learners see changes only after Publish to Platform (new immutable version each time).</p>
-              {!editable ? (
+              {weekVisibilityRecoveryAction(draft) === "working-copy" ? (
                 <div className="toolbar week-visibility-toolbar">
                   <p className="field-hint" role="status">{weekVisibilityNextSteps(draft)}</p>
                   <button className="button button--primary" type="button" onClick={() => openWorkingCopyFromPublished()}>
@@ -528,70 +526,106 @@ export function CurriculumAuthoringPage({
                   </button>
                 </div>
               ) : null}
+              {weekVisibilityRecoveryAction(draft) === "return-to-draft" ? (
+                <div className="toolbar week-visibility-toolbar">
+                  <p className="field-hint" role="status">{weekVisibilityNextSteps(draft)}</p>
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    onClick={() => {
+                      try {
+                        applyRecord(returnToDraft(draft));
+                        setMessage("Returned to Draft. You can Post or Remove weeks now.");
+                      } catch (error) {
+                        showError(error);
+                      }
+                    }}
+                  >
+                    Return to Draft
+                  </button>
+                </div>
+              ) : null}
               {orderedWeeks.length ? (
-                <>
-                  <div className="toolbar week-visibility-toolbar">
-                    <div>
-                      <label htmlFor="week-visibility-select">Week</label>
-                      <select
-                        id="week-visibility-select"
-                        value={selectedVisibilityWeek?.id || ""}
-                        disabled={!editable}
-                        onChange={(event) => setVisibilityWeekId(event.target.value)}
-                      >
-                        {orderedWeeks.map((week) => (
-                          <option key={week.id} value={week.id}>{weekVisibilityOptionLabel(week)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <button
-                      className="button button--primary"
-                      type="button"
-                      disabled={!editable || !selectedVisibilityWeek || !canPostWeek(selectedVisibilityWeek)}
-                      onClick={() => {
-                        if (!selectedVisibilityWeek) return;
-                        if (!window.confirm(`Post “${String(selectedVisibilityWeek.metadata.title)}” as available?`)) return;
-                        updatePackage(postWeek(pkg, selectedVisibilityWeek.id));
-                        setVisibilityWeekId(selectedVisibilityWeek.id);
-                        setMessage(weekVisibilityNextSteps(draft));
-                      }}
+                <div className="toolbar week-visibility-toolbar">
+                  <div>
+                    <label htmlFor="week-visibility-select">Week</label>
+                    <select
+                      id="week-visibility-select"
+                      value={selectedVisibilityWeek?.id || ""}
+                      disabled={!editable}
+                      onChange={(event) => setVisibilityWeekId(event.target.value)}
                     >
-                      Post week
-                    </button>
-                    <button
-                      className="button button--secondary"
-                      type="button"
-                      disabled={!editable || !selectedVisibilityWeek || !canRemoveWeek(selectedVisibilityWeek)}
-                      onClick={() => {
-                        if (!selectedVisibilityWeek) return;
-                        if (!window.confirm(REMOVE_WEEK_CONFIRM)) return;
-                        updatePackage(removeWeek(pkg, selectedVisibilityWeek.id));
-                        setVisibilityWeekId(selectedVisibilityWeek.id);
-                        setMessage(weekVisibilityNextSteps(draft));
-                      }}
-                    >
-                      Remove week
-                    </button>
+                      {orderedWeeks.map((week) => (
+                        <option key={week.id} value={week.id}>{weekVisibilityOptionLabel(week)}</option>
+                      ))}
+                    </select>
                   </div>
-                  <ul className="authoring-list">
-                    {orderedWeeks.map((week) => {
-                      const status = weekContentStatus(week);
-                      return (
-                        <li key={week.id}>
-                          <strong>{String(week.metadata.title)}</strong>
-                          <code>{week.id}</code>
-                          <span>Week {String(week.metadata.teachingWeek)}</span>
-                          <StatusBadge label={status} tone={weekStatusTone(status)} />
-                          <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(week.id)}>Edit</button>
-                          <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${week.id}.json`, exportDocument(week))}>Export</button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </>
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    disabled={!editable || !selectedVisibilityWeek || !canPostWeek(selectedVisibilityWeek)}
+                    onClick={() => {
+                      if (!selectedVisibilityWeek) return;
+                      if (!window.confirm(`Post “${String(selectedVisibilityWeek.metadata.title)}” as available?`)) return;
+                      updatePackage(postWeek(pkg, selectedVisibilityWeek.id));
+                      setVisibilityWeekId(selectedVisibilityWeek.id);
+                      setMessage(weekVisibilityNextSteps(draft));
+                    }}
+                  >
+                    Post week
+                  </button>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    disabled={!editable || !selectedVisibilityWeek || !canRemoveWeek(selectedVisibilityWeek)}
+                    onClick={() => {
+                      if (!selectedVisibilityWeek) return;
+                      if (!window.confirm(REMOVE_WEEK_CONFIRM)) return;
+                      updatePackage(removeWeek(pkg, selectedVisibilityWeek.id));
+                      setVisibilityWeekId(selectedVisibilityWeek.id);
+                      setMessage(weekVisibilityNextSteps(draft));
+                    }}
+                  >
+                    Remove week
+                  </button>
+                </div>
               ) : <p>No weeks in this draft.</p>}
+              {orderedWeeks.length ? (
+                <ul className="authoring-list">
+                  {orderedWeeks.map((week) => {
+                    const status = weekContentStatus(week);
+                    return (
+                      <li key={week.id}>
+                        <strong>{String(week.metadata.title)}</strong>
+                        <code>{week.id}</code>
+                        <span>Week {String(week.metadata.teachingWeek)}</span>
+                        <StatusBadge label={status} tone={weekStatusTone(status)} />
+                        <button className="button button--small button--secondary" type="button" disabled={!editable} onClick={() => setEditingWeekId(week.id)}>Edit</button>
+                        <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${week.id}.json`, exportDocument(week))}>Export</button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
             </section>
-          </fieldset>
+            <fieldset className="authoring-fieldset" disabled={!editable}>
+              <legend className="sr-only">Week editors</legend>
+              <WeekForm
+                key={editingWeekId || "create-week"}
+                existingIds={pkg.weeks.map((item) => item.id)}
+                existing={pkg.weeks.find((item) => item.id === editingWeekId) || null}
+                onCreate={(week) => {
+                  updatePackage(applyWeek(pkg, week));
+                  setEditingWeekId(null);
+                }}
+              />
+              {editingWeekId ? (
+                <p>
+                  <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(null)}>Cancel week edit</button>
+                </p>
+              ) : null}
+            </fieldset>
+          </>
         ) : null}
 
         {tab === "sessions" ? (

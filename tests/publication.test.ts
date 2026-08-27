@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { comparePackages, hasStructuredChanges } from "../src/content/compare.ts";
 import { migrateRecord } from "../src/content/draft-store.ts";
-import { canPublishToPlatform, platformPublishBlockedReason, weekVisibilityNextSteps } from "../src/content/publication-guidance.ts";
+import { canPublishToPlatform, platformPublishBlockedReason, weekVisibilityNextSteps, weekVisibilityRecoveryAction } from "../src/content/publication-guidance.ts";
 import { createActivity, createBlock, createSession, createWeek, syncCurriculumLists } from "../src/content/factories.ts";
 import { canTransition, LIFECYCLE_LABELS, LifecycleError, publicationRecord, reviewMetadata, transitionRecord } from "../src/content/lifecycle.ts";
 import { publicationGate } from "../src/content/publication-gate.ts";
@@ -252,6 +252,7 @@ test("after platform publish, a working copy can post a week and publish again",
   assert.equal(canPublishToPlatform(firstPublished, true), false);
   assert.match(platformPublishBlockedReason(firstPublished, true) || "", /Create a new draft from published/i);
   assert.match(weekVisibilityNextSteps(firstPublished), /Create a new draft from published/i);
+  assert.equal(weekVisibilityRecoveryAction(firstPublished), "working-copy");
 
   const copy = createWorkingCopy(firstPublished, "Ada Author");
   assert.equal(copy.status, "draft");

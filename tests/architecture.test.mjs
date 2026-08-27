@@ -114,6 +114,20 @@ test("register hub dialog keeps a visible manifest paste textarea", async () => 
   assert.match(css, /field-sizing: fixed/);
 });
 
+test("week visibility controls stay outside the disabled week-editor fieldset", async () => {
+  const source = await readFile(new URL("src/views/curriculum-authoring.tsx", root), "utf8");
+  const visibilityHeading = source.indexOf("<h2>Week visibility</h2>");
+  const weekForm = source.indexOf("<WeekForm");
+  const weekEditorFieldset = source.lastIndexOf('<fieldset className="authoring-fieldset" disabled={!editable}>', weekForm);
+  const postWeekButton = source.indexOf("\n                    Post week\n");
+  const createDraft = source.indexOf("Create new draft from published");
+  assert.ok(visibilityHeading > 0);
+  assert.ok(weekForm > visibilityHeading);
+  assert.ok(weekEditorFieldset > visibilityHeading, "WeekForm must sit in a fieldset after Week visibility");
+  assert.ok(postWeekButton > visibilityHeading && postWeekButton < weekEditorFieldset, "Post week must not sit inside the disabled week-editor fieldset");
+  assert.ok(createDraft > visibilityHeading && createDraft < weekEditorFieldset, "Create new draft must not sit inside the disabled week-editor fieldset");
+});
+
 test("curriculum authoring keeps updateCurriculum pending and isolates the publication RPC", async () => {
   const [mutations, service, authoring] = await Promise.all([
     readFile(new URL("src/services/pending-admin-mutations.ts", root), "utf8"),
