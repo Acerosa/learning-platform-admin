@@ -41,6 +41,7 @@ import {
   removeWeek,
   REMOVE_WEEK_CONFIRM,
   weekContentStatus,
+  weekVisibilityOptionLabel,
   WEEK_VISIBILITY_PUBLISH_REMINDER,
 } from "../content/week-availability";
 import {
@@ -161,6 +162,7 @@ export function CurriculumAuthoringPage({
   const [loadStatus, setLoadStatus] = useState<"idle" | "loading" | "loaded" | "empty" | "error">("idle");
   const [editingWeekId, setEditingWeekId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [visibilityWeekId, setVisibilityWeekId] = useState("");
   const [remoteDraftStatus, setRemoteDraftStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const saveGate = useRef(createSequenceGate());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -233,6 +235,11 @@ export function CurriculumAuthoringPage({
   const editable = isEditableStatus(draft.status);
   const validation = useMemo(() => validatePackage(pkg), [pkg]);
   const gate = useMemo(() => publicationGate(pkg, draft.sourcePackageVersion), [pkg, draft.sourcePackageVersion]);
+  const orderedWeeks = useMemo(
+    () => [...pkg.weeks].sort((left, right) => Number(left.metadata.teachingWeek) - Number(right.metadata.teachingWeek)),
+    [pkg.weeks],
+  );
+  const selectedVisibilityWeek = orderedWeeks.find((week) => week.id === visibilityWeekId) || orderedWeeks[0] || null;
   const previewRecord = drafts.find((item) => item.id === previewId) || draft;
   const selectedActivity = previewRecord.package.activities.find((item) => item.id === selectedActivityId)
     || previewRecord.package.activities[0]
@@ -489,46 +496,67 @@ export function CurriculumAuthoringPage({
             <section className="panel">
               <h2>Weeks</h2>
               <p className="field-hint">Post week sets status to available. Remove week sets status to planned and keeps the week, sessions, and activities. Learners see changes only after Publish to Platform.</p>
-              {pkg.weeks.length ? (
-                <ul className="authoring-list">
-                  {pkg.weeks.map((week) => {
-                    const status = weekContentStatus(week);
-                    return (
-                      <li key={week.id}>
-                        <strong>{String(week.metadata.title)}</strong>
-                        <code>{week.id}</code>
-                        <span>Week {String(week.metadata.teachingWeek)}</span>
-                        <StatusBadge label={status} tone={weekStatusTone(status)} />
-                        <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(week.id)}>Edit</button>
-                        <button
-                          className="button button--small button--primary"
-                          type="button"
-                          disabled={!editable || !canPostWeek(week)}
-                          onClick={() => {
-                            if (!window.confirm(`Post “${String(week.metadata.title)}” as available?`)) return;
-                            updatePackage(postWeek(pkg, week.id));
-                            setMessage(WEEK_VISIBILITY_PUBLISH_REMINDER);
-                          }}
-                        >
-                          Post week
-                        </button>
-                        <button
-                          className="button button--small button--secondary"
-                          type="button"
-                          disabled={!editable || !canRemoveWeek(week)}
-                          onClick={() => {
-                            if (!window.confirm(REMOVE_WEEK_CONFIRM)) return;
-                            updatePackage(removeWeek(pkg, week.id));
-                            setMessage(WEEK_VISIBILITY_PUBLISH_REMINDER);
-                          }}
-                        >
-                          Remove week
-                        </button>
-                        <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${week.id}.json`, exportDocument(week))}>Export</button>
-                      </li>
-                    );
-                  })}
-                </ul>
+              {orderedWeeks.length ? (
+                <>
+                  <div className="toolbar week-visibility-toolbar">
+                    <div>
+                      <label htmlFor="week-visibility-select">Week</label>
+                      <select
+                        id="week-visibility-select"
+                        value={selectedVisibilityWeek?.id || ""}
+                        disabled={!editable}
+                        onChange={(event) => setVisibilityWeekId(event.target.value)}
+                      >
+                        {orderedWeeks.map((week) => (
+                          <option key={week.id} value={week.id}>{weekVisibilityOptionLabel(week)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      className="button button--primary"
+                      type="button"
+                      disabled={!editable || !selectedVisibilityWeek || !canPostWeek(selectedVisibilityWeek)}
+                      onClick={() => {
+                        if (!selectedVisibilityWeek) return;
+                        if (!window.confirm(`Post “${String(selectedVisibilityWeek.metadata.title)}” as available?`)) return;
+                        updatePackage(postWeek(pkg, selectedVisibilityWeek.id));
+                        setVisibilityWeekId(selectedVisibilityWeek.id);
+                        setMessage(WEEK_VISIBILITY_PUBLISH_REMINDER);
+                      }}
+                    >
+                      Post week
+                    </button>
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      disabled={!editable || !selectedVisibilityWeek || !canRemoveWeek(selectedVisibilityWeek)}
+                      onClick={() => {
+                        if (!selectedVisibilityWeek) return;
+                        if (!window.confirm(REMOVE_WEEK_CONFIRM)) return;
+                        updatePackage(removeWeek(pkg, selectedVisibilityWeek.id));
+                        setVisibilityWeekId(selectedVisibilityWeek.id);
+                        setMessage(WEEK_VISIBILITY_PUBLISH_REMINDER);
+                      }}
+                    >
+                      Remove week
+                    </button>
+                  </div>
+                  <ul className="authoring-list">
+                    {orderedWeeks.map((week) => {
+                      const status = weekContentStatus(week);
+                      return (
+                        <li key={week.id}>
+                          <strong>{String(week.metadata.title)}</strong>
+                          <code>{week.id}</code>
+                          <span>Week {String(week.metadata.teachingWeek)}</span>
+                          <StatusBadge label={status} tone={weekStatusTone(status)} />
+                          <button className="button button--small button--secondary" type="button" onClick={() => setEditingWeekId(week.id)}>Edit</button>
+                          <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${week.id}.json`, exportDocument(week))}>Export</button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               ) : <p>No weeks in this draft.</p>}
             </section>
           </fieldset>

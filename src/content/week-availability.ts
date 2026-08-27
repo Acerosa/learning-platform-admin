@@ -27,6 +27,14 @@ export function canRemoveWeek(week: ContentDocument): boolean {
   return weekContentStatus(week) === "available";
 }
 
+/** Compact select label: `Week N — Title (status)`. */
+export function weekVisibilityOptionLabel(week: ContentDocument): string {
+  const number = String(week.metadata.teachingWeek ?? "?");
+  const title = String(week.metadata.title || week.id);
+  const status = weekContentStatus(week);
+  return `Week ${number} — ${title} (${status})`;
+}
+
 export function setWeekStatus(
   pkg: ContentPackage,
   weekId: string,

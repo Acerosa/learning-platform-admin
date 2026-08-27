@@ -9,7 +9,7 @@ import type { ContentBlock } from "../src/content/types.ts";
 import { containsUnsafeMarkup, sanitizeImportedText, sanitizeObject } from "../src/content/sanitize.ts";
 import { previewActivityHtml, previewWeekHtml, validateDocument, validatePackage } from "../src/content/validate.ts";
 import { getContentEngine } from "../src/content/engine.ts";
-import { canPostWeek, canRemoveWeek, postWeek, removeWeek, WEEK_VISIBILITY_PUBLISH_REMINDER } from "../src/content/week-availability.ts";
+import { canPostWeek, canRemoveWeek, postWeek, removeWeek, weekVisibilityOptionLabel, WEEK_VISIBILITY_PUBLISH_REMINDER } from "../src/content/week-availability.ts";
 
 test("week session and activity factories emit canonical envelopes", () => {
   const week = createWeek({ id: "week-20", teachingWeek: 20, title: "Synthetic week", learningOutcomes: [] });
@@ -309,6 +309,10 @@ test("post week and remove week update package week status without deleting cont
   pkg.sessions.push(session);
   pkg.activities.push(activity);
 
+  assert.equal(weekVisibilityOptionLabel(week), "Week 7 — Visibility week (planned)");
+  assert.equal(canPostWeek(week), true);
+  assert.equal(canRemoveWeek(week), false);
+
   const posted = postWeek(pkg, "week-7");
   assert.equal(posted.weeks.length, 1);
   assert.equal(posted.weeks[0].metadata.status, "available");
@@ -317,6 +321,7 @@ test("post week and remove week update package week status without deleting cont
   assert.deepEqual(posted.weeks[0].relationships.sessions, ["week-7-session"]);
   assert.equal(canPostWeek(posted.weeks[0]), false);
   assert.equal(canRemoveWeek(posted.weeks[0]), true);
+  assert.equal(weekVisibilityOptionLabel(posted.weeks[0]), "Week 7 — Visibility week (available)");
 
   const removed = removeWeek(posted, "week-7");
   assert.equal(removed.weeks.length, 1);

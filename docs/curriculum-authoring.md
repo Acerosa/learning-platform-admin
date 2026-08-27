@@ -45,9 +45,10 @@ Week, session and activity forms map onto those fields. Version is taken from
 the engine `SCHEMA_VERSION`; the UI does not invent extra properties.
 
 Week `metadata.status` uses Content `STATUSES`: `planned`, `available`,
-`archived`. On the Weeks list, **Post week** sets `available` and **Remove
-week** sets `planned` without deleting the week, sessions, or activities.
-Learners see those visibility changes only after **Publish to Platform**.
+`archived`. On the Weeks tab, staff pick a week from a dropdown and use
+**Post week** (`available`) or **Remove week** (`planned`) without deleting
+the week, sessions, or activities. Learners see those visibility changes only
+after **Publish to Platform**.
 
 Session kinds come from the engine contract:
 
