@@ -353,6 +353,7 @@ test("hub publication status uses the catalogue without reimplementing publicati
     platformPublicationError: null,
     platformPublishedAt: null,
     platformPublicationId: null,
+    remoteRevision: 0,
     package: {
       hub: { schema: "lp.content.hub", schemaVersion: "0.1.0", id: unit3.hubCode, version: "0.1.0", metadata: {}, relationships: {} },
       curriculum: { schema: "lp.content.curriculum", schemaVersion: "0.1.0", id: "curr", version: "0.1.0", metadata: {}, relationships: {} },

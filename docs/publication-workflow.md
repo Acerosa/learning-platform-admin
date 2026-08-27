@@ -119,6 +119,14 @@ There is no GitHub commit or learner-hub deployment.
 Composition output is a normal draft/package. Validate → approve → Publish to
 Platform remains the only learner-visible path.
 
+## Week visibility (post / remove)
+
+Within an editable Draft, staff can **Post week** (`metadata.status` →
+`available`) or **Remove week** (`metadata.status` → `planned`) on the Weeks
+list. Remove does not delete curriculum objects. Those status changes stay in
+the package until staff run local Publish and then **Publish to Platform**;
+there is no separate reveal API.
+
 ## Preview
 
 Preview uses the `@learning-platform/content` renderer against the **selected**

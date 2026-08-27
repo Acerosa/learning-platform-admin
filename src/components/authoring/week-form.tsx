@@ -68,10 +68,11 @@ export function WeekForm({
           <input id="week-title" name="title" required defaultValue={String(existing?.metadata.title || "")} />
         </div>
         <div>
-          <label htmlFor="week-status">status</label>
+          <label htmlFor="week-status">status (advanced)</label>
           <select id="week-status" name="status" defaultValue={String(existing?.metadata.status || "planned")}>
             {engine.STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
           </select>
+          <p className="field-hint">Prefer Post week / Remove week on the Weeks list for planned ↔ available.</p>
         </div>
         <div>
           <label htmlFor="week-phase">phase</label>
