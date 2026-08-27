@@ -121,11 +121,11 @@ Platform remains the only learner-visible path.
 
 ## Week visibility (post / remove)
 
-Within an editable Draft, staff can **Post week** (`metadata.status` →
-`available`) or **Remove week** (`metadata.status` → `planned`) on the Weeks
-list. Remove does not delete curriculum objects. Those status changes stay in
-the package until staff run local Publish and then **Publish to Platform**;
-there is no separate reveal API.
+Within an editable Draft, staff select a week from the Weeks dropdown and
+**Post week** (`metadata.status` → `available`) or **Remove week**
+(`metadata.status` → `planned`). Remove does not delete curriculum objects.
+Those status changes stay in the package until staff run local Publish and then
+**Publish to Platform**; there is no separate reveal API.
 
 ## Preview
 

@@ -1896,6 +1896,13 @@ tbody tr:hover {
   font-size: 0.82rem;
   line-height: 1.4;
 }
+.week-visibility-toolbar {
+  margin: 0.75rem 0 1rem;
+  align-items: end;
+}
+.week-visibility-toolbar select {
+  min-width: min(100%, 28rem);
+}
 .authoring-banner,
 .authoring-alert {
   display: flex;
