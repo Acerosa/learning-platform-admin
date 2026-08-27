@@ -4,13 +4,20 @@ import type { ContentDocument, ContentPackage } from "./types.ts";
 export const CONTENT_WEEK_STATUSES = ["planned", "available", "archived"] as const;
 export type ContentWeekStatus = (typeof CONTENT_WEEK_STATUSES)[number];
 
-/** Reminder shown after Post week / Remove week. Learners see changes only after platform publication. */
+/** Reminder for staff: visibility changes go live via Post/Remove & publish. */
 export const WEEK_VISIBILITY_PUBLISH_REMINDER =
-  "Publish to Platform for learners to see this.";
+  "Use Post week & publish (or Remove week & publish) so learners see this.";
 
 export const REMOVE_WEEK_CONFIRM =
   "Learners will lose access until this week is posted again";
 
+export function postWeekAndPublishConfirm(weekTitle: string): string {
+  return `Post “${weekTitle}” as available and publish a new version to the platform for learners?`;
+}
+
+export function removeWeekAndPublishConfirm(weekTitle: string): string {
+  return `${REMOVE_WEEK_CONFIRM}. This will publish a new version to the platform. Continue?`;
+}
 export function isContentWeekStatus(value: string): value is ContentWeekStatus {
   return (CONTENT_WEEK_STATUSES as readonly string[]).includes(value);
 }

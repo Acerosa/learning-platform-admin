@@ -121,23 +121,26 @@ Platform remains the only learner-visible path.
 
 ## Week visibility (post / remove)
 
-Within an editable Draft, staff select a week from the Weeks dropdown and
-**Post week** (`metadata.status` → `available`) or **Remove week**
+On the Weeks tab, staff select a week and use **Post week & publish**
+(`metadata.status` → `available`) or **Remove week & publish**
 (`metadata.status` → `planned`). Remove does not delete curriculum objects.
 
-Post/Remove alone do not update learner hubs. Staff must then:
+Each action (with a live administrator session) automatically:
 
-1. Save draft
-2. Review → Ready for Review → In Review → Approve
-3. Publication → **Publish immutable version** (new version each release)
-4. **Publish to Platform**
+1. Opens a working copy when the current snapshot is Published/Superseded (or returns review states to Draft)
+2. Applies the visibility change
+3. Validates the package
+4. Auto-approves with notes such as `Week visibility: post <weekId>`
+5. Creates a new immutable Admin version (semver bump)
+6. Calls **Publish to Platform** (`admin_api.publish_curriculum`)
+
+There is no separate reveal API. The full Review → Approve → Publish immutable
+→ Publish to Platform path remains for normal curriculum edits.
 
 A snapshot that is already `platformPublicationState === published` cannot be
-sent again. Use **Create new draft from published** (Versions, Publication, or
-the Weeks banner when the record is read-only). The working copy resets
-platform publication state to idle so another Post/Remove cycle can publish.
-
-There is no separate reveal API.
+sent again as-is. Post/Remove & publish creates the next working copy and
+version. **Create new draft from published** remains available for content
+edits.
 
 ## Preview
 

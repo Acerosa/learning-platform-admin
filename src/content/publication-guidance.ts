@@ -22,7 +22,7 @@ export function platformPublishBlockedReason(
     return "Platform publication is already in progress.";
   }
   if (record.status === "published" && record.platformPublicationState === "published") {
-    return "This snapshot is already on the platform. Create a new draft from published, Post/Remove weeks, Approve, Publish an immutable version, then Publish to Platform again.";
+    return "This snapshot is already on the platform. For week visibility, use Post week & publish / Remove week & publish (creates a new draft and version). For other edits, create a new draft from published, then use Review and Publication.";
   }
   if (record.status !== "published") {
     return "Publish an immutable version first (Approve → Publish immutable version), then Publish to Platform.";
@@ -32,7 +32,7 @@ export function platformPublishBlockedReason(
 
 export type WeekVisibilityRecovery = "working-copy" | "return-to-draft" | null;
 
-/** How staff can regain an editable Draft for Post/Remove. */
+/** How staff can regain an editable Draft for content edits (optional for visibility publish). */
 export function weekVisibilityRecoveryAction(record: AuthoringDraft): WeekVisibilityRecovery {
   if (isEditableStatus(record.status)) return null;
   if (isImmutableStatus(record.status)) return "working-copy";
@@ -40,18 +40,18 @@ export function weekVisibilityRecoveryAction(record: AuthoringDraft): WeekVisibi
   return null;
 }
 
-/** Guidance after Post/Remove week on the current record. */
+/** Guidance on the Weeks tab for the current record. */
 export function weekVisibilityNextSteps(record: AuthoringDraft): string {
   const recovery = weekVisibilityRecoveryAction(record);
   if (recovery === "working-copy") {
-    return "This record is read-only. Create a new draft from published, then Post/Remove, Approve, Publish immutable, and Publish to Platform.";
+    return "This snapshot is read-only. Use Post week & publish / Remove week & publish to open a working copy and push visibility to learners in one step. For other curriculum edits, create a new draft from published first.";
   }
   if (recovery === "return-to-draft") {
-    return "This record is read-only in review. Return to Draft, then Post/Remove weeks before approving again.";
+    return "This record is in review. Post week & publish / Remove week & publish will return it to Draft, then publish. Or use Return to Draft for content edits.";
   }
-  return `${WEEK_VISIBILITY_PUBLISH_REMINDER} Next: Save draft → Review (Ready for Review → In Review → Approve) → Publication (Publish immutable version → Publish to Platform).`;
+  return WEEK_VISIBILITY_PUBLISH_REMINDER;
 }
 
 export function afterPlatformPublishGuidance(): string {
-  return "Published to the platform. Learner hubs load this version from Supabase without a GitHub deployment. To Post or Remove another week later: Create a new draft from published, then Approve → Publish immutable → Publish to Platform.";
+  return "Published to the platform. Learner hubs load this version from Supabase without a GitHub deployment. To change week visibility again, use Post week & publish or Remove week & publish on Weeks.";
 }

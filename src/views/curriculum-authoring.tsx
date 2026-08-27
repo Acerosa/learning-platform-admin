@@ -42,12 +42,17 @@ import { previewActivityHtml, previewWeekHtml, validatePackage } from "../conten
 import {
   canPostWeek,
   canRemoveWeek,
-  postWeek,
-  removeWeek,
-  REMOVE_WEEK_CONFIRM,
+  postWeekAndPublishConfirm,
+  removeWeekAndPublishConfirm,
   weekContentStatus,
   weekVisibilityOptionLabel,
 } from "../content/week-availability";
+import {
+  canRunWeekVisibilityPublish,
+  prepareWeekVisibilityPublish,
+  weekVisibilityPublishSuccessMessage,
+  type WeekVisibilityAction,
+} from "../content/week-visibility-publish";
 import {
   approveRecord,
   archiveVersion,
@@ -168,6 +173,7 @@ export function CurriculumAuthoringPage({
   const [editingWeekId, setEditingWeekId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [visibilityWeekId, setVisibilityWeekId] = useState("");
+  const [visibilityPublishBusy, setVisibilityPublishBusy] = useState(false);
   const [remoteDraftStatus, setRemoteDraftStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const saveGate = useRef(createSequenceGate());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -262,6 +268,11 @@ export function CurriculumAuthoringPage({
         : "<p>Create a week or activity to preview the learner renderer.</p>";
 
   const compareRecords = drafts.length ? drafts : [draft];
+  const visibilityPublishReady = canRunWeekVisibilityPublish(
+    draft,
+    platformAvailable && Boolean(onPublishToPlatform),
+    visibilityPublishBusy,
+  );
 
   function showError(error: unknown) {
     setMessage(error instanceof Error ? error.message : "The requested publication action could not be completed.");
@@ -281,7 +292,7 @@ export function CurriculumAuthoringPage({
       setPublishVersionValue(suggestNextVersion(compareRecords, copy.hubId, copy.courseKey));
       setPublishNotes("");
       setTab("weeks");
-      setMessage("New editable draft created from the published snapshot. Post/Remove weeks here, then Approve → Publish immutable → Publish to Platform.");
+      setMessage("New editable draft created from the published snapshot. Use Post week & publish / Remove week & publish for visibility, or edit content then use Review and Publication.");
     } catch (error) {
       showError(error);
     }
@@ -370,6 +381,78 @@ export function CurriculumAuthoringPage({
     }
   }
 
+  async function publishWeekVisibility(action: WeekVisibilityAction) {
+    if (!selectedVisibilityWeek || !onPublishToPlatform) {
+      setMessage("Post week & publish requires a live administrator session.");
+      return;
+    }
+    const weekTitle = String(selectedVisibilityWeek.metadata.title || selectedVisibilityWeek.id);
+    const confirmed = action === "post"
+      ? window.confirm(postWeekAndPublishConfirm(weekTitle))
+      : window.confirm(removeWeekAndPublishConfirm(weekTitle));
+    if (!confirmed) return;
+
+    setVisibilityPublishBusy(true);
+    try {
+      const prepared = prepareWeekVisibilityPublish(
+        compareRecords,
+        draft,
+        selectedVisibilityWeek.id,
+        action,
+        actor,
+      );
+      let nextRecords = prepared.records;
+      persistDrafts(nextRecords);
+      setDrafts(nextRecords);
+      setDraft(prepared.published);
+      setPreviewId(prepared.published.id);
+      setPublishVersionValue(suggestNextVersion(nextRecords, prepared.published.hubId, prepared.published.courseKey));
+      setVisibilityWeekId(prepared.weekId);
+      setMessage("Publishing to the platform…");
+
+      const publishing = withPlatformPublication(prepared.published, { platformPublicationState: "publishing" });
+      nextRecords = nextRecords.map((item) => (item.id === publishing.id ? publishing : item));
+      persistDrafts(nextRecords);
+      setDrafts(nextRecords);
+      setDraft(publishing);
+
+      try {
+        const result = await onPublishToPlatform(publishing);
+        const done = withPlatformPublication(publishing, {
+          platformPublicationState: "published",
+          platformPublicationError: null,
+          platformPublishedAt: result.publishedAt,
+          platformPublicationId: result.id,
+        });
+        nextRecords = nextRecords.map((item) => (item.id === done.id ? done : item));
+        persistDrafts(nextRecords);
+        setDrafts(nextRecords);
+        setDraft(done);
+        setMessage(
+          result.idempotent
+            ? `This snapshot is already the active platform publication. ${weekVisibilityPublishSuccessMessage(prepared)}`
+            : weekVisibilityPublishSuccessMessage(prepared),
+        );
+      } catch (error) {
+        const failed = withPlatformPublication(publishing, {
+          platformPublicationState: "failed",
+          platformPublicationError: error instanceof Error
+            ? error.message
+            : "Curriculum could not be published to the platform.",
+        });
+        nextRecords = nextRecords.map((item) => (item.id === failed.id ? failed : item));
+        persistDrafts(nextRecords);
+        setDrafts(nextRecords);
+        setDraft(failed);
+        showError(error);
+      }
+    } catch (error) {
+      showError(error);
+    } finally {
+      setVisibilityPublishBusy(false);
+    }
+  }
+
   function setHubContext(hubCode: string) {
     const hub = hubs.find((item) => item.hubCode === hubCode);
     const link = links.find((item) => item.hubCode === hubCode);
@@ -426,7 +509,7 @@ export function CurriculumAuthoringPage({
           try {
             applyRecord(returnToDraft(draft));
             setTab("weeks");
-            setMessage("Returned to Draft. Post/Remove weeks here, then Approve → Publish immutable → Publish to Platform.");
+            setMessage("Returned to Draft. Use Post week & publish / Remove week & publish for visibility, or edit content then use Review and Publication.");
           } catch (error) {
             showError(error);
           }
@@ -517,11 +600,15 @@ export function CurriculumAuthoringPage({
           <>
             <section className="panel">
               <h2>Week visibility</h2>
-              <p className="field-hint">Post week sets status to available. Remove week sets status to planned and keeps the week, sessions, and activities. Learners see changes only after Publish to Platform (new immutable version each time).</p>
+              <p className="field-hint">
+                Post week &amp; publish sets status to available and pushes a new platform version.
+                Remove week &amp; publish sets status to planned (keeps the week, sessions, and activities) and publishes.
+                Requires a live administrator session.
+              </p>
               {weekVisibilityRecoveryAction(draft) === "working-copy" ? (
                 <div className="toolbar week-visibility-toolbar">
                   <p className="field-hint" role="status">{weekVisibilityNextSteps(draft)}</p>
-                  <button className="button button--primary" type="button" onClick={() => openWorkingCopyFromPublished()}>
+                  <button className="button button--secondary" type="button" onClick={() => openWorkingCopyFromPublished()}>
                     Create new draft from published
                   </button>
                 </div>
@@ -530,12 +617,12 @@ export function CurriculumAuthoringPage({
                 <div className="toolbar week-visibility-toolbar">
                   <p className="field-hint" role="status">{weekVisibilityNextSteps(draft)}</p>
                   <button
-                    className="button button--primary"
+                    className="button button--secondary"
                     type="button"
                     onClick={() => {
                       try {
                         applyRecord(returnToDraft(draft));
-                        setMessage("Returned to Draft. You can Post or Remove weeks now.");
+                        setMessage("Returned to Draft. Use Post week & publish / Remove week & publish, or edit content then use Review and Publication.");
                       } catch (error) {
                         showError(error);
                       }
@@ -545,6 +632,12 @@ export function CurriculumAuthoringPage({
                   </button>
                 </div>
               ) : null}
+              {editable && !visibilityPublishReady ? (
+                <p className="field-hint" role="status">{weekVisibilityNextSteps(draft)}</p>
+              ) : null}
+              {!platformAvailable ? (
+                <p className="field-hint" role="status">Sign in as an administrator to Post week &amp; publish or Remove week &amp; publish.</p>
+              ) : null}
               {orderedWeeks.length ? (
                 <div className="toolbar week-visibility-toolbar">
                   <div>
@@ -552,7 +645,7 @@ export function CurriculumAuthoringPage({
                     <select
                       id="week-visibility-select"
                       value={selectedVisibilityWeek?.id || ""}
-                      disabled={!editable}
+                      disabled={visibilityPublishBusy || (!editable && !visibilityPublishReady)}
                       onChange={(event) => setVisibilityWeekId(event.target.value)}
                     >
                       {orderedWeeks.map((week) => (
@@ -563,30 +656,26 @@ export function CurriculumAuthoringPage({
                   <button
                     className="button button--primary"
                     type="button"
-                    disabled={!editable || !selectedVisibilityWeek || !canPostWeek(selectedVisibilityWeek)}
-                    onClick={() => {
-                      if (!selectedVisibilityWeek) return;
-                      if (!window.confirm(`Post “${String(selectedVisibilityWeek.metadata.title)}” as available?`)) return;
-                      updatePackage(postWeek(pkg, selectedVisibilityWeek.id));
-                      setVisibilityWeekId(selectedVisibilityWeek.id);
-                      setMessage(weekVisibilityNextSteps(draft));
-                    }}
+                    disabled={
+                      !visibilityPublishReady
+                      || !selectedVisibilityWeek
+                      || !canPostWeek(selectedVisibilityWeek)
+                    }
+                    onClick={() => void publishWeekVisibility("post")}
                   >
-                    Post week
+                    {visibilityPublishBusy ? "Publishing…" : "Post week & publish"}
                   </button>
                   <button
                     className="button button--secondary"
                     type="button"
-                    disabled={!editable || !selectedVisibilityWeek || !canRemoveWeek(selectedVisibilityWeek)}
-                    onClick={() => {
-                      if (!selectedVisibilityWeek) return;
-                      if (!window.confirm(REMOVE_WEEK_CONFIRM)) return;
-                      updatePackage(removeWeek(pkg, selectedVisibilityWeek.id));
-                      setVisibilityWeekId(selectedVisibilityWeek.id);
-                      setMessage(weekVisibilityNextSteps(draft));
-                    }}
+                    disabled={
+                      !visibilityPublishReady
+                      || !selectedVisibilityWeek
+                      || !canRemoveWeek(selectedVisibilityWeek)
+                    }
+                    onClick={() => void publishWeekVisibility("remove")}
                   >
-                    Remove week
+                    Remove week &amp; publish
                   </button>
                 </div>
               ) : <p>No weeks in this draft.</p>}

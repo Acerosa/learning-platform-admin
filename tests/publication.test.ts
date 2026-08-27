@@ -21,6 +21,11 @@ import {
   withPlatformPublication,
 } from "../src/content/versioning.ts";
 import { postWeek } from "../src/content/week-availability.ts";
+import {
+  prepareWeekVisibilityPublish,
+  weekVisibilityPublishSuccessMessage,
+  WeekVisibilityPublishError,
+} from "../src/content/week-visibility-publish.ts";
 import { platformPublicationArgs } from "../src/content/platform-publication.ts";
 
 function withContent(draft = createDraft("authoring-hub", "Authoring hub", "ocr-level-3-it", "Ada Author")) {
@@ -250,8 +255,8 @@ test("after platform publish, a working copy can post a week and publish again",
   records = replaceRecord(records, firstPublished);
 
   assert.equal(canPublishToPlatform(firstPublished, true), false);
-  assert.match(platformPublishBlockedReason(firstPublished, true) || "", /Create a new draft from published/i);
-  assert.match(weekVisibilityNextSteps(firstPublished), /Create a new draft from published/i);
+  assert.match(platformPublishBlockedReason(firstPublished, true) || "", /Post week & publish/i);
+  assert.match(weekVisibilityNextSteps(firstPublished), /Post week & publish/i);
   assert.equal(weekVisibilityRecoveryAction(firstPublished), "working-copy");
 
   const copy = createWorkingCopy(firstPublished, "Ada Author");
@@ -265,7 +270,7 @@ test("after platform publish, a working copy can post a week and publish again",
   assert.equal(posted.package.weeks[0].metadata.status, "available");
   assert.equal(posted.package.weeks.length, 1);
   assert.equal(posted.package.activities.length, 1);
-  assert.match(weekVisibilityNextSteps(posted), /Publish to Platform/);
+  assert.match(weekVisibilityNextSteps(posted), /Post week & publish/i);
 
   const secondApproved = throughApproval(posted);
   records = publishVersion(records, secondApproved, {
@@ -296,6 +301,49 @@ test("platform publication payload accepts only approved or published snapshots"
   assert.equal(args.p_schema_version, published.schemaVersion);
   assert.equal(args.p_source_package_version, published.sourcePackageVersion);
   assert.equal(args.p_package, published.package);
+});
+
+test("week visibility publish posts a week, bumps version, and leaves platform pending", () => {
+  const draft = withContent();
+  const weekId = draft.package.weeks[0].id;
+  const result = prepareWeekVisibilityPublish([draft], draft, weekId, "post", "Ada Author");
+  assert.equal(result.published.status, "published");
+  assert.equal(result.published.version, "0.1.0");
+  assert.equal(result.published.platformPublicationState, "pending");
+  assert.equal(result.published.package.weeks[0].metadata.status, "available");
+  assert.match(result.published.approvalNotes, /Week visibility: post/);
+  assert.equal(canPublishToPlatform(result.published, true), true);
+  assert.match(weekVisibilityPublishSuccessMessage(result), /available on the platform/);
+});
+
+test("week visibility publish from an already platform-published snapshot creates the next version", () => {
+  const draft = withContent();
+  const weekId = draft.package.weeks[0].id;
+  const first = prepareWeekVisibilityPublish([draft], draft, weekId, "post", "Ada Author");
+  const onPlatform = withPlatformPublication(first.published, {
+    platformPublicationState: "published",
+    platformPublishedAt: "2026-08-27T12:00:00.000Z",
+    platformPublicationId: "pub-1",
+  });
+  const records = replaceRecord(first.records, onPlatform);
+  const second = prepareWeekVisibilityPublish(records, onPlatform, weekId, "remove", "Ada Author");
+  assert.equal(second.published.version, "0.1.1");
+  assert.equal(second.published.platformPublicationState, "pending");
+  assert.equal(second.published.package.weeks[0].metadata.status, "planned");
+  assert.equal(second.published.package.weeks.length, 1);
+  assert.equal(second.published.package.activities.length, 1);
+  assert.equal(canPublishToPlatform(second.published, true), true);
+  assert.match(weekVisibilityPublishSuccessMessage(second), /planned again on the platform/);
+});
+
+test("week visibility publish blocks when validation fails", () => {
+  const invalid = withContent();
+  invalid.package.weeks.push(invalid.package.weeks[0]);
+  const weekId = invalid.package.weeks[0].id;
+  assert.throws(
+    () => prepareWeekVisibilityPublish([invalid], invalid, weekId, "post", "Ada Author"),
+    WeekVisibilityPublishError,
+  );
 });
 
 test("an imported week graph can pass the publication gate and local publish", () => {

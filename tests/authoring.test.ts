@@ -331,6 +331,6 @@ test("post week and remove week update package week status without deleting cont
   assert.equal(removed.activities.some((item) => item.id === "week-7-activity"), true);
   assert.equal(canPostWeek(removed.weeks[0]), true);
   assert.equal(canRemoveWeek(removed.weeks[0]), false);
-  assert.equal(WEEK_VISIBILITY_PUBLISH_REMINDER, "Publish to Platform for learners to see this.");
+  assert.equal(WEEK_VISIBILITY_PUBLISH_REMINDER, "Use Post week & publish (or Remove week & publish) so learners see this.");
   assert.deepEqual([...getContentEngine().STATUSES], ["planned", "available", "archived"]);
 });
