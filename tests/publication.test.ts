@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { comparePackages, hasStructuredChanges } from "../src/content/compare.ts";
 import { migrateRecord } from "../src/content/draft-store.ts";
+import { canPublishToPlatform, platformPublishBlockedReason, weekVisibilityNextSteps } from "../src/content/publication-guidance.ts";
 import { createActivity, createBlock, createSession, createWeek, syncCurriculumLists } from "../src/content/factories.ts";
 import { canTransition, LIFECYCLE_LABELS, LifecycleError, publicationRecord, reviewMetadata, transitionRecord } from "../src/content/lifecycle.ts";
 import { publicationGate } from "../src/content/publication-gate.ts";
@@ -11,12 +12,15 @@ import {
   createDraft,
   createWorkingCopy,
   publishVersion,
+  replaceRecord,
   restoreAsDraft,
   startReview,
   submitForReview,
   suggestNextVersion,
   touchDraft,
+  withPlatformPublication,
 } from "../src/content/versioning.ts";
+import { postWeek } from "../src/content/week-availability.ts";
 import { platformPublicationArgs } from "../src/content/platform-publication.ts";
 
 function withContent(draft = createDraft("authoring-hub", "Authoring hub", "ocr-level-3-it", "Ada Author")) {
@@ -230,6 +234,50 @@ test("local publish marks the snapshot pending for platform publication", () => 
     publishedBy: "Ada Author",
   })[0];
   assert.equal(published.platformPublicationState, "pending");
+});
+
+test("after platform publish, a working copy can post a week and publish again", () => {
+  const firstApproved = throughApproval();
+  let records = publishVersion([firstApproved], firstApproved, {
+    version: "0.1.0",
+    publishedBy: "Ada Author",
+  });
+  const firstPublished = withPlatformPublication(records[0], {
+    platformPublicationState: "published",
+    platformPublishedAt: "2026-08-27T12:00:00.000Z",
+    platformPublicationId: "pub-1",
+  });
+  records = replaceRecord(records, firstPublished);
+
+  assert.equal(canPublishToPlatform(firstPublished, true), false);
+  assert.match(platformPublishBlockedReason(firstPublished, true) || "", /Create a new draft from published/i);
+  assert.match(weekVisibilityNextSteps(firstPublished), /Create a new draft from published/i);
+
+  const copy = createWorkingCopy(firstPublished, "Ada Author");
+  assert.equal(copy.status, "draft");
+  assert.equal(copy.platformPublicationState, "idle");
+  assert.equal(canPublishToPlatform(copy, true), false);
+
+  const weekId = copy.package.weeks[0].id;
+  assert.equal(copy.package.weeks[0].metadata.status, "planned");
+  const posted = touchDraft(copy, postWeek(copy.package, weekId));
+  assert.equal(posted.package.weeks[0].metadata.status, "available");
+  assert.equal(posted.package.weeks.length, 1);
+  assert.equal(posted.package.activities.length, 1);
+  assert.match(weekVisibilityNextSteps(posted), /Publish to Platform/);
+
+  const secondApproved = throughApproval(posted);
+  records = publishVersion(records, secondApproved, {
+    version: "0.1.1",
+    publishedBy: "Ada Author",
+  });
+  const secondPublished = records.find((item) => item.version === "0.1.1");
+  assert.ok(secondPublished);
+  assert.equal(secondPublished.status, "published");
+  assert.equal(secondPublished.platformPublicationState, "pending");
+  assert.equal(canPublishToPlatform(secondPublished, true), true);
+  assert.equal(platformPublishBlockedReason(secondPublished, true), null);
+  assert.equal(secondPublished.package.weeks[0].metadata.status, "available");
 });
 
 test("platform publication payload accepts only approved or published snapshots", () => {

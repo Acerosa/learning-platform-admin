@@ -124,8 +124,20 @@ Platform remains the only learner-visible path.
 Within an editable Draft, staff select a week from the Weeks dropdown and
 **Post week** (`metadata.status` → `available`) or **Remove week**
 (`metadata.status` → `planned`). Remove does not delete curriculum objects.
-Those status changes stay in the package until staff run local Publish and then
-**Publish to Platform**; there is no separate reveal API.
+
+Post/Remove alone do not update learner hubs. Staff must then:
+
+1. Save draft
+2. Review → Ready for Review → In Review → Approve
+3. Publication → **Publish immutable version** (new version each release)
+4. **Publish to Platform**
+
+A snapshot that is already `platformPublicationState === published` cannot be
+sent again. Use **Create new draft from published** (Versions, Publication, or
+the Weeks banner when the record is read-only). The working copy resets
+platform publication state to idle so another Post/Remove cycle can publish.
+
+There is no separate reveal API.
 
 ## Preview
 
