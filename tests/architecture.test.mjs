@@ -119,12 +119,12 @@ test("week visibility controls stay outside the disabled week-editor fieldset", 
   const visibilityHeading = source.indexOf("<h2>Week visibility</h2>");
   const weekForm = source.indexOf("<WeekForm");
   const weekEditorFieldset = source.lastIndexOf('<fieldset className="authoring-fieldset" disabled={!editable}>', weekForm);
-  const postWeekButton = source.indexOf("\n                    Post week\n");
-  const createDraft = source.indexOf("Create new draft from published");
+  const postWeekButton = source.indexOf("Post week & publish", visibilityHeading);
+  const createDraft = source.indexOf("Create new draft from published", visibilityHeading);
   assert.ok(visibilityHeading > 0);
   assert.ok(weekForm > visibilityHeading);
   assert.ok(weekEditorFieldset > visibilityHeading, "WeekForm must sit in a fieldset after Week visibility");
-  assert.ok(postWeekButton > visibilityHeading && postWeekButton < weekEditorFieldset, "Post week must not sit inside the disabled week-editor fieldset");
+  assert.ok(postWeekButton > visibilityHeading && postWeekButton < weekEditorFieldset, "Post week & publish must not sit inside the disabled week-editor fieldset");
   assert.ok(createDraft > visibilityHeading && createDraft < weekEditorFieldset, "Create new draft must not sit inside the disabled week-editor fieldset");
 });
 

@@ -31,9 +31,9 @@ export function LifecycleBanner({
         {editable
           ? "Admin edits this Draft. Learners never see drafts."
           : platformDone
-            ? "This snapshot is on the platform and read-only. Create a new draft from published to Post/Remove weeks again."
+            ? "This snapshot is on the platform and read-only. Use Post week & publish / Remove week & publish on Weeks, or create a new draft for other edits."
             : recovery === "return-to-draft"
-              ? "This record is in review and read-only. Return to Draft to Post/Remove weeks."
+              ? "This record is in review and read-only. Use Post week & publish on Weeks, or Return to Draft for content edits."
               : "This record is read-only. Restore as Draft or open a working copy to edit."}
       </p>
       {recovery === "working-copy" && onCreateWorkingCopy ? (
