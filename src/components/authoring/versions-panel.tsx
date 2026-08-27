@@ -34,7 +34,7 @@ export function VersionsPanel({
       {published ? (
         <div className="toolbar">
           <button className="button button--primary" type="button" onClick={() => onWorkingCopy(published)}>
-            Open working copy
+            Create new draft from published
           </button>
         </div>
       ) : null}

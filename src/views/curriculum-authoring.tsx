@@ -31,6 +31,10 @@ import {
 import { downloadText, exportActivityPackage, exportDocument, exportPackage } from "../content/export";
 import { syncCurriculumLists, upsertAssignment, upsertOutcome } from "../content/factories";
 import { isEditableStatus, LIFECYCLE_LABELS } from "../content/lifecycle";
+import {
+  afterPlatformPublishGuidance,
+  weekVisibilityNextSteps,
+} from "../content/publication-guidance";
 import { publicationGate } from "../content/publication-gate";
 import type { AuthoringDraft, ContentActivity, ContentDocument, ContentPackage } from "../content/types";
 import { previewActivityHtml, previewWeekHtml, validatePackage } from "../content/validate";
@@ -42,13 +46,13 @@ import {
   REMOVE_WEEK_CONFIRM,
   weekContentStatus,
   weekVisibilityOptionLabel,
-  WEEK_VISIBILITY_PUBLISH_REMINDER,
 } from "../content/week-availability";
 import {
   approveRecord,
   archiveVersion,
   createWorkingCopy,
   createWorkingCopyFromPackage,
+  currentPublished,
   mergeRemoteAuthoringDrafts,
   replaceRecord,
   restoreAsDraft,
@@ -256,8 +260,30 @@ export function CurriculumAuthoringPage({
         ? previewActivityHtml(selectedActivity)
         : "<p>Create a week or activity to preview the learner renderer.</p>";
 
+  const compareRecords = drafts.length ? drafts : [draft];
+
   function showError(error: unknown) {
     setMessage(error instanceof Error ? error.message : "The requested publication action could not be completed.");
+  }
+
+  function openWorkingCopyFromPublished(source?: AuthoringDraft | null) {
+    const published = source
+      || currentPublished(compareRecords, draft.hubId, draft.courseKey)
+      || (draft.status === "published" || draft.status === "superseded" ? draft : null);
+    if (!published) {
+      setMessage("No published version is available to copy. Publish an immutable version first.");
+      return;
+    }
+    try {
+      const copy = createWorkingCopy(published, actor);
+      commit(copy);
+      setPublishVersionValue(suggestNextVersion(compareRecords, copy.hubId, copy.courseKey));
+      setPublishNotes("");
+      setTab("weeks");
+      setMessage("New editable draft created from the published snapshot. Post/Remove weeks here, then Approve → Publish immutable → Publish to Platform.");
+    } catch (error) {
+      showError(error);
+    }
   }
 
   async function openPublished() {
@@ -380,8 +406,6 @@ export function CurriculumAuthoringPage({
     { id: "archive", label: "Archive" },
   ];
 
-  const compareRecords = drafts.length ? drafts : [draft];
-
   return (
     <>
       <header className="page-header">
@@ -394,7 +418,7 @@ export function CurriculumAuthoringPage({
       </header>
 
       <AuthoringAreaLinks current="curriculum" />
-      <LifecycleBanner record={draft} />
+      <LifecycleBanner record={draft} onCreateWorkingCopy={() => openWorkingCopyFromPublished()} />
       <p role="status">Draft save: {saveStatus === "idle" ? "Saved" : saveStatus === "unsaved" ? "Unsaved changes" : saveStatus === "saving" ? "Saving..." : saveStatus === "failed" ? "Save failed" : saveStatus === "offline" ? "Offline — changes not yet saved" : "Saved"}</p>
       {remoteDraftStatus === "loading" ? <p role="status">Loading remote curriculum draft...</p> : null}
       {loadStatus === "loading" ? <p role="status">Loading published curriculum...</p> : null}
@@ -495,7 +519,15 @@ export function CurriculumAuthoringPage({
             ) : null}
             <section className="panel">
               <h2>Weeks</h2>
-              <p className="field-hint">Post week sets status to available. Remove week sets status to planned and keeps the week, sessions, and activities. Learners see changes only after Publish to Platform.</p>
+              <p className="field-hint">Post week sets status to available. Remove week sets status to planned and keeps the week, sessions, and activities. Learners see changes only after Publish to Platform (new immutable version each time).</p>
+              {!editable ? (
+                <div className="toolbar week-visibility-toolbar">
+                  <p className="field-hint" role="status">{weekVisibilityNextSteps(draft)}</p>
+                  <button className="button button--primary" type="button" onClick={() => openWorkingCopyFromPublished()}>
+                    Create new draft from published
+                  </button>
+                </div>
+              ) : null}
               {orderedWeeks.length ? (
                 <>
                   <div className="toolbar week-visibility-toolbar">
@@ -521,7 +553,7 @@ export function CurriculumAuthoringPage({
                         if (!window.confirm(`Post “${String(selectedVisibilityWeek.metadata.title)}” as available?`)) return;
                         updatePackage(postWeek(pkg, selectedVisibilityWeek.id));
                         setVisibilityWeekId(selectedVisibilityWeek.id);
-                        setMessage(WEEK_VISIBILITY_PUBLISH_REMINDER);
+                        setMessage(weekVisibilityNextSteps(draft));
                       }}
                     >
                       Post week
@@ -535,7 +567,7 @@ export function CurriculumAuthoringPage({
                         if (!window.confirm(REMOVE_WEEK_CONFIRM)) return;
                         updatePackage(removeWeek(pkg, selectedVisibilityWeek.id));
                         setVisibilityWeekId(selectedVisibilityWeek.id);
-                        setMessage(WEEK_VISIBILITY_PUBLISH_REMINDER);
+                        setMessage(weekVisibilityNextSteps(draft));
                       }}
                     >
                       Remove week
@@ -708,13 +740,7 @@ export function CurriculumAuthoringPage({
               setTab("curriculum");
             }}
             onWorkingCopy={(published) => {
-              try {
-                const copy = createWorkingCopy(published, actor);
-                commit(copy);
-                setTab("curriculum");
-              } catch (error) {
-                showError(error);
-              }
+              openWorkingCopyFromPublished(published);
             }}
           />
         ) : null}
@@ -781,6 +807,7 @@ export function CurriculumAuthoringPage({
             }}
             publications={publications}
             platformAvailable={platformAvailable}
+            onCreateWorkingCopy={() => openWorkingCopyFromPublished()}
             onPublishToPlatform={() => {
               void (async () => {
                 if (!onPublishToPlatform) {
@@ -799,8 +826,8 @@ export function CurriculumAuthoringPage({
                   }));
                   setMessage(
                     result.idempotent
-                      ? "This snapshot is already the active platform publication."
-                      : "Published to the platform. Learner hubs load this version from Supabase without a GitHub deployment.",
+                      ? `This snapshot is already the active platform publication. ${afterPlatformPublishGuidance()}`
+                      : afterPlatformPublishGuidance(),
                   );
                 } catch (error) {
                   commit(withPlatformPublication(publishing, {

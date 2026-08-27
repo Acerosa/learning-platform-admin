@@ -1,6 +1,8 @@
-import type { CurriculumPublicationRecord } from "../../api/admin-api";
+import type { AuthoringDraft } from "../../content/types";
+import { canPublishToPlatform, platformPublishBlockedReason } from "../../content/publication-guidance";
 import { canTransition } from "../../content/lifecycle";
-import type { AuthoringDraft, ValidationIssue } from "../../content/types";
+import type { CurriculumPublicationRecord } from "../../api/admin-api";
+import type { ValidationIssue } from "../../content/types";
 import { formatDate } from "../../utils/format";
 import { DiagnosticsList } from "./diagnostics-list";
 
@@ -25,6 +27,7 @@ export function PublicationPanel({
   onNotesChange,
   onPublish,
   onPublishToPlatform,
+  onCreateWorkingCopy,
 }: {
   record: AuthoringDraft;
   version: string;
@@ -38,12 +41,12 @@ export function PublicationPanel({
   onNotesChange: (value: string) => void;
   onPublish: () => void;
   onPublishToPlatform: () => void;
+  onCreateWorkingCopy?: () => void;
 }) {
   const canPublish = canTransition(record.status, "published") && gateOk;
-  const canPublishToPlatform = record.status === "published"
-    && record.platformPublicationState !== "publishing"
-    && record.platformPublicationState !== "published"
-    && platformAvailable;
+  const publishToPlatformEnabled = canPublishToPlatform(record, platformAvailable);
+  const blockedReason = platformPublishBlockedReason(record, platformAvailable);
+  const needsWorkingCopy = record.status === "published" && Boolean(onCreateWorkingCopy);
   const history = publications.filter(
     (item) => item.hubCode === record.hubId && item.courseKey === record.courseKey,
   );
@@ -107,19 +110,22 @@ export function PublicationPanel({
         <button
           className="button button--secondary"
           type="button"
-          disabled={!canPublishToPlatform}
+          disabled={!publishToPlatformEnabled}
           onClick={onPublishToPlatform}
         >
           {record.platformPublicationState === "publishing" ? "Publishing..." : "Publish to Platform"}
         </button>
+        {needsWorkingCopy && onCreateWorkingCopy ? (
+          <button className="button button--secondary" type="button" onClick={onCreateWorkingCopy}>
+            Create new draft from published
+          </button>
+        ) : null}
       </div>
       {!gateOk ? <p role="status">Publication is blocked until validation succeeds with a supported schemaVersion and packageVersion.</p> : null}
-      {record.status === "published" && !platformAvailable ? (
-        <p role="status">Publish to Platform requires a live administrator session.</p>
-      ) : null}
+      {blockedReason ? <p role="status">{blockedReason}</p> : null}
       {record.platformPublicationError ? <p role="alert">{record.platformPublicationError}</p> : null}
       {record.platformPublicationState === "published" ? (
-        <p role="status">Learner hubs load this published package from Supabase. A GitHub Pages redeploy is not required for curriculum changes.</p>
+        <p role="status">Learner hubs load this published package from Supabase. A GitHub Pages redeploy is not required for curriculum changes. Further Post/Remove week changes need a new draft from this published snapshot.</p>
       ) : null}
       <DiagnosticsList issues={issues} />
       <h3>Platform publication history</h3>

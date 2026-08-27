@@ -47,8 +47,13 @@ the engine `SCHEMA_VERSION`; the UI does not invent extra properties.
 Week `metadata.status` uses Content `STATUSES`: `planned`, `available`,
 `archived`. On the Weeks tab, staff pick a week from a dropdown and use
 **Post week** (`available`) or **Remove week** (`planned`) without deleting
-the week, sessions, or activities. Learners see those visibility changes only
-after **Publish to Platform**.
+the week, sessions, or activities.
+
+Learners see those visibility changes only after a full publish cycle:
+
+Post/Remove → Save draft → Approve → Publish immutable version → **Publish to
+Platform**. If the current snapshot is already on the platform, create a new
+draft from published first (the UI surfaces this when Weeks is read-only).
 
 Session kinds come from the engine contract:
 
