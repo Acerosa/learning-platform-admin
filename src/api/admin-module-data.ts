@@ -199,7 +199,10 @@ export function moduleLoadingLabel(key: AdminModuleDataKey): string {
   }
 }
 
-export function mergeModuleCacheToSnapshot(cache: AdminModuleCacheState): AdminDataSnapshot {
+export function mergeModuleCacheToSnapshot(
+  cache: AdminModuleCacheState,
+  bootstrap?: AdminBootstrapData | null,
+): AdminDataSnapshot {
   const dashboard = cache.dashboard.data;
   const hubs = cache["hubs-curriculum"].data;
   const people = cache.people.data;
@@ -208,7 +211,7 @@ export function mergeModuleCacheToSnapshot(cache: AdminModuleCacheState): AdminD
   const system = cache.system.data;
 
   return Object.freeze({
-    dashboardSummary: dashboard?.dashboardSummary ?? EMPTY_DASHBOARD_SUMMARY,
+    dashboardSummary: dashboard?.dashboardSummary ?? bootstrap?.dashboardSummary ?? EMPTY_DASHBOARD_SUMMARY,
     health: system?.health ?? dashboard?.health ?? [],
     hubs: hubs?.hubs ?? dashboard?.hubs ?? system?.hubs ?? [],
     hubCourseLinks: hubs?.hubCourseLinks ?? [],
