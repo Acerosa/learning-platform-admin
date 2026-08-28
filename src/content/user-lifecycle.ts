@@ -9,6 +9,9 @@ export const USER_LIFECYCLE_LABELS: Record<"draft" | "published" | "archived", s
 
 export function userLifecycleLabel(record: Pick<AuthoringDraft, "status" | "platformPublicationState">): string {
   if (record.status === "archived") return USER_LIFECYCLE_LABELS.archived;
+  if (record.status === "published" && record.platformPublicationState === "failed") {
+    return "Platform publish failed";
+  }
   if (record.status === "published" && record.platformPublicationState === "published") {
     return USER_LIFECYCLE_LABELS.published;
   }

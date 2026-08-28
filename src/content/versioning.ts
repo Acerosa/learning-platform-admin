@@ -67,9 +67,59 @@ export function latestAssignedVersion(records: readonly AuthoringDraft[], hubId:
   return versions.at(-1) || null;
 }
 
-export function suggestNextVersion(records: readonly AuthoringDraft[], hubId: string, courseKey: string) {
-  const latest = latestAssignedVersion(records, hubId, courseKey);
+export type PublicationVersionContext = {
+  basedOnVersion?: string | null;
+};
+
+function publicationVersionCandidates(
+  records: readonly AuthoringDraft[],
+  hubId: string,
+  courseKey: string,
+  context: PublicationVersionContext = {},
+): string[] {
+  const candidates = assignedVersions(records, hubId, courseKey);
+  if (context.basedOnVersion && isSemver(context.basedOnVersion)) {
+    candidates.push(context.basedOnVersion);
+  }
+  for (const item of records) {
+    if (item.hubId !== hubId || item.courseKey !== courseKey) continue;
+    if (item.basedOnVersion && isSemver(item.basedOnVersion)) {
+      candidates.push(item.basedOnVersion);
+    }
+    if (item.platformPublicationState === "published" && item.version && isSemver(item.version)) {
+      candidates.push(item.version);
+    }
+  }
+  return candidates;
+}
+
+/** Highest known publication version for a hub/course from local history and context. */
+export function authoritativePublicationVersion(
+  records: readonly AuthoringDraft[],
+  hubId: string,
+  courseKey: string,
+  context: PublicationVersionContext = {},
+): string | null {
+  const candidates = publicationVersionCandidates(records, hubId, courseKey, context);
+  if (!candidates.length) return null;
+  return [...candidates].sort(compareSemver).at(-1) || null;
+}
+
+export function suggestNextVersion(
+  records: readonly AuthoringDraft[],
+  hubId: string,
+  courseKey: string,
+  context: PublicationVersionContext = {},
+): string {
+  const latest = authoritativePublicationVersion(records, hubId, courseKey, context);
   return latest ? bumpPatch(latest) : "0.1.0";
+}
+
+export function suggestNextVersionForDraft(
+  records: readonly AuthoringDraft[],
+  draft: Pick<AuthoringDraft, "hubId" | "courseKey" | "basedOnVersion">,
+): string {
+  return suggestNextVersion(records, draft.hubId, draft.courseKey, { basedOnVersion: draft.basedOnVersion });
 }
 
 export function currentPublished(records: readonly AuthoringDraft[], hubId: string, courseKey: string) {
@@ -130,9 +180,11 @@ export function publishVersion(
   if (!isSemver(version)) {
     throw new LifecycleError("Publication requires a semantic version such as 0.1.0.");
   }
-  const latest = latestAssignedVersion(records, draft.hubId, draft.courseKey);
+  const latest = authoritativePublicationVersion(records, draft.hubId, draft.courseKey, {
+    basedOnVersion: draft.basedOnVersion,
+  });
   if (latest && compareSemver(version, latest) <= 0) {
-    throw new LifecycleError(`Version ${version} must be greater than the latest assigned version ${latest}.`);
+    throw new LifecycleError(`Version ${version} must be greater than the latest known publication version ${latest}.`);
   }
   if (records.some((item) => item.hubId === draft.hubId && item.courseKey === draft.courseKey && item.version === version)) {
     throw new LifecycleError(`Version ${version} already exists for this curriculum.`);

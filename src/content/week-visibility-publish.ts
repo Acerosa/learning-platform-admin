@@ -6,6 +6,7 @@ import {
   createWorkingCopy,
   publishVersion,
   replaceRecord,
+  restoreAsDraft,
   returnToDraft,
   startReview,
   submitForReview,
@@ -129,16 +130,23 @@ export function prepareWeekVisibilityPublish(
   if (!week) {
     throw new WeekVisibilityPublishError(`Week not found: ${weekId}`);
   }
-  if (action === "post" && !canPostWeek(week)) {
-    throw new WeekVisibilityPublishError("This week is already available.");
-  }
-  if (action === "remove" && !canRemoveWeek(week)) {
-    throw new WeekVisibilityPublishError("This week is not available to remove.");
+  const targetStatus = action === "post" ? "available" : "planned";
+  const alreadyAtTarget = weekContentStatus(week) === targetStatus;
+
+  if (!alreadyAtTarget) {
+    if (action === "post" && !canPostWeek(week)) {
+      throw new WeekVisibilityPublishError("This week is already available.");
+    }
+    if (action === "remove" && !canRemoveWeek(week)) {
+      throw new WeekVisibilityPublishError("This week is not available to remove.");
+    }
   }
 
-  const nextPackage = action === "post"
-    ? postWeek(working.package, weekId)
-    : removeWeek(working.package, weekId);
+  const nextPackage = alreadyAtTarget
+    ? working.package
+    : action === "post"
+      ? postWeek(working.package, weekId)
+      : removeWeek(working.package, weekId);
   working = touchDraft(working, nextPackage);
   workingRecords = replaceRecord(workingRecords, working);
 
@@ -153,7 +161,9 @@ export function prepareWeekVisibilityPublish(
   const approved = approveForWeekVisibilityPublish(working, action, weekId, actor);
   workingRecords = replaceRecord(workingRecords, approved);
 
-  const version = suggestNextVersion(workingRecords, approved.hubId, approved.courseKey);
+  const version = suggestNextVersion(workingRecords, approved.hubId, approved.courseKey, {
+    basedOnVersion: working.basedOnVersion,
+  });
   const notes = `Week visibility: ${action} ${weekId}`;
   const nextRecords = publishVersion(workingRecords, approved, {
     version,
@@ -211,4 +221,43 @@ export function canRunWeekVisibilityPublish(
     return false;
   }
   return true;
+}
+
+/**
+ * After a failed platform publish, restore the prior platform snapshot (if any),
+ * discard the failed immutable attempt, and keep the intended week change in an editable draft.
+ */
+export function recoverFromFailedWeekVisibilityPublish(
+  records: AuthoringDraft[],
+  failed: AuthoringDraft,
+  actor: string,
+): { records: AuthoringDraft[]; draft: AuthoringDraft } {
+  if (failed.platformPublicationState !== "failed") {
+    throw new WeekVisibilityPublishError("Recovery requires a failed platform publication.");
+  }
+
+  let nextRecords = records.map((item) => {
+    if (item.id === failed.id) return item;
+    if (
+      item.hubId === failed.hubId
+      && item.courseKey === failed.courseKey
+      && item.status === "superseded"
+      && item.platformPublicationState === "published"
+    ) {
+      return { ...item, status: "published" as const };
+    }
+    return item;
+  });
+
+  const retryDraft = restoreAsDraft(failed, actor);
+  retryDraft.basedOnVersion = failed.basedOnVersion ?? retryDraft.basedOnVersion;
+  nextRecords = nextRecords.filter((item) => item.id !== failed.id);
+  nextRecords = replaceRecord(nextRecords, retryDraft);
+
+  return { records: nextRecords, draft: retryDraft };
+}
+
+export function weekVisibilityPlatformPublishFailureMessage(action: WeekVisibilityAction): string {
+  const verb = action === "post" ? "Make available" : "Hide from learners";
+  return `Platform publication failed. Your week change is kept in this draft — use ${verb} again to retry.`;
 }

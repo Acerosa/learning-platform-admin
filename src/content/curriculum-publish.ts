@@ -109,7 +109,9 @@ export function prepareCurriculumPublish(
   const approved = approveForCurriculumPublish(working, actor, notes);
   workingRecords = replaceRecord(workingRecords, approved);
 
-  const version = suggestNextVersion(workingRecords, approved.hubId, approved.courseKey);
+  const version = suggestNextVersion(workingRecords, approved.hubId, approved.courseKey, {
+    basedOnVersion: working.basedOnVersion,
+  });
   const nextRecords = publishVersion(workingRecords, approved, {
     version,
     publishedBy: actor,
