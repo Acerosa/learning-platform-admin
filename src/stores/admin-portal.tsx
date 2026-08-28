@@ -74,12 +74,14 @@ import {
   CURRICULUM_MUTATION_INVALIDATES,
   fetchAdminBootstrapData,
   fetchModuleData,
+  formatModuleLoadError,
   HUB_MUTATION_INVALIDATES,
   invalidateModuleCache,
   isModuleReady,
   moduleStatusForLoad,
   REVIEW_MUTATION_INVALIDATES,
   setModuleCacheEntry,
+  shouldBeginModuleLoad,
 } from "./admin-module-loader";
 import {
   DEMO_ADMIN_SESSION,
@@ -302,8 +304,10 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     const entry = current.moduleCache[key];
     const refresh = options?.refresh ?? false;
 
-    if (!refresh && isModuleReady(entry)) {
-      recordModuleCacheHit(key);
+    if (!shouldBeginModuleLoad(entry, refresh)) {
+      if (!refresh && isModuleReady(entry)) {
+        recordModuleCacheHit(key);
+      }
       return;
     }
 
@@ -349,9 +353,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         }));
         markModuleLoadCompleted(key);
       } catch (error) {
-        const message = error instanceof Error
-          ? error.message
-          : "This module could not be loaded.";
+        const message = formatModuleLoadError(key, error);
         setState((portal) => ({
           ...portal,
           moduleCache: setModuleCacheEntry(portal.moduleCache, key, {

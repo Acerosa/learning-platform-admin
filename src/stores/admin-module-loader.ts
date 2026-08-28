@@ -7,7 +7,8 @@ import type {
   AdminModulePayload,
   ModuleLoadStatus,
 } from "../api/admin-module-data.ts";
-import { sliceDemoModuleData } from "../api/admin-module-data.ts";
+import { moduleLoadingLabel, sliceDemoModuleData } from "../api/admin-module-data.ts";
+import { AdminReadError } from "../services/supabase-admin-service.ts";
 import {
   loadAdminBootstrapData,
   loadAnalyticsData,
@@ -20,6 +21,41 @@ import {
 
 export function isModuleReady(entry: AdminModuleCacheEntry): boolean {
   return entry.status === "ready" || entry.status === "refreshing";
+}
+
+export function shouldAutoLoadModule(
+  portalStatus: string,
+  entryStatus: ModuleLoadStatus,
+): boolean {
+  return portalStatus === "ready" && entryStatus === "idle";
+}
+
+export function shouldBeginModuleLoad(
+  entry: AdminModuleCacheEntry,
+  refresh: boolean,
+): boolean {
+  if (refresh) return true;
+  if (isModuleReady(entry)) return false;
+  if (entry.status === "error") return false;
+  if (entry.status === "loading") return false;
+  return entry.status === "idle";
+}
+
+export function formatModuleLoadError(
+  moduleKey: AdminModuleDataKey,
+  error: unknown,
+): string {
+  const label = moduleLoadingLabel(moduleKey).replace(/…$/, "");
+  if (error instanceof AdminReadError) {
+    const operation = error.message
+      .replace(/^The /, "")
+      .replace(/ read could not be completed\.$/, "");
+    return `${label} could not be loaded.\nOperation: ${operation}\nCode: ${error.code}\nMessage: ${error.message}`;
+  }
+  if (error instanceof Error) {
+    return `${label} could not be loaded.\nMessage: ${error.message}`;
+  }
+  return `${label} could not be loaded.\nMessage: This module could not be loaded.`;
 }
 
 export function invalidateModuleCache(
