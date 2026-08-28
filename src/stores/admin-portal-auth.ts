@@ -14,9 +14,9 @@ export function shouldClearAdminData(event: AuthBootstrapEvent): boolean {
 }
 
 export function shouldPreservePortalDataOnRefresh(
-  current: { status: string; data: unknown | null },
+  current: { status: string; bootstrapReady: boolean },
   options?: { background?: boolean },
 ): boolean {
   if (options?.background) return true;
-  return current.status === "ready" && current.data !== null;
+  return current.status === "ready" && current.bootstrapReady;
 }

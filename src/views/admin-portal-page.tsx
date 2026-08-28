@@ -16,7 +16,7 @@ import { ModuleContent } from "./module-content";
 export function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
   const portal = useAdminPortal();
 
-  if (portal.status === "loading" && !portal.data) return <AdminLoadingState />;
+  if (portal.status === "loading" && !portal.bootstrapReady) return <AdminLoadingState />;
   if (portal.status === "signed-out") {
     return (
       <AdminSignIn
@@ -37,7 +37,7 @@ export function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
       />
     );
   }
-  if (portal.status === "error" || !portal.data) {
+  if (portal.status === "error" || !portal.bootstrapReady) {
     return <AdminUnavailable message={portal.authMessage} onRetry={portal.retry} />;
   }
 
