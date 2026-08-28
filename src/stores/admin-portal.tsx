@@ -6,10 +6,30 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { Session } from "@supabase/supabase-js";
-import type { AdminDataSnapshot, HubRegistrationResult, PlatformPublicationResult, ReviewResponseRequest, ReviewResponseResult, CurriculumDraftSaveResult, CurrentCurriculumPackageRecord } from "../api/admin-api";
+import type {
+  AdminDataSnapshot,
+  HubRegistrationResult,
+  PlatformPublicationResult,
+  ReviewResponseRequest,
+  ReviewResponseResult,
+  CurriculumDraftSaveResult,
+  CurrentCurriculumPackageRecord,
+} from "../api/admin-api";
+import type {
+  AdminBootstrapData,
+  AdminModuleCacheState,
+  AdminModuleDataKey,
+  AdminModulePayload,
+} from "../api/admin-module-data";
+import {
+  createEmptyModuleCache,
+  mergeModuleCacheToSnapshot,
+  sliceDemoModuleData,
+} from "../api/admin-module-data";
 import type { AuthoringDraft, ContentPackage } from "../content/types";
 import { authoringDraftFromRemote } from "../content/versioning";
 import type { HubRegistrationRequest } from "../content/hub-registration";
@@ -17,6 +37,7 @@ import { registerDemoHub, updateDemoHub } from "../content/hub-registration";
 import {
   DEMO_ADMIN_DATA,
   DEMO_DATA_NOTICE,
+  demoAdminService,
 } from "../services/demo-admin-service";
 import {
   getAdminRuntimeConfig,
@@ -30,7 +51,6 @@ import {
   claimInitialPlatformAdmin,
   createSupabaseAdminClient,
   createSupabaseAdminReadService,
-  loadAdminData,
   publishCurriculum as publishCurriculumRpc,
   saveCurriculumDraft as saveCurriculumDraftRpc,
   loadCurrentCurriculumPackage as loadCurrentCurriculumPackageRpc,
@@ -42,6 +62,25 @@ import {
   updateHub as updateHubRpc,
   type AdminSupabaseClient,
 } from "../services/supabase-admin-service";
+import {
+  markBootstrapCompleted,
+  markBootstrapStarted,
+  markModuleLoadCompleted,
+  markModuleLoadStarted,
+  recordModuleCacheHit,
+  resetAdminModulePerformance,
+} from "../services/admin-module-performance";
+import {
+  CURRICULUM_MUTATION_INVALIDATES,
+  fetchAdminBootstrapData,
+  fetchModuleData,
+  HUB_MUTATION_INVALIDATES,
+  invalidateModuleCache,
+  isModuleReady,
+  moduleStatusForLoad,
+  REVIEW_MUTATION_INVALIDATES,
+  setModuleCacheEntry,
+} from "./admin-module-loader";
 import {
   DEMO_ADMIN_SESSION,
   SIGNED_OUT_ADMIN_SESSION,
@@ -72,10 +111,15 @@ interface AdminPortalContextValue {
   config: AdminRuntimeConfig;
   status: AdminPortalStatus;
   session: AdminSessionSnapshot;
+  bootstrapReady: boolean;
+  bootstrap: AdminBootstrapData | null;
+  moduleCache: AdminModuleCacheState;
   data: AdminDataSnapshot | null;
   refreshing: boolean;
   dataSource: AdminDataSourceStatus;
   authMessage: string | null;
+  ensureModuleData(key: AdminModuleDataKey): Promise<void>;
+  refreshModuleData(key: AdminModuleDataKey): Promise<void>;
   signIn(email: string, password: string): Promise<void>;
   signUp(email: string, password: string): Promise<void>;
   requestMagicLink(email: string): Promise<void>;
@@ -96,7 +140,10 @@ interface AdminPortalContextValue {
 interface PortalState {
   status: AdminPortalStatus;
   session: AdminSessionSnapshot;
-  data: AdminDataSnapshot | null;
+  bootstrap: AdminBootstrapData | null;
+  bootstrapReady: boolean;
+  moduleCache: AdminModuleCacheState;
+  demoSnapshot: AdminDataSnapshot | null;
   message: string | null;
   refreshing: boolean;
 }
@@ -123,7 +170,9 @@ function redirectUrl() {
   return new URL(path, window.location.origin).toString();
 }
 
-function resultFromDemoHub(registered: { result: { hub: NonNullable<AdminDataSnapshot["hubs"][number]>; courseKeys: readonly string[] } }): HubRegistrationResult {
+function resultFromDemoHub(registered: {
+  result: { hub: NonNullable<AdminDataSnapshot["hubs"][number]>; courseKeys: readonly string[] };
+}): HubRegistrationResult {
   return {
     hubCode: registered.result.hub.hubCode,
     hubName: registered.result.hub.hubName,
@@ -146,6 +195,54 @@ function resultFromDemoHub(registered: { result: { hub: NonNullable<AdminDataSna
   };
 }
 
+function clearedPortalState(message: string | null = null): PortalState {
+  return {
+    status: "signed-out",
+    session: SIGNED_OUT_ADMIN_SESSION,
+    bootstrap: null,
+    bootstrapReady: false,
+    moduleCache: createEmptyModuleCache(),
+    demoSnapshot: null,
+    message,
+    refreshing: false,
+  };
+}
+
+function createDemoModuleCache(): AdminModuleCacheState {
+  return {
+    dashboard: {
+      status: "ready",
+      data: sliceDemoModuleData(DEMO_ADMIN_DATA, "dashboard"),
+      error: null,
+    },
+    "hubs-curriculum": {
+      status: "ready",
+      data: sliceDemoModuleData(DEMO_ADMIN_DATA, "hubs-curriculum"),
+      error: null,
+    },
+    people: {
+      status: "ready",
+      data: sliceDemoModuleData(DEMO_ADMIN_DATA, "people"),
+      error: null,
+    },
+    "assignments-results": {
+      status: "ready",
+      data: sliceDemoModuleData(DEMO_ADMIN_DATA, "assignments-results"),
+      error: null,
+    },
+    analytics: {
+      status: "ready",
+      data: sliceDemoModuleData(DEMO_ADMIN_DATA, "analytics"),
+      error: null,
+    },
+    system: {
+      status: "ready",
+      data: sliceDemoModuleData(DEMO_ADMIN_DATA, "system"),
+      error: null,
+    },
+  };
+}
+
 export function AdminPortalProvider({ children }: { children: React.ReactNode }) {
   const config = useMemo(() => getAdminRuntimeConfig(), []);
   const [client] = useState<AdminSupabaseClient | null>(() =>
@@ -158,7 +255,10 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       return {
         status: "ready",
         session: DEMO_ADMIN_SESSION,
-        data: DEMO_ADMIN_DATA,
+        bootstrap: { dashboardSummary: DEMO_ADMIN_DATA.dashboardSummary },
+        bootstrapReady: true,
+        moduleCache: createDemoModuleCache(),
+        demoSnapshot: DEMO_ADMIN_DATA,
         message: null,
         refreshing: false,
       };
@@ -167,7 +267,10 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       return {
         status: "error",
         session: unavailableSession(),
-        data: null,
+        bootstrap: null,
+        bootstrapReady: false,
+        moduleCache: createEmptyModuleCache(),
+        demoSnapshot: null,
         message: config.message,
         refreshing: false,
       };
@@ -175,11 +278,118 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     return {
       status: "loading",
       session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
-      data: null,
+      bootstrap: null,
+      bootstrapReady: false,
+      moduleCache: createEmptyModuleCache(),
+      demoSnapshot: null,
       message: null,
       refreshing: false,
     };
   });
+
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const moduleLoadPromises = useRef(new Map<AdminModuleDataKey, Promise<void>>());
+
+  const loadModuleData = useCallback(async (
+    key: AdminModuleDataKey,
+    options?: { refresh?: boolean },
+  ) => {
+    const current = stateRef.current;
+    const entry = current.moduleCache[key];
+    const refresh = options?.refresh ?? false;
+
+    if (!refresh && isModuleReady(entry)) {
+      recordModuleCacheHit(key);
+      return;
+    }
+
+    const existing = moduleLoadPromises.current.get(key);
+    if (existing) {
+      await existing;
+      return;
+    }
+
+    const promise = (async () => {
+      markModuleLoadStarted(key);
+      setState((portal) => ({
+        ...portal,
+        moduleCache: setModuleCacheEntry(portal.moduleCache, key, {
+          status: moduleStatusForLoad(portal.moduleCache[key].status, refresh),
+          error: null,
+        }),
+      }));
+
+      try {
+        const demoSnapshot = stateRef.current.demoSnapshot;
+        const service = client
+          ? createSupabaseAdminReadService(client)
+          : demoSnapshot
+            ? demoAdminService
+            : null;
+        if (!service) {
+          throw new AdminReadError("unavailable", key);
+        }
+
+        const data = await fetchModuleData(key, service, {
+          bootstrap: stateRef.current.bootstrap,
+          demoSnapshot,
+        });
+
+        setState((portal) => ({
+          ...portal,
+          moduleCache: setModuleCacheEntry(portal.moduleCache, key, {
+            status: "ready",
+            data: data as AdminModulePayload[typeof key],
+            error: null,
+          }),
+        }));
+        markModuleLoadCompleted(key);
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message
+          : "This module could not be loaded.";
+        setState((portal) => ({
+          ...portal,
+          moduleCache: setModuleCacheEntry(portal.moduleCache, key, {
+            status: "error",
+            error: message,
+          }),
+        }));
+        markModuleLoadCompleted(key);
+      }
+    })();
+
+    moduleLoadPromises.current.set(key, promise);
+    try {
+      await promise;
+    } finally {
+      moduleLoadPromises.current.delete(key);
+    }
+  }, [client]);
+
+  const ensureModuleData = useCallback(async (key: AdminModuleDataKey) => {
+    await loadModuleData(key);
+  }, [loadModuleData]);
+
+  const refreshModuleData = useCallback(async (key: AdminModuleDataKey) => {
+    await loadModuleData(key, { refresh: true });
+  }, [loadModuleData]);
+
+  const invalidateAndRefreshModules = useCallback(async (keys: readonly AdminModuleDataKey[]) => {
+    setState((portal) => ({
+      ...portal,
+      moduleCache: invalidateModuleCache(portal.moduleCache, keys),
+    }));
+    await Promise.all(keys.map((key) => loadModuleData(key, { refresh: true })));
+  }, [loadModuleData]);
+
+  const completeDashboardBootstrap = useCallback(async () => {
+    await loadModuleData("dashboard");
+  }, [loadModuleData]);
 
   const bootstrapSession = useCallback(async (
     session: Session | null,
@@ -191,35 +401,37 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       if (shouldPreservePortalDataOnRefresh(current, options)) {
         return { ...current, refreshing: true, message: null };
       }
+      resetAdminModulePerformance();
       return {
         ...current,
         status: "loading",
-        data: null,
+        bootstrap: null,
+        bootstrapReady: false,
+        moduleCache: createEmptyModuleCache(),
+        demoSnapshot: null,
         message: null,
         refreshing: false,
       };
     });
 
     if (!session) {
-      setState({
-        status: "signed-out",
-        session: SIGNED_OUT_ADMIN_SESSION,
-        data: null,
-        message: null,
-        refreshing: false,
-      });
+      setState(clearedPortalState());
       return;
     }
 
     const service = createSupabaseAdminReadService(client);
     try {
+      markBootstrapStarted();
       const staffContext = await service.getCurrentStaffContext();
       const nextSession = sessionFromStaffContext(staffContext);
       if (nextSession.state !== "authenticated") {
         setState({
           status: "access-denied",
           session: nextSession,
-          data: null,
+          bootstrap: null,
+          bootstrapReady: false,
+          moduleCache: createEmptyModuleCache(),
+          demoSnapshot: null,
           message:
             "This authenticated account does not have an active platform administrator role.",
           refreshing: false,
@@ -227,14 +439,19 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         return;
       }
 
-      const data = await loadAdminData(service);
+      const bootstrap = await fetchAdminBootstrapData(service);
       setState({
         status: "ready",
         session: nextSession,
-        data,
+        bootstrap,
+        bootstrapReady: true,
+        moduleCache: createEmptyModuleCache(),
+        demoSnapshot: null,
         message: null,
         refreshing: false,
       });
+      markBootstrapCompleted();
+      void completeDashboardBootstrap();
     } catch (error) {
       const denied = error instanceof AdminReadError && error.code === "access-denied";
       setState((current) => ({
@@ -242,14 +459,21 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         session: denied
           ? { ...SIGNED_OUT_ADMIN_SESSION, state: "access-denied" }
           : unavailableSession(),
-        data: shouldPreservePortalDataOnRefresh(current, options) ? current.data : null,
+        bootstrap: null,
+        bootstrapReady: shouldPreservePortalDataOnRefresh(current, options)
+          ? current.bootstrapReady
+          : false,
+        moduleCache: shouldPreservePortalDataOnRefresh(current, options)
+          ? current.moduleCache
+          : createEmptyModuleCache(),
+        demoSnapshot: null,
         message: denied
           ? "The backend denied access to administrative data."
           : "Live administrative data is currently unavailable. No demo data has been substituted.",
         refreshing: false,
       }));
     }
-  }, [client]);
+  }, [client, completeDashboardBootstrap]);
 
   const refresh = useCallback(async (options?: { background?: boolean }) => {
     if (!client) return;
@@ -258,7 +482,10 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       setState({
         status: "error",
         session: unavailableSession(),
-        data: null,
+        bootstrap: null,
+        bootstrapReady: false,
+        moduleCache: createEmptyModuleCache(),
+        demoSnapshot: null,
         message: "The authentication service is currently unavailable.",
         refreshing: false,
       });
@@ -274,13 +501,9 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       if (shouldClearAdminData(event)) {
-        setState({
-          status: "signed-out",
-          session: SIGNED_OUT_ADMIN_SESSION,
-          data: null,
-          message: null,
-          refreshing: false,
-        });
+        resetAdminModulePerformance();
+        moduleLoadPromises.current.clear();
+        setState(clearedPortalState());
         return;
       }
       if (shouldBootstrapAdminData(event)) {
@@ -299,14 +522,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     setState((current) => ({ ...current, status: "loading", message: null }));
     const { error } = await client.auth.signInWithPassword({ email, password });
     if (error) {
-      setState({
-        status: "signed-out",
-        session: SIGNED_OUT_ADMIN_SESSION,
-        data: null,
-        message: "Sign-in failed. Check the account details and try again.",
-        refreshing: false,
-      });
-      return;
+      setState(clearedPortalState("Sign-in failed. Check the account details and try again."));
     }
   }, [client]);
 
@@ -321,25 +537,14 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         redirectUrl() ?? window.location.origin,
       );
       if (result.confirmationRequired) {
-        setState({
-          status: "signed-out",
-          session: SIGNED_OUT_ADMIN_SESSION,
-          data: null,
-          message:
-            "Check your email to confirm the account, then sign in. Account creation does not grant administration access by itself.",
-          refreshing: false,
-        });
-        return;
+        setState(clearedPortalState(
+          "Check your email to confirm the account, then sign in. Account creation does not grant administration access by itself.",
+        ));
       }
     } catch {
-      setState({
-        status: "signed-out",
-        session: SIGNED_OUT_ADMIN_SESSION,
-        data: null,
-        message:
-          "The account could not be created. Check the details and try again, or sign in if the account already exists.",
-        refreshing: false,
-      });
+      setState(clearedPortalState(
+        "The account could not be created. Check the details and try again, or sign in if the account already exists.",
+      ));
     }
   }, [client]);
 
@@ -353,15 +558,11 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         emailRedirectTo: redirectUrl(),
       },
     });
-    setState({
-      status: "signed-out",
-      session: SIGNED_OUT_ADMIN_SESSION,
-      data: null,
-      message: error
+    setState(clearedPortalState(
+      error
         ? "A sign-in link could not be sent. Check the staff email and try again."
         : "Check the staff inbox for a time-limited sign-in link.",
-      refreshing: false,
-    });
+    ));
   }, [client]);
 
   const claimInitialAdmin = useCallback(async (bootstrapToken: string) => {
@@ -369,7 +570,9 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     setState((current) => ({
       ...current,
       status: "loading",
-      data: null,
+      bootstrap: null,
+      bootstrapReady: false,
+      moduleCache: createEmptyModuleCache(),
       message: null,
       refreshing: false,
     }));
@@ -381,7 +584,9 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       setState((current) => ({
         ...current,
         status: "access-denied",
-        data: null,
+        bootstrap: null,
+        bootstrapReady: false,
+        moduleCache: createEmptyModuleCache(),
         message:
           "Initial administrator setup could not be completed. Check the one-time setup code or contact the platform owner.",
         refreshing: false,
@@ -394,14 +599,19 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       if (config.mode !== "demo") {
         throw new AdminHubRegistrationError("unavailable");
       }
-      const current = state.data ?? DEMO_ADMIN_DATA;
+      const current = stateRef.current.demoSnapshot ?? DEMO_ADMIN_DATA;
       try {
         const registered = registerDemoHub(current, request);
         setState((existing) => (
           existing.status === "ready"
-            ? { ...existing, data: registered.snapshot }
+            ? {
+                ...existing,
+                demoSnapshot: registered.snapshot,
+                moduleCache: invalidateModuleCache(existing.moduleCache, HUB_MUTATION_INVALIDATES),
+              }
             : existing
         ));
+        await invalidateAndRefreshModules(HUB_MUTATION_INVALIDATES);
         return resultFromDemoHub(registered);
       } catch (caught) {
         throw new AdminHubRegistrationError(
@@ -410,27 +620,28 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       }
     }
     const result = await registerHubRpc(client, request);
-    const service = createSupabaseAdminReadService(client);
-    const data = await loadAdminData(service);
-    setState((current) => (
-      current.status === "ready" ? { ...current, data } : current
-    ));
+    await invalidateAndRefreshModules(HUB_MUTATION_INVALIDATES);
     return result;
-  }, [client, config.mode, state.data]);
+  }, [client, config.mode, invalidateAndRefreshModules]);
 
   const updateHub = useCallback(async (request: HubRegistrationRequest) => {
     if (!client) {
       if (config.mode !== "demo") {
         throw new AdminHubRegistrationError("unavailable");
       }
-      const current = state.data ?? DEMO_ADMIN_DATA;
+      const current = stateRef.current.demoSnapshot ?? DEMO_ADMIN_DATA;
       try {
         const updated = updateDemoHub(current, request);
         setState((existing) => (
           existing.status === "ready"
-            ? { ...existing, data: updated.snapshot }
+            ? {
+                ...existing,
+                demoSnapshot: updated.snapshot,
+                moduleCache: invalidateModuleCache(existing.moduleCache, HUB_MUTATION_INVALIDATES),
+              }
             : existing
         ));
+        await invalidateAndRefreshModules(HUB_MUTATION_INVALIDATES);
         return resultFromDemoHub(updated);
       } catch (caught) {
         throw new AdminHubRegistrationError(
@@ -439,26 +650,18 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       }
     }
     const result = await updateHubRpc(client, request);
-    const service = createSupabaseAdminReadService(client);
-    const data = await loadAdminData(service);
-    setState((current) => (
-      current.status === "ready" ? { ...current, data } : current
-    ));
+    await invalidateAndRefreshModules(HUB_MUTATION_INVALIDATES);
     return result;
-  }, [client, config.mode, state.data]);
+  }, [client, config.mode, invalidateAndRefreshModules]);
 
   const publishCurriculum = useCallback(async (record: AuthoringDraft) => {
     if (!client) {
       throw new AdminPublicationError("unavailable");
     }
     const result = await publishCurriculumRpc(client, record);
-    const service = createSupabaseAdminReadService(client);
-    const data = await loadAdminData(service);
-    setState((current) => (
-      current.status === "ready" ? { ...current, data } : current
-    ));
+    await invalidateAndRefreshModules(CURRICULUM_MUTATION_INVALIDATES);
     return result;
-  }, [client]);
+  }, [client, invalidateAndRefreshModules]);
 
   const saveCurriculumDraft = useCallback(async (record: AuthoringDraft) => {
     if (!client) throw new AdminPublicationError("unavailable");
@@ -476,8 +679,8 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     return authoringDraftFromRemote({
       ...record,
       package: record.package as unknown as ContentPackage,
-    }, state.session.displayName);
-  }, [client, state.session.displayName]);
+    }, stateRef.current.session.displayName);
+  }, [client]);
 
   const discardRemoteCurriculumDraft = useCallback(async (draftId: string) => {
     if (!client) throw new AdminPublicationError("unavailable");
@@ -486,11 +689,14 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const reviewResponse = useCallback(async (request: ReviewResponseRequest) => {
     if (config.mode === "demo") {
-      if (!state.data) throw new AdminReviewError("unavailable");
-      const current = state.data.responses.find((response) => response.responseId === request.responseId);
+      const snapshot = mergeModuleCacheToSnapshot(stateRef.current.moduleCache);
+      const demoSnapshot = stateRef.current.demoSnapshot ?? DEMO_ADMIN_DATA;
+      const source = snapshot.responses.length ? snapshot : demoSnapshot;
+      if (!source.responses.length) throw new AdminReviewError("unavailable");
+      const current = source.responses.find((response) => response.responseId === request.responseId);
       if (!current) throw new AdminReviewError("REVIEW_RESPONSE_NOT_FOUND");
       const markedAt = new Date().toISOString();
-      const responses = state.data.responses.map((response) => (
+      const responses = source.responses.map((response) => (
         response.responseId === request.responseId
           ? {
               ...response,
@@ -506,7 +712,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       ));
       const attemptResponses = responses.filter((response) => response.attemptId === current.attemptId);
       const attemptScore = attemptResponses.reduce((sum, response) => sum + (response.score ?? 0), 0);
-      const attempts = state.data.attempts.map((attempt) => (
+      const attempts = source.attempts.map((attempt) => (
         attempt.attemptId === current.attemptId
           ? {
               ...attempt,
@@ -516,8 +722,17 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
             }
           : attempt
       ));
-      const data = { ...state.data, responses, attempts };
-      setState((portal) => (portal.status === "ready" ? { ...portal, data } : portal));
+      const nextSnapshot = { ...demoSnapshot, responses, attempts };
+      setState((portal) => (
+        portal.status === "ready"
+          ? {
+              ...portal,
+              demoSnapshot: nextSnapshot,
+              moduleCache: invalidateModuleCache(portal.moduleCache, REVIEW_MUTATION_INVALIDATES),
+            }
+          : portal
+      ));
+      await invalidateAndRefreshModules(REVIEW_MUTATION_INVALIDATES);
       return {
         responseId: request.responseId,
         attemptId: current.attemptId,
@@ -537,13 +752,9 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
     if (!client) throw new AdminReviewError("unavailable");
     const result = await reviewResponseRpc(client, request);
-    const service = createSupabaseAdminReadService(client);
-    const data = await loadAdminData(service);
-    setState((current) => (
-      current.status === "ready" ? { ...current, data } : current
-    ));
+    await invalidateAndRefreshModules(REVIEW_MUTATION_INVALIDATES);
     return result;
-  }, [client, config.mode, state.data]);
+  }, [client, config.mode, invalidateAndRefreshModules]);
 
   const callRpc = useCallback(async (name: string, params: Record<string, unknown>): Promise<unknown[]> => {
     if (!client) throw new Error("Platform not connected");
@@ -555,14 +766,15 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   const signOut = useCallback(async () => {
     if (!client) return;
     await client.auth.signOut();
-    setState({
-      status: "signed-out",
-      session: SIGNED_OUT_ADMIN_SESSION,
-      data: null,
-      message: null,
-      refreshing: false,
-    });
+    resetAdminModulePerformance();
+    moduleLoadPromises.current.clear();
+    setState(clearedPortalState());
   }, [client]);
+
+  const data = useMemo(
+    () => (state.bootstrapReady ? mergeModuleCacheToSnapshot(state.moduleCache) : null),
+    [state.bootstrapReady, state.moduleCache],
+  );
 
   const dataSource = useMemo<AdminDataSourceStatus>(() => {
     if (config.mode === "demo") {
@@ -608,18 +820,23 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const retry = useCallback(async () => {
     await refresh({
-      background: state.status === "ready" && state.data !== null,
+      background: state.status === "ready" && state.bootstrapReady,
     });
-  }, [refresh, state.data, state.status]);
+  }, [refresh, state.bootstrapReady, state.status]);
 
   const value = useMemo<AdminPortalContextValue>(() => ({
     config,
     status: state.status,
     session: state.session,
-    data: state.data,
+    bootstrapReady: state.bootstrapReady,
+    bootstrap: state.bootstrap,
+    moduleCache: state.moduleCache,
+    data,
     refreshing: state.refreshing,
     dataSource,
     authMessage: state.message,
+    ensureModuleData,
+    refreshModuleData,
     signIn,
     signUp,
     requestMagicLink,
@@ -635,7 +852,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     callRpc,
     signOut,
     retry,
-  }), [callRpc, claimInitialAdmin, config, dataSource, discardRemoteCurriculumDraft, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, registerHub, requestMagicLink, retry, reviewResponse, saveCurriculumDraft, signIn, signOut, signUp, state, updateHub]);
+  }), [callRpc, claimInitialAdmin, config, data, dataSource, discardRemoteCurriculumDraft, ensureModuleData, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refreshModuleData, registerHub, requestMagicLink, retry, reviewResponse, saveCurriculumDraft, signIn, signOut, signUp, state, updateHub]);
 
   return (
     <AdminPortalContext.Provider value={value}>
@@ -651,3 +868,5 @@ export function useAdminPortal() {
   }
   return context;
 }
+
+export type { AdminModuleDataKey };

@@ -19,15 +19,15 @@ test("auth bootstrap runs once for INITIAL_SESSION and SIGNED_IN only", () => {
 });
 
 test("background refresh preserves ready portal data", () => {
-  const ready = { status: "ready", data: { hubs: [] } };
+  const ready = { status: "ready", bootstrapReady: true };
   assert.equal(shouldPreservePortalDataOnRefresh(ready), true);
-  assert.equal(shouldPreservePortalDataOnRefresh({ status: "loading", data: null }), false);
+  assert.equal(shouldPreservePortalDataOnRefresh({ status: "loading", bootstrapReady: false }), false);
   assert.equal(
-    shouldPreservePortalDataOnRefresh({ status: "ready", data: null }),
+    shouldPreservePortalDataOnRefresh({ status: "ready", bootstrapReady: false }),
     false,
   );
   assert.equal(
-    shouldPreservePortalDataOnRefresh({ status: "loading", data: null }, { background: true }),
+    shouldPreservePortalDataOnRefresh({ status: "loading", bootstrapReady: false }, { background: true }),
     true,
   );
 });
@@ -64,12 +64,12 @@ test("refresh preserves cached data instead of clearing it by default", async ()
   const source = await readFile(new URL("src/stores/admin-portal.tsx", root), "utf8");
   assert.match(source, /shouldPreservePortalDataOnRefresh/);
   assert.match(source, /refreshing: true/);
-  assert.match(source, /background: state\.status === "ready" && state\.data !== null/);
+  assert.match(source, /background: state\.status === "ready" && state\.bootstrapReady/);
 });
 
 test("module frame keeps portal visible while cached data refreshes", async () => {
   const source = await readFile(new URL("src/views/admin-portal-page.tsx", root), "utf8");
-  assert.match(source, /portal\.status === "loading" && !portal\.data/);
+  assert.match(source, /portal\.status === "loading" && !portal\.bootstrapReady/);
 });
 
 test("internal Admin links use Next client navigation outside GitHub Pages", async () => {

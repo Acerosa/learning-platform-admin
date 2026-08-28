@@ -1712,6 +1712,26 @@ tbody tr:hover {
   to { transform: translateX(140%); }
 }
 
+.module-loading {
+  display: grid;
+  gap: 0.75rem;
+  padding: 2rem 0;
+  color: var(--lp-muted);
+}
+
+.module-loading__spinner {
+  display: block;
+  width: 2.5rem;
+  height: 0.3rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--lp-primary), transparent);
+  animation: admin-loading 1s ease-in-out infinite alternate;
+}
+
+.module-loading--error {
+  color: var(--lp-danger, #b42318);
+}
+
 .navigation-backdrop { display: none; }
 
 @media (max-width: 80rem) {

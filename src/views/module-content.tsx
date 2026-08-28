@@ -21,6 +21,8 @@ import { legacyRouteContext } from "../router/legacy-routes";
 import { getAdminModule, type AdminModuleId } from "../router/modules";
 import { AdminHubRegistrationError } from "../services/supabase-admin-service";
 import { useAdminPortal } from "../stores/admin-portal";
+import { moduleDataKeyForRoute } from "../api/admin-module-data";
+import { ModuleDataShell } from "../components/module-data-shell";
 import { formatDate } from "../utils/format";
 import { AssessmentArea } from "./assessment-area";
 import { CurriculumAuthoringPage } from "./curriculum-authoring";
@@ -270,13 +272,14 @@ function legacyHeading(moduleId: AdminModuleId): string | undefined {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, publishCurriculum, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse } = useAdminPortal();
+  const { data, session, dataSource, publishCurriculum, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, bootstrapReady } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
-  if (!data) return null;
+  const moduleKey = moduleDataKeyForRoute(moduleId);
+  if (!bootstrapReady || !data) return null;
   const openPending = (action: PendingAction) => setPendingAction(action);
   const hubDialogOpen = registerOpen || Boolean(editingHub);
   const routeContext = legacyRouteContext(moduleId);
@@ -410,7 +413,11 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
 
   return (
     <>
-      {content}
+      {moduleKey ? (
+        <ModuleDataShell moduleKey={moduleKey}>{content}</ModuleDataShell>
+      ) : (
+        content
+      )}
       <PendingActionDialog action={pendingAction} onClose={() => setPendingAction(null)} />
       {hubDialogOpen ? (
         <RegisterHubDialog
