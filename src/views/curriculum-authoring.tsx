@@ -12,7 +12,6 @@ import { LifecycleBanner, lifecycleTone } from "../components/authoring/lifecycl
 import { PreviewPane } from "../components/authoring/preview-pane";
 import { PublicationPanel } from "../components/authoring/publication-panel";
 import { ReviewPanel } from "../components/authoring/review-panel";
-import { AuthoringAreaLinks } from "../components/authoring-area-links";
 import { SessionForm } from "../components/authoring/session-form";
 import { VersionsPanel } from "../components/authoring/versions-panel";
 import { WeekForm } from "../components/authoring/week-form";
@@ -30,7 +29,13 @@ import {
 } from "../content/draft-store";
 import { downloadText, exportActivityPackage, exportDocument, exportPackage } from "../content/export";
 import { syncCurriculumLists, upsertAssignment, upsertOutcome } from "../content/factories";
+import {
+  canRunCurriculumPublish,
+  curriculumPublishSuccessMessage,
+  prepareCurriculumPublish,
+} from "../content/curriculum-publish";
 import { isEditableStatus, LIFECYCLE_LABELS } from "../content/lifecycle";
+import { userLifecycleLabel } from "../content/user-lifecycle";
 import {
   afterPlatformPublishGuidance,
   weekVisibilityNextSteps,
@@ -174,6 +179,7 @@ export function CurriculumAuthoringPage({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [visibilityWeekId, setVisibilityWeekId] = useState("");
   const [visibilityPublishBusy, setVisibilityPublishBusy] = useState(false);
+  const [curriculumPublishBusy, setCurriculumPublishBusy] = useState(false);
   const [remoteDraftStatus, setRemoteDraftStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const saveGate = useRef(createSequenceGate());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -272,6 +278,12 @@ export function CurriculumAuthoringPage({
     draft,
     platformAvailable && Boolean(onPublishToPlatform),
     visibilityPublishBusy,
+  );
+  const curriculumPublishReady = canRunCurriculumPublish(
+    draft,
+    platformAvailable && Boolean(onPublishToPlatform),
+    curriculumPublishBusy || visibilityPublishBusy,
+    gate.ok,
   );
 
   function showError(error: unknown) {
@@ -461,6 +473,69 @@ export function CurriculumAuthoringPage({
     }
   }
 
+  async function publishCurriculum() {
+    if (!onPublishToPlatform) {
+      setMessage("Publish requires a live administrator session.");
+      return;
+    }
+    if (!window.confirm("Publish this curriculum to the platform? This creates an immutable version and replaces the active platform publication.")) {
+      return;
+    }
+    setCurriculumPublishBusy(true);
+    try {
+      const prepared = prepareCurriculumPublish(
+        compareRecords,
+        draft,
+        actor,
+        publishNotes || "Curriculum publish",
+      );
+      let nextRecords = prepared.records;
+      persistDrafts(nextRecords);
+      setDrafts(nextRecords);
+      setDraft(prepared.published);
+      setPreviewId(prepared.published.id);
+      setPublishVersionValue(suggestNextVersion(nextRecords, prepared.published.hubId, prepared.published.courseKey));
+      setMessage("Publishing to the platform…");
+
+      const publishing = withPlatformPublication(prepared.published, { platformPublicationState: "publishing" });
+      nextRecords = nextRecords.map((item) => (item.id === publishing.id ? publishing : item));
+      persistDrafts(nextRecords);
+      setDrafts(nextRecords);
+      setDraft(publishing);
+
+      try {
+        const result = await onPublishToPlatform(publishing);
+        const done = withPlatformPublication(publishing, {
+          platformPublicationState: "published",
+          platformPublicationError: null,
+          platformPublishedAt: result.publishedAt,
+          platformPublicationId: result.id,
+        });
+        nextRecords = nextRecords.map((item) => (item.id === done.id ? done : item));
+        persistDrafts(nextRecords);
+        setDrafts(nextRecords);
+        setDraft(done);
+        setMessage(curriculumPublishSuccessMessage(prepared.version, result.idempotent));
+      } catch (error) {
+        const failed = withPlatformPublication(publishing, {
+          platformPublicationState: "failed",
+          platformPublicationError: error instanceof Error
+            ? error.message
+            : "Curriculum could not be published to the platform.",
+        });
+        nextRecords = nextRecords.map((item) => (item.id === failed.id ? failed : item));
+        persistDrafts(nextRecords);
+        setDrafts(nextRecords);
+        setDraft(failed);
+        showError(error);
+      }
+    } catch (error) {
+      showError(error);
+    } finally {
+      setCurriculumPublishBusy(false);
+    }
+  }
+
   function setHubContext(hubCode: string) {
     const hub = hubs.find((item) => item.hubCode === hubCode);
     const link = links.find((item) => item.hubCode === hubCode);
@@ -489,33 +564,63 @@ export function CurriculumAuthoringPage({
     });
   }
 
-  const tabs: { id: AuthoringTab; label: string }[] = [
+  const primaryTabs: { id: AuthoringTab; label: string }[] = [
     { id: "curriculum", label: "Curriculum" },
     { id: "weeks", label: "Weeks" },
     { id: "sessions", label: "Sessions" },
     { id: "activities", label: "Activities" },
-    { id: "imports", label: "Imports" },
+  ];
+  const secondaryTabs: { id: AuthoringTab; label: string }[] = [
+    { id: "imports", label: "Import" },
     { id: "drafts", label: "Drafts" },
-    { id: "versions", label: "Versions" },
-    { id: "review", label: "Review" },
-    { id: "publication", label: "Publication" },
+    { id: "versions", label: "Version history" },
     { id: "history", label: "History" },
     { id: "compare", label: "Compare" },
     { id: "archive", label: "Archive" },
+    { id: "review", label: "Review (advanced)" },
+    { id: "publication", label: "Publication (advanced)" },
   ];
 
   return (
     <>
       <header className="page-header">
         <div>
-          <p className="eyebrow">Edit and publish a hub curriculum</p>
-          <h1>Curriculum authoring</h1>
-          <p>Choose a hub and course, open published content as a draft, then validate, review, approve and publish to the platform. Reusable masters live in Content Library. Assembling those masters into a draft happens in Composition.</p>
+          <p className="eyebrow">Hub curriculum authoring</p>
+          <h1>Curriculum</h1>
+          <p>Choose a hub and course, edit teaching content, then Save draft or Publish. Published means the backend platform catalogue is updated.</p>
         </div>
-        <StatusBadge label={LIFECYCLE_LABELS[draft.status]} tone={lifecycleTone(draft.status)} />
+        <StatusBadge label={userLifecycleLabel(draft)} tone={lifecycleTone(draft.status)} />
       </header>
 
-      <AuthoringAreaLinks current="curriculum" />
+      <div className="toolbar authoring-primary-toolbar">
+        <button className="button button--secondary" type="button" disabled={!editable} onClick={() => void persistRemote(draft, true)}>
+          Save draft
+        </button>
+        <button className="button button--secondary" type="button" onClick={() => document.getElementById("authoring-preview-pane")?.scrollIntoView({ behavior: "smooth" })}>
+          Preview
+        </button>
+        <button
+          className="button button--primary"
+          type="button"
+          disabled={!curriculumPublishReady}
+          onClick={() => void publishCurriculum()}
+        >
+          {curriculumPublishBusy ? "Publishing…" : "Publish"}
+        </button>
+        <details className="authoring-more-menu">
+          <summary className="button button--secondary">More</summary>
+          <div className="authoring-more-menu__panel" role="menu">
+            {secondaryTabs.map((item) => (
+              <button key={item.id} type="button" role="menuitem" className="button button--small button--secondary" onClick={() => setTab(item.id)}>
+                {item.label}
+              </button>
+            ))}
+            <button type="button" role="menuitem" className="button button--small button--secondary" disabled={!editable} onClick={() => downloadText(`${pkg.hub.id}-package.json`, exportPackage(pkg))}>Export</button>
+            <button type="button" role="menuitem" className="button button--small button--secondary" disabled={!platformAvailable} onClick={() => void openPublished()}>Open published content</button>
+            <button type="button" role="menuitem" className="button button--small button--secondary" onClick={() => openWorkingCopyFromPublished()}>Create draft from published</button>
+          </div>
+        </details>
+      </div>
       <LifecycleBanner
         record={draft}
         onCreateWorkingCopy={() => openWorkingCopyFromPublished()}
@@ -568,7 +673,7 @@ export function CurriculumAuthoringPage({
       </section>
 
       <div className="authoring-tabs" role="tablist" aria-label="Authoring views">
-        {tabs.map((item) => (
+        {primaryTabs.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -588,23 +693,12 @@ export function CurriculumAuthoringPage({
         {tab === "curriculum" ? (
           <section className="panel">
             <h2>Draft workspace</h2>
-            <p>This workspace edits and publishes a specific hub/course curriculum. Learners consume published content only. Lifecycle: Draft, Ready for Review, In Review, Approved, Published, Superseded, Archived. Validation is a gate, not a status. Local Publish stays in this browser; Publish to Platform sends an approved snapshot to the backend catalogue.</p>
+            <p>Normal workflow: Save draft while editing, then Publish when validation passes. Published means the immutable snapshot is active on the platform.</p>
             <div className="toolbar">
-              <button className="button button--primary" type="button" onClick={() => {
+              <button className="button button--secondary" type="button" onClick={() => {
                 const result = validatePackage(pkg);
-                setMessage(result.valid ? "Validation succeeded." : "Validation failed. Publication remains blocked.");
+                setMessage(result.valid ? "Validation succeeded." : "Validation failed. Publish remains blocked.");
               }}>Validate</button>
-              <button className="button button--secondary" type="button" disabled={!editable} onClick={() => {
-                try {
-                  applyRecord(submitForReview(draft));
-                } catch (error) {
-                  showError(error);
-                }
-              }}>Mark ready for review</button>
-              <button className="button button--secondary" type="button" onClick={() => downloadText(`${pkg.hub.id}-package.json`, exportPackage(pkg))}>Export package</button>
-              <button className="button button--secondary" type="button" disabled={!editable} onClick={() => void persistRemote(draft, true)}>Save draft</button>
-              <button className="button button--secondary" type="button" disabled={!platformAvailable} onClick={() => void openPublished()}>Open published content</button>
-              <button className="button button--secondary" type="button" disabled={!pkg.activities.length} onClick={() => downloadText(`${selectedActivity?.id || "activity"}.json`, exportActivityPackage(pkg, selectedActivity?.id))}>Export activity package</button>
             </div>
             <DiagnosticsList issues={validation.issues} />
           </section>
@@ -690,7 +784,7 @@ export function CurriculumAuthoringPage({
                     }
                     onClick={() => void publishWeekVisibility("post")}
                   >
-                    {visibilityPublishBusy ? "Publishing…" : "Post week & publish"}
+                    {visibilityPublishBusy ? "Publishing…" : "Make available"}
                   </button>
                   <button
                     className="button button--secondary"
@@ -702,7 +796,7 @@ export function CurriculumAuthoringPage({
                     }
                     onClick={() => void publishWeekVisibility("remove")}
                   >
-                    Remove week &amp; publish
+                    Hide from learners
                   </button>
                 </div>
               ) : <p>No weeks in this draft.</p>}
@@ -1089,7 +1183,7 @@ export function CurriculumAuthoringPage({
           </div>
         )}
       </div>
-      <PreviewPane title="Preview" html={previewHtml} />
+      <PreviewPane title="Preview" html={previewHtml} id="authoring-preview-pane" />
     </>
   );
 }

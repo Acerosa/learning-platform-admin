@@ -39,7 +39,19 @@ export type WeekVisibilityPublishResult = {
   action: WeekVisibilityAction;
   teachingWeek: string;
   weekTitle: string;
+  status: "available" | "planned";
+  hubCode: string;
+  courseKey: string;
 };
+
+/** Soft, non-blocking hint when T Level week ids may not overlay hub weeks week-1…week-22. */
+export function weekVisibilityHubIdHint(hubCode: string, weekId: string, teachingWeek: string): string | null {
+  if (hubCode !== "tlevel-software-development") return null;
+  const expected = /^week-\d+$/;
+  if (expected.test(weekId)) return null;
+  const n = teachingWeek && teachingWeek !== "?" ? teachingWeek : "N";
+  return `Learner hub overlays match week-1…week-22 (e.g. week-${n}); this id is “${weekId}”.`;
+}
 
 /** Fast-forward Draft → Approved for the week-visibility shortcut (skips Review UI). */
 export function approveForWeekVisibilityPublish(
@@ -96,6 +108,7 @@ function ensureEditableDraft(
  * Atomic local prepare: working copy (if needed) → Post/Remove → validate →
  * auto-approve → immutable publish. Does not call the platform RPC.
  * Persists nothing; caller should replace local records then Publish to Platform.
+ * Review UI is not required — approveForWeekVisibilityPublish fast-forwards lifecycle.
  */
 export function prepareWeekVisibilityPublish(
   records: AuthoringDraft[],
@@ -168,14 +181,21 @@ export function prepareWeekVisibilityPublish(
     action,
     teachingWeek: String(publishedWeek.metadata.teachingWeek ?? "?"),
     weekTitle: String(publishedWeek.metadata.title || weekId),
+    status: expected,
+    hubCode: published.hubId,
+    courseKey: published.courseKey,
   };
 }
 
 export function weekVisibilityPublishSuccessMessage(result: WeekVisibilityPublishResult): string {
-  if (result.action === "post") {
-    return `Week ${result.teachingWeek} (“${result.weekTitle}”) is available on the platform. Reload the learner hub to see it.`;
-  }
-  return `Week ${result.teachingWeek} (“${result.weekTitle}”) is planned again on the platform. Reload the learner hub to see it.`;
+  const base = [
+    `${result.hubCode} / ${result.courseKey}`,
+    `week ${result.teachingWeek} (${result.weekId})`,
+    `status ${result.status}`,
+    "Reload the learner hub.",
+  ].join(" · ");
+  const hint = weekVisibilityHubIdHint(result.hubCode, result.weekId, result.teachingWeek);
+  return hint ? `${base} ${hint}` : base;
 }
 
 export function canRunWeekVisibilityPublish(
