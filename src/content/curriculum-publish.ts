@@ -96,7 +96,7 @@ export function prepareCurriculumPublish(
 
   const ensured = ensureEditableDraft(records, draft, actor);
   let workingRecords = ensured.records;
-  let working = ensured.draft;
+  const working = ensured.draft;
 
   const gate = publicationGate(working.package, working.sourcePackageVersion);
   if (!gate.ok) {

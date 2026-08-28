@@ -6,7 +6,6 @@ import type { PendingAction } from "../components/pending-action-dialog";
 import { getAdminModule } from "../router/modules";
 import type { PeopleTab } from "../router/legacy-routes";
 import {
-  EnrolmentsPanel,
   GroupsPanel,
   LearnersPanel,
   StaffPanel,

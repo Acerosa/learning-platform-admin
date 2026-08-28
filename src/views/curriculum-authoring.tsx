@@ -27,7 +27,7 @@ import {
   saveDraft,
   touchDraft,
 } from "../content/draft-store";
-import { downloadText, exportActivityPackage, exportDocument, exportPackage } from "../content/export";
+import { downloadText, exportDocument, exportPackage } from "../content/export";
 import { syncCurriculumLists, upsertAssignment, upsertOutcome } from "../content/factories";
 import {
   canRunCurriculumPublish,
@@ -69,7 +69,6 @@ import {
   restoreAsDraft,
   returnToDraft,
   startReview,
-  submitForReview,
   suggestNextVersion,
   updateReviewMetadata,
   publishVersion,
