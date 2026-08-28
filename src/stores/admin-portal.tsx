@@ -77,6 +77,7 @@ import {
   formatModuleLoadError,
   HUB_MUTATION_INVALIDATES,
   invalidateModuleCache,
+  markModuleCacheRefreshing,
   isModuleReady,
   moduleStatusForLoad,
   REVIEW_MUTATION_INVALIDATES,
@@ -384,7 +385,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   const invalidateAndRefreshModules = useCallback(async (keys: readonly AdminModuleDataKey[]) => {
     setState((portal) => ({
       ...portal,
-      moduleCache: invalidateModuleCache(portal.moduleCache, keys),
+      moduleCache: markModuleCacheRefreshing(portal.moduleCache, keys),
     }));
     await Promise.all(keys.map((key) => loadModuleData(key, { refresh: true })));
   }, [loadModuleData]);
