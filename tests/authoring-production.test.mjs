@@ -5,11 +5,13 @@ import { renderText } from "./helpers/render.mjs";
 
 const root = new URL("../", import.meta.url);
 
-test("sidebar navigation exposes Content Library and Composition without Activities", async () => {
+test("sidebar navigation exposes six primary areas without hidden modules", async () => {
   const { html } = await renderText("/");
-  assert.match(html, /Content Library/);
-  assert.match(html, /Composition/);
-  assert.match(html, /Curriculum authoring/);
+  for (const label of ["Dashboard", "Hubs &amp; Curriculum", "People", "Assignments &amp; Results", "Analytics", "System"]) {
+    assert.match(html, new RegExp(label));
+  }
+  assert.doesNotMatch(html, />Content Library<\/span>/);
+  assert.doesNotMatch(html, />Composition<\/span>/);
   assert.doesNotMatch(html, />Activities<\/a>/);
   assert.doesNotMatch(html, /href="\/activities"/);
 });

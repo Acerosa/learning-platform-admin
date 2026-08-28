@@ -7,6 +7,10 @@ import { createActivity, createBlock, createSession, createWeek, syncCurriculumL
 import { canTransition, LIFECYCLE_LABELS, LifecycleError, publicationRecord, reviewMetadata, transitionRecord } from "../src/content/lifecycle.ts";
 import { publicationGate } from "../src/content/publication-gate.ts";
 import {
+  canRunCurriculumPublish,
+  prepareCurriculumPublish,
+} from "../src/content/curriculum-publish.ts";
+import {
   approveRecord,
   archiveVersion,
   createDraft,
@@ -23,6 +27,7 @@ import {
 import { postWeek } from "../src/content/week-availability.ts";
 import {
   prepareWeekVisibilityPublish,
+  weekVisibilityHubIdHint,
   weekVisibilityPublishSuccessMessage,
   WeekVisibilityPublishError,
 } from "../src/content/week-visibility-publish.ts";
@@ -313,7 +318,9 @@ test("week visibility publish posts a week, bumps version, and leaves platform p
   assert.equal(result.published.package.weeks[0].metadata.status, "available");
   assert.match(result.published.approvalNotes, /Week visibility: post/);
   assert.equal(canPublishToPlatform(result.published, true), true);
-  assert.match(weekVisibilityPublishSuccessMessage(result), /available on the platform/);
+  assert.match(weekVisibilityPublishSuccessMessage(result), /Reload the learner hub/);
+  assert.match(weekVisibilityPublishSuccessMessage(result), /status available/);
+  assert.match(weekVisibilityPublishSuccessMessage(result), new RegExp(weekId));
 });
 
 test("week visibility publish from an already platform-published snapshot creates the next version", () => {
@@ -333,7 +340,8 @@ test("week visibility publish from an already platform-published snapshot create
   assert.equal(second.published.package.weeks.length, 1);
   assert.equal(second.published.package.activities.length, 1);
   assert.equal(canPublishToPlatform(second.published, true), true);
-  assert.match(weekVisibilityPublishSuccessMessage(second), /planned again on the platform/);
+  assert.match(weekVisibilityPublishSuccessMessage(second), /Reload the learner hub/);
+  assert.match(weekVisibilityPublishSuccessMessage(second), /status planned/);
 });
 
 test("week visibility publish blocks when validation fails", () => {
@@ -344,6 +352,38 @@ test("week visibility publish blocks when validation fails", () => {
     () => prepareWeekVisibilityPublish([invalid], invalid, weekId, "post", "Ada Author"),
     WeekVisibilityPublishError,
   );
+});
+
+test("week visibility success message includes hub sync details and soft T Level id hint", () => {
+  assert.equal(weekVisibilityHubIdHint("tlevel-software-development", "week-1", "1"), null);
+  assert.match(weekVisibilityHubIdHint("tlevel-software-development", "foundations", "1") || "", /week-1/);
+  assert.equal(weekVisibilityHubIdHint("unit-3-cyber-security", "foundations", "1"), null);
+
+  const draft = withContent();
+  draft.hubId = "tlevel-software-development";
+  draft.courseKey = "t-level-digital-software-development";
+  const week = {
+    ...draft.package.weeks[0],
+    id: "foundations",
+    metadata: { ...draft.package.weeks[0].metadata, teachingWeek: 1, title: "Foundations", status: "planned" },
+  };
+  draft.package = syncCurriculumLists({
+    ...draft.package,
+    hub: { ...draft.package.hub, id: "tlevel-software-development" },
+    curriculum: {
+      ...draft.package.curriculum,
+      metadata: { ...draft.package.curriculum.metadata, course: "t-level-digital-software-development" },
+    },
+    weeks: [week],
+  });
+  const result = prepareWeekVisibilityPublish([draft], draft, "foundations", "post", "Ada Author");
+  const message = weekVisibilityPublishSuccessMessage(result);
+  assert.match(message, /tlevel-software-development/);
+  assert.match(message, /t-level-digital-software-development/);
+  assert.match(message, /foundations/);
+  assert.match(message, /status available/);
+  assert.match(message, /Reload the learner hub/);
+  assert.match(message, /week-1/);
 });
 
 test("an imported week graph can pass the publication gate and local publish", () => {
@@ -400,4 +440,39 @@ test("authoring drafts can be opened for Unit 3 and T Level without a Unit 14 fi
   assert.equal(unit3.courseKey, "ocr-level-3-it");
   assert.equal(tlevel.package.hub.id, "tlevel-software-development");
   assert.equal(tlevel.courseKey, "t-level-digital-software-development");
+});
+
+test("prepareCurriculumPublish auto-approves draft and creates immutable published snapshot", () => {
+  const draft = withContent();
+  const result = prepareCurriculumPublish([], draft, "Ada Author", "Ship it");
+  assert.equal(result.published.status, "published");
+  assert.match(result.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(result.published.platformPublicationState, "pending");
+});
+
+test("canRunCurriculumPublish requires validation and live platform session", () => {
+  const draft = withContent();
+  assert.equal(canRunCurriculumPublish(draft, false, false, true), false);
+  assert.equal(canRunCurriculumPublish(draft, true, false, false), false);
+  assert.equal(canRunCurriculumPublish(draft, true, false, true), true);
+});
+
+test("userLifecycleLabel does not report Published when backend publication failed", async () => {
+  const { userLifecycleLabel, USER_LIFECYCLE_LABELS } = await import("../src/content/user-lifecycle.ts");
+  const locallyPublished = publishVersion([throughApproval(withContent())], throughApproval(withContent()), {
+    version: "0.1.0",
+    publishedBy: "Ada Author",
+  })[0];
+  const failed = withPlatformPublication(locallyPublished, {
+    platformPublicationState: "failed",
+    platformPublicationError: "Curriculum could not be published to the platform.",
+  });
+  assert.notEqual(userLifecycleLabel(failed), USER_LIFECYCLE_LABELS.published);
+  assert.equal(userLifecycleLabel(failed), "Published (pending platform sync)");
+  const succeeded = withPlatformPublication(locallyPublished, {
+    platformPublicationState: "published",
+    platformPublishedAt: new Date().toISOString(),
+    platformPublicationId: "pub-1",
+  });
+  assert.equal(userLifecycleLabel(succeeded), USER_LIFECYCLE_LABELS.published);
 });
