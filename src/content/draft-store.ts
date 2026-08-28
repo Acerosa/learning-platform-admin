@@ -14,9 +14,13 @@ import {
   type LifecycleStatus,
   type PlatformPublicationState,
 } from "./types.ts";
+import { pruneRecordsForLocalStorage } from "./authoring-context.ts";
+import { writeLocalStorageItem, type PersistStorageResult } from "./local-storage.ts";
 import { createDraft, touchDraft } from "./versioning.ts";
 
 export { createDraft, touchDraft };
+export type { PersistStorageResult };
+export { STORAGE_CACHE_WARNING, STORAGE_QUOTA_WARNING } from "./local-storage.ts";
 
 const STORAGE_KEY_V1 = "lp.admin.authoring.drafts.v1";
 const STORAGE_KEY = "lp.admin.authoring.records.v2";
@@ -101,19 +105,31 @@ function sealRecord(record: AuthoringDraft): AuthoringDraft {
 
 export function loadDrafts(): AuthoringDraft[] {
   const current = readStorage(STORAGE_KEY).map(migrateRecord).filter((item): item is AuthoringDraft => Boolean(item)).map(sealRecord);
-  if (current.length) return current;
+  if (current.length) {
+    const pruned = pruneRecordsForLocalStorage(current);
+    if (pruned.length !== current.length) persistDrafts(pruned);
+    return pruned;
+  }
   const legacy = readStorage(STORAGE_KEY_V1).map(migrateRecord).filter((item): item is AuthoringDraft => Boolean(item)).map(sealRecord);
-  if (legacy.length) persistDrafts(legacy);
-  return legacy;
+  if (legacy.length) {
+    const pruned = pruneRecordsForLocalStorage(legacy);
+    persistDrafts(pruned);
+    return pruned;
+  }
+  return [];
 }
 
-export function persistDrafts(drafts: AuthoringDraft[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
+export function persistDrafts(drafts: AuthoringDraft[]): PersistStorageResult {
+  const payload = pruneRecordsForLocalStorage(drafts);
+  return writeLocalStorageItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+export function saveDraftRecords(drafts: AuthoringDraft[], draft: AuthoringDraft) {
+  return [draft, ...drafts.filter((item) => item.id !== draft.id)];
 }
 
 export function saveDraft(drafts: AuthoringDraft[], draft: AuthoringDraft) {
-  const next = [draft, ...drafts.filter((item) => item.id !== draft.id)];
+  const next = saveDraftRecords(drafts, draft);
   persistDrafts(next);
   return next;
 }

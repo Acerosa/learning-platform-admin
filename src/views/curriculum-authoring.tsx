@@ -19,12 +19,19 @@ import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import { duplicateIndependentActivity, insertActivityVariant } from "../content/activity-variants";
 import { DRAFT_AUTOSAVE_MS, createSequenceGate } from "../content/async-authoring";
 import {
+  applyDraftSelection,
+  recordsForContext,
+  resolveActiveDraftForContext,
+} from "../content/authoring-context";
+import {
   createDraft,
   deleteDraft,
   duplicateDraft,
   loadDrafts,
   persistDrafts,
-  saveDraft,
+  saveDraftRecords,
+  STORAGE_CACHE_WARNING,
+  STORAGE_QUOTA_WARNING,
   touchDraft,
 } from "../content/draft-store";
 import { downloadText, exportDocument, exportPackage } from "../content/export";
@@ -157,17 +164,23 @@ export function CurriculumAuthoringPage({
 }) {
   const defaultHub = hubs[0];
   const defaultLink = links.find((link) => link.hubCode === defaultHub?.hubCode) || links[0];
+  const initialHubCode = defaultHub?.hubCode || "authoring-hub";
+  const initialCourseKey = defaultLink?.courseKey || "course";
   const [tab, setTab] = useState<AuthoringTab>("curriculum");
   const [drafts, setDrafts] = useState<AuthoringDraft[]>([]);
+  const [selectedHubCode, setSelectedHubCode] = useState(initialHubCode);
+  const [selectedCourseKey, setSelectedCourseKey] = useState(initialCourseKey);
   const [draft, setDraft] = useState<AuthoringDraft>(() => createDraft(
-    defaultHub?.hubCode || "authoring-hub",
+    initialHubCode,
     defaultHub?.hubName || "Authoring hub",
-    defaultLink?.courseKey || "course",
+    initialCourseKey,
     actor,
   ));
   const [selectedActivityId, setSelectedActivityId] = useState<string>("");
   const [hydrated, setHydrated] = useState(false);
+  const [contextReady, setContextReady] = useState(false);
   const [message, setMessage] = useState("");
+  const [storageWarning, setStorageWarning] = useState("");
   const [previewId, setPreviewId] = useState("");
   const [previewWeekId, setPreviewWeekId] = useState("");
   const [previewMode, setPreviewMode] = useState<"week" | "activity">("week");
@@ -188,22 +201,54 @@ export function CurriculumAuthoringPage({
   const draftRef = useRef(draft);
   const remoteLoaded = useRef(false);
 
+  function hubNameFor(hubCode: string) {
+    return hubs.find((item) => item.hubCode === hubCode)?.hubName || hubCode;
+  }
+
+  function courseKeyForHub(hubCode: string, fallback = selectedCourseKey) {
+    return links.find((item) => item.hubCode === hubCode)?.courseKey || fallback;
+  }
+
+  function noteStoragePersist(nextRecords: AuthoringDraft[]) {
+    const result = persistDrafts(nextRecords);
+    if (result.ok) return result;
+    setStorageWarning(result.quotaExceeded ? STORAGE_QUOTA_WARNING : STORAGE_CACHE_WARNING);
+    return result;
+  }
+
+  function applySelectionForDraft(next: AuthoringDraft, records: AuthoringDraft[]) {
+    const selection = applyDraftSelection(next, records);
+    setSelectedActivityId(selection.selectedActivityId);
+    setPreviewId(selection.previewId);
+    setCompareLeft(selection.compareLeft);
+    setCompareRight(selection.compareRight);
+    setVisibilityWeekId(selection.visibilityWeekId);
+    setPublishVersionValue(suggestNextVersionForDraft(recordsForContext(records, next.hubId, next.courseKey), next));
+    setPublishNotes(next.publicationNotes);
+  }
+
+  function activateDraftForContext(
+    records: AuthoringDraft[],
+    hubCode: string,
+    courseKey: string,
+    hubName?: string,
+  ) {
+    const next = resolveActiveDraftForContext(records, hubCode, courseKey, hubName || hubNameFor(hubCode), actor);
+    applySelectionForDraft(next, records);
+    return next;
+  }
+
   useEffect(() => {
     const stored = loadDrafts();
     /* eslint-disable react-hooks/set-state-in-effect -- restore local drafts after SSR hydration */
     setDrafts(stored);
-    if (stored[0]) {
-      setDraft(stored[0]);
-      setSelectedActivityId(stored[0].package.activities[0]?.id || "");
-      setPreviewId(stored[0].id);
-      setCompareLeft(stored[0].id);
-      setCompareRight(stored[1]?.id || stored[0].id);
-      setPublishVersionValue(suggestNextVersionForDraft(stored, stored[0]));
-      setPublishNotes(stored[0].publicationNotes);
-    }
+    const next = resolveActiveDraftForContext(stored, initialHubCode, initialCourseKey, defaultHub?.hubName || initialHubCode, actor);
+    setDraft(next);
+    applySelectionForDraft(next, stored);
     setHydrated(true);
+    setContextReady(true);
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [actor, defaultHub?.hubName, initialCourseKey, initialHubCode]);
 
   useEffect(() => {
     if (!hydrated || remoteLoaded.current || !platformAvailable || !onLoadRemoteDrafts) return;
@@ -213,27 +258,17 @@ export function CurriculumAuthoringPage({
       .then((remotes) => {
         const stored = loadDrafts();
         const merged = mergeRemoteAuthoringDrafts(stored, remotes);
-        persistDrafts(merged);
+        noteStoragePersist(merged);
         setDrafts(merged);
-        const preferred = remotes.find((item) => item.hubId === (defaultHub?.hubCode || stored[0]?.hubId))
-          || remotes[0]
-          || merged[0];
-        if (preferred) {
-          setDraft(preferred);
-          setSelectedActivityId(preferred.package.activities[0]?.id || "");
-          setPreviewId(preferred.id);
-          setCompareLeft(preferred.id);
-          setCompareRight(merged.find((item) => item.id !== preferred.id)?.id || preferred.id);
-          setPublishVersionValue(suggestNextVersionForDraft(merged, preferred));
-          setPublishNotes(preferred.publicationNotes);
-        }
+        const next = activateDraftForContext(merged, selectedHubCode, selectedCourseKey);
+        setDraft(next);
         setRemoteDraftStatus("loaded");
       })
       .catch((error) => {
         setRemoteDraftStatus("error");
         setMessage(error instanceof Error ? error.message : "Remote curriculum drafts could not be loaded.");
       });
-  }, [defaultHub?.hubCode, hydrated, onLoadRemoteDrafts, platformAvailable]);
+  }, [hydrated, onLoadRemoteDrafts, platformAvailable, selectedCourseKey, selectedHubCode]);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -275,7 +310,11 @@ export function CurriculumAuthoringPage({
         ? previewActivityHtml(selectedActivity)
         : "<p>Create a week or activity to preview the learner renderer.</p>";
 
-  const compareRecords = drafts.length ? drafts : [draft];
+  const compareRecords = useMemo(() => {
+    const pool = drafts.length ? drafts : [draft];
+    return recordsForContext(pool, selectedHubCode, selectedCourseKey);
+  }, [draft, drafts, selectedCourseKey, selectedHubCode]);
+  const contextMatches = draft.hubId === selectedHubCode && draft.courseKey === selectedCourseKey;
   const visibilityPublishReady = canRunWeekVisibilityPublish(
     draft,
     platformAvailable && Boolean(onPublishToPlatform),
@@ -319,16 +358,21 @@ export function CurriculumAuthoringPage({
       return;
     }
     setLoadStatus("loading");
+    setStorageWarning("");
     try {
-      const published = await onLoadPublishedPackage(pkg.hub.id, String(pkg.curriculum.metadata.course || draft.courseKey));
+      const published = await onLoadPublishedPackage(selectedHubCode, selectedCourseKey);
       const working = createWorkingCopyFromPackage(published.package, actor, published.packageVersion);
       const weekCount = working.package.weeks.length;
-      commit(working, saveDraft(drafts, working), false);
+      const nextRecords = saveDraftRecords(drafts, working);
+      noteStoragePersist(nextRecords);
+      setDraft(working);
+      setDrafts(nextRecords);
+      setPreviewId(working.id);
       setSaveStatus("saved");
       setLoadStatus("loaded");
       setSelectedActivityId(working.package.activities[0]?.id || "");
       setVisibilityWeekId(working.package.weeks[0]?.id || "");
-      setPublishVersionValue(suggestNextVersionForDraft(saveDraft(drafts, working), working));
+      setPublishVersionValue(suggestNextVersionForDraft(recordsForContext(nextRecords, selectedHubCode, selectedCourseKey), working));
       setTab("weeks");
       setMessage(
         weekCount
@@ -341,7 +385,8 @@ export function CurriculumAuthoringPage({
     }
   }
 
-  function commit(nextDraft: AuthoringDraft, nextRecords = saveDraft(drafts, nextDraft), markUnsaved = true) {
+  function commit(nextDraft: AuthoringDraft, nextRecords = saveDraftRecords(drafts, nextDraft), markUnsaved = true) {
+    noteStoragePersist(nextRecords);
     setDraft(nextDraft);
     setDrafts(nextRecords);
     setPreviewId(nextDraft.id);
@@ -374,7 +419,9 @@ export function CurriculumAuthoringPage({
         ? { ...draftRef.current, remoteRevision: result.revision }
         : { ...nextDraft, remoteRevision: result.revision };
       setDraft(latest);
-      setDrafts(saveDraft(drafts, latest));
+      const nextRecords = saveDraftRecords(drafts, latest);
+      noteStoragePersist(nextRecords);
+      setDrafts(nextRecords);
       setSaveStatus("saved");
     } catch (error) {
       if (!saveGate.current.isCurrent(requestId) && !explicit) return;
@@ -435,7 +482,7 @@ export function CurriculumAuthoringPage({
         { hostedPublicationVersion },
       );
       let nextRecords = prepared.records;
-      persistDrafts(nextRecords);
+      noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
       setDraft(prepared.published);
       setPreviewId(prepared.published.id);
@@ -445,7 +492,7 @@ export function CurriculumAuthoringPage({
 
       const publishing = withPlatformPublication(prepared.published, { platformPublicationState: "publishing" });
       nextRecords = nextRecords.map((item) => (item.id === publishing.id ? publishing : item));
-      persistDrafts(nextRecords);
+      noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
       setDraft(publishing);
 
@@ -458,7 +505,7 @@ export function CurriculumAuthoringPage({
           platformPublicationId: result.id,
         });
         nextRecords = nextRecords.map((item) => (item.id === done.id ? done : item));
-        persistDrafts(nextRecords);
+        noteStoragePersist(nextRecords);
         setDrafts(nextRecords);
         setDraft(done);
         setMessage(
@@ -475,7 +522,7 @@ export function CurriculumAuthoringPage({
         });
         const withFailed = nextRecords.map((item) => (item.id === failed.id ? failed : item));
         const recovered = recoverFromFailedWeekVisibilityPublish(withFailed, failed, actor);
-        persistDrafts(recovered.records);
+        noteStoragePersist(recovered.records);
         setDrafts(recovered.records);
         setDraft(recovered.draft);
         setPreviewId(recovered.draft.id);
@@ -506,7 +553,7 @@ export function CurriculumAuthoringPage({
         publishNotes || "Curriculum publish",
       );
       let nextRecords = prepared.records;
-      persistDrafts(nextRecords);
+      noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
       setDraft(prepared.published);
       setPreviewId(prepared.published.id);
@@ -515,7 +562,7 @@ export function CurriculumAuthoringPage({
 
       const publishing = withPlatformPublication(prepared.published, { platformPublicationState: "publishing" });
       nextRecords = nextRecords.map((item) => (item.id === publishing.id ? publishing : item));
-      persistDrafts(nextRecords);
+      noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
       setDraft(publishing);
 
@@ -528,7 +575,7 @@ export function CurriculumAuthoringPage({
           platformPublicationId: result.id,
         });
         nextRecords = nextRecords.map((item) => (item.id === done.id ? done : item));
-        persistDrafts(nextRecords);
+        noteStoragePersist(nextRecords);
         setDrafts(nextRecords);
         setDraft(done);
         setMessage(curriculumPublishSuccessMessage(prepared.version, result.idempotent));
@@ -540,7 +587,7 @@ export function CurriculumAuthoringPage({
             : "Curriculum could not be published to the platform.",
         });
         nextRecords = nextRecords.map((item) => (item.id === failed.id ? failed : item));
-        persistDrafts(nextRecords);
+        noteStoragePersist(nextRecords);
         setDrafts(nextRecords);
         setDraft(failed);
         showError(error);
@@ -554,30 +601,23 @@ export function CurriculumAuthoringPage({
 
   function setHubContext(hubCode: string) {
     const hub = hubs.find((item) => item.hubCode === hubCode);
-    const link = links.find((item) => item.hubCode === hubCode);
-    const courseKey = link?.courseKey || draft.courseKey;
-    if (!editable) {
-      const next = createDraft(hubCode, hub?.hubName || hubCode, courseKey, actor);
-      commit(next);
-      setMessage(`Switched to ${hub?.hubName || hubCode}. Use Open published content to load the live package.`);
-      return;
-    }
-    const curriculumId = `${hubCode}-curriculum`;
-    updatePackage({
-      ...pkg,
-      hub: {
-        ...pkg.hub,
-        id: hubCode,
-        metadata: { ...pkg.hub.metadata, name: hub?.hubName || hubCode },
-        relationships: { ...pkg.hub.relationships, curriculum: curriculumId },
-      },
-      curriculum: {
-        ...pkg.curriculum,
-        id: curriculumId,
-        metadata: { ...pkg.curriculum.metadata, course: courseKey, title: `${hub?.hubName || hubCode} curriculum` },
-        relationships: { ...pkg.curriculum.relationships },
-      },
-    });
+    const courseKey = courseKeyForHub(hubCode);
+    setSelectedHubCode(hubCode);
+    setSelectedCourseKey(courseKey);
+    setStorageWarning("");
+    const next = resolveActiveDraftForContext(drafts, hubCode, courseKey, hub?.hubName || hubCode, actor);
+    const nextRecords = commit(next, undefined, false);
+    applySelectionForDraft(next, nextRecords);
+    setMessage(`Switched to ${hub?.hubName || hubCode}. Use Open published content to load the live package when needed.`);
+  }
+
+  function setCourseContext(courseKey: string) {
+    setSelectedCourseKey(courseKey);
+    setStorageWarning("");
+    const next = resolveActiveDraftForContext(drafts, selectedHubCode, courseKey, hubNameFor(selectedHubCode), actor);
+    const nextRecords = commit(next, undefined, false);
+    applySelectionForDraft(next, nextRecords);
+    setMessage(`Switched to ${courseKey}. Use Open published content to load the live package when needed.`);
   }
 
   const primaryTabs: { id: AuthoringTab; label: string }[] = [
@@ -654,6 +694,7 @@ export function CurriculumAuthoringPage({
       {remoteDraftStatus === "loading" ? <p role="status">Loading remote curriculum draft...</p> : null}
       {loadStatus === "loading" ? <p role="status">Loading published curriculum...</p> : null}
       {loadStatus === "error" ? <p className="authoring-alert" role="alert">Published curriculum could not be loaded. <button type="button" className="button button--small button--secondary" onClick={() => void openPublished()}>Retry</button></p> : null}
+      {storageWarning ? <p className="authoring-alert authoring-alert--warning" role="status">{storageWarning}</p> : null}
       {remoteDraftStatus === "error" ? <p className="authoring-alert" role="alert">Remote drafts could not be reopened. LocalStorage remains available as a fallback, but the hosted draft is authoritative.</p> : null}
       {message ? <p className="authoring-alert" role="alert">{message}</p> : null}
 
@@ -661,8 +702,8 @@ export function CurriculumAuthoringPage({
         <div className="toolbar">
           <div>
             <label htmlFor="authoring-hub">Hub context</label>
-            <select id="authoring-hub" value={pkg.hub.id} onChange={(event) => setHubContext(event.target.value)}>
-              {(hubs.length ? hubs : [{ hubCode: pkg.hub.id, hubName: String(pkg.hub.metadata.name || pkg.hub.id) } as HubRecord]).map((hub) => (
+            <select id="authoring-hub" value={selectedHubCode} onChange={(event) => setHubContext(event.target.value)}>
+              {(hubs.length ? hubs : [{ hubCode: selectedHubCode, hubName: hubNameFor(selectedHubCode) } as HubRecord]).map((hub) => (
                 <option key={hub.hubCode} value={hub.hubCode}>{hub.hubName}</option>
               ))}
             </select>
@@ -671,17 +712,13 @@ export function CurriculumAuthoringPage({
             <label htmlFor="authoring-course">Course</label>
             <select
               id="authoring-course"
-              value={String(pkg.curriculum.metadata.course || "")}
-              disabled={!editable}
-              onChange={(event) => updatePackage({
-                ...pkg,
-                curriculum: { ...pkg.curriculum, metadata: { ...pkg.curriculum.metadata, course: event.target.value } },
-              })}
+              value={selectedCourseKey}
+              onChange={(event) => setCourseContext(event.target.value)}
             >
-              {links.filter((link) => link.hubCode === pkg.hub.id).map((link) => (
+              {links.filter((link) => link.hubCode === selectedHubCode).map((link) => (
                 <option key={link.courseKey} value={link.courseKey}>{link.courseTitle}</option>
               ))}
-              {!links.some((link) => link.hubCode === pkg.hub.id) ? <option value={String(pkg.curriculum.metadata.course || "course")}>{String(pkg.curriculum.metadata.course || "course")}</option> : null}
+              {!links.some((link) => link.hubCode === selectedHubCode) ? <option value={selectedCourseKey}>{selectedCourseKey}</option> : null}
             </select>
           </div>
           <span className="toolbar__count" role="status">{pkg.weeks.length} weeks · {pkg.sessions.length} sessions · {pkg.activities.length} activities</span>
@@ -721,6 +758,12 @@ export function CurriculumAuthoringPage({
         ) : null}
 
         {tab === "weeks" ? (
+          <>
+            {!contextReady || !contextMatches ? (
+              <section className="panel">
+                <p role="status">Loading curriculum context...</p>
+              </section>
+            ) : (
           <>
             <section className="panel">
               <h2>Week visibility</h2>
@@ -852,6 +895,8 @@ export function CurriculumAuthoringPage({
               ) : null}
             </fieldset>
           </>
+            )}
+          </>
         ) : null}
 
         {tab === "sessions" ? (
@@ -981,7 +1026,9 @@ export function CurriculumAuthoringPage({
                     <button className="button button--small button--secondary" type="button" onClick={() => {
                       const remaining = deleteDraft(drafts, item.id);
                       setDrafts(remaining);
-                      if (item.id === draft.id && remaining[0]) setDraft(remaining[0]);
+                      if (item.id === draft.id) {
+                        activateDraftForContext(remaining, selectedHubCode, selectedCourseKey);
+                      }
                     }}>Delete</button>
                   </li>
                 ))}
@@ -1053,7 +1100,7 @@ export function CurriculumAuthoringPage({
                   publishedBy: actor,
                   notes: publishNotes,
                 });
-                persistDrafts(nextRecords);
+                noteStoragePersist(nextRecords);
                 const published = nextRecords.find((item) => item.id === draft.id);
                 setDrafts(nextRecords);
                 if (published) {
@@ -1142,7 +1189,7 @@ export function CurriculumAuthoringPage({
               try {
                 const archived = archiveVersion(item);
                 const next = replaceRecord(compareRecords, archived);
-                persistDrafts(next);
+                noteStoragePersist(next);
                 setDrafts(next);
                 if (item.id === draft.id) setDraft(archived);
               } catch (error) {
