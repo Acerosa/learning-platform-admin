@@ -1,6 +1,6 @@
-export function PreviewPane({ title, html }: { title: string; html: string }) {
+export function PreviewPane({ title, html, id }: { title: string; html: string; id?: string }) {
   return (
-    <section className="authoring-preview panel" aria-labelledby="authoring-preview-title">
+    <section className="authoring-preview panel" aria-labelledby="authoring-preview-title" id={id}>
       <div className="panel__header">
         <div>
           <p className="eyebrow">Read-only learner renderer</p>

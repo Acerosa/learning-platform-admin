@@ -45,9 +45,11 @@ function percentageLabel(value: number | null) {
 export function ResultsMarkbookPage({
   data,
   onReviewResponse,
+  embedded = false,
 }: {
   data: AdminDataSnapshot;
   onReviewResponse: (request: ReviewResponseRequest) => Promise<unknown>;
+  embedded?: boolean;
 }) {
   const currentModule = getAdminModule("results");
   const [pane, setPane] = useState<ResultsPane>("dashboard");
@@ -152,13 +154,15 @@ export function ResultsMarkbookPage({
 
   return (
     <>
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">{currentModule.eyebrow}</p>
-          <h1>{currentModule.label}</h1>
-          <p>{currentModule.description}</p>
-        </div>
-      </header>
+      {embedded ? null : (
+        <header className="page-header">
+          <div>
+            <p className="eyebrow">{currentModule.eyebrow}</p>
+            <h1>{currentModule.label}</h1>
+            <p>{currentModule.description}</p>
+          </div>
+        </header>
+      )}
       <p className="eyebrow">Results → {groupCode ?? "Group"} → {learnerNumber ?? "Learner"} → {activityKey ?? "Activity"} → {attemptId ?? "Attempt"} → Evidence → Feedback → Review</p>
       <nav className="toolbar" aria-label="Results sections">
         {(["dashboard", "groups", "learners", "activities", "attempts", "review", "feedback", "markbook", "diagnostics"] as const).map((id) => (

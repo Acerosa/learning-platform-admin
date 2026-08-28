@@ -5,6 +5,7 @@ import type { AuditEventRecord, HubCourseLinkRecord, HubRecord } from "../api/ad
 import type { HubHealthReport } from "../content/hub-health";
 import type { HubPublicationStatus } from "../content/hub-publication";
 import { formatDate } from "../utils/format";
+import { AdminLink } from "./admin-link";
 import { StatusBadge, type BadgeTone } from "./status-badge";
 
 function toneForHealth(status: HubHealthReport["status"]): BadgeTone {
@@ -169,6 +170,7 @@ export function HubDetailDialog({
         </button>
         <button className="button button--secondary" type="button" onClick={() => onEdit(hub)}>Edit hub</button>
         <button className="button button--secondary" type="button" onClick={onClose}>Close</button>
+        <AdminLink className="button button--primary" href="/curriculum">Edit curriculum</AdminLink>
       </div>
     </dialog>
   );

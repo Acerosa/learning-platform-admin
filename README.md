@@ -14,7 +14,8 @@ This repository is the administration interface for the entire Learning Platform
 - The backend `admin_api` contract is version `0.2.0`, draft, with read models and curriculum publication.
 - Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.
 - Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
-- Dashboard, hubs, courses, learners, staff roles, groups, enrolments, assignments, results, attempts, analytics, monitoring, contracts and audit consume the shared read-service snapshot.
+- The portal exposes six primary areas: Dashboard, Hubs & Curriculum, People, Assignments & Results, Analytics and System. Legacy module URLs remain available.
+- Dashboard, hubs, people, assignments, results, analytics and system consume the shared read-service snapshot.
 - Write journeys against backend data remain pending except hub registration,
   hub updates and curriculum publication: they explain the missing mutation
   contract and never invent an endpoint.

@@ -24,12 +24,15 @@ test("package is the 0.2.0 administration repository and consumes platform core"
   assert.equal(pkg.dependencies["drizzle-orm"], undefined);
 });
 
-test("module registry has 19 unique hub-agnostic modules", async () => {
+test("module registry has six primary areas and legacy route aliases", async () => {
   const source = await readFile(new URL("src/router/modules.ts", root), "utf8");
-  const ids = [...source.matchAll(/^\s+"([a-z-]+)",$/gm)].map((match) => match[1]);
-  assert.equal(ids.length, 19);
-  assert.equal(new Set(ids).size, 19);
-  assert.deepEqual(ids, ["dashboard", "hubs", "courses", "curriculum", "activities", "content-library", "composition", "learners", "teachers", "groups", "enrolments", "assignments", "results", "attempts", "analytics", "monitoring", "certification", "configuration", "audit"]);
+  assert.match(source, /PRIMARY_NAVIGATION_IDS/);
+  assert.match(source, /LEGACY_MODULE_IDS/);
+  const primary = [...source.matchAll(/PRIMARY_NAVIGATION_IDS = \[([\s\S]*?)\] as const/gm)][0][1];
+  assert.equal([...primary.matchAll(/"([a-z-]+)"/g)].length, 6);
+  const all = [...source.matchAll(/^\s+"([a-z-]+)",$/gm)].map((match) => match[1]);
+  assert.equal(all.length, 22);
+  assert.equal(new Set(all).size, 22);
 });
 
 test("admin API names match the documented backend surface", async () => {
@@ -119,12 +122,12 @@ test("week visibility controls stay outside the disabled week-editor fieldset", 
   const visibilityHeading = source.indexOf("<h2>Week visibility</h2>");
   const weekForm = source.indexOf("<WeekForm");
   const weekEditorFieldset = source.lastIndexOf('<fieldset className="authoring-fieldset" disabled={!editable}>', weekForm);
-  const postWeekButton = source.indexOf("Post week & publish", visibilityHeading);
+  const postWeekButton = source.indexOf("Make available", visibilityHeading);
   const createDraft = source.indexOf("Create new draft from published", visibilityHeading);
   assert.ok(visibilityHeading > 0);
   assert.ok(weekForm > visibilityHeading);
   assert.ok(weekEditorFieldset > visibilityHeading, "WeekForm must sit in a fieldset after Week visibility");
-  assert.ok(postWeekButton > visibilityHeading && postWeekButton < weekEditorFieldset, "Post week & publish must not sit inside the disabled week-editor fieldset");
+  assert.ok(postWeekButton > visibilityHeading && postWeekButton < weekEditorFieldset, "Make available must not sit inside the disabled week-editor fieldset");
   assert.ok(createDraft > visibilityHeading && createDraft < weekEditorFieldset, "Create new draft must not sit inside the disabled week-editor fieldset");
 });
 

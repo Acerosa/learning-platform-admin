@@ -1,21 +1,32 @@
 # Publication workflow
 
-Curriculum publication is an Admin-local CMS lifecycle. Admin edits Drafts.
-Learners consume Published content. Drafts must never appear in a learner hub.
+Curriculum publication is an Admin-local CMS lifecycle. Admin edits **Drafts**.
+Learners consume **Published** content (backend catalogue). Drafts must never
+appear in a learner hub.
 
-This workflow does **not** commit to GitHub or deploy into Unit 14 or any other
-hub. Backend catalogue publication is a separate, explicit **Publish to
-Platform** step after a local Published snapshot exists.
+## User-facing workflow (Simplification v1)
 
-## Architecture
+Normal curriculum editing in the portal:
 
 ```text
-Admin working copy (Draft)
-  → review states
-      → Approved
-          → immutable Published snapshot (browser storage)
-              → Publish to Platform (admin_api.publish_curriculum)
+Save draft  →  Publish
 ```
+
+**Publish** orchestrates validation, internal approval (when needed), immutable
+version creation and `admin_api.publish_curriculum` in one action. The UI
+shows **Published** only after the platform RPC succeeds.
+
+Review states (`Ready for Review`, `In Review`, `Approved`) remain in the
+data model for history and advanced panels, but are not required on the primary
+path. Semver is chosen automatically via `suggestNextVersion`.
+
+Week visibility uses the same atomic pattern: **Make available** /
+**Hide from learners** (formerly Post/Remove week & publish).
+
+This workflow does **not** commit to GitHub or deploy into learner hubs directly.
+Backend catalogue publication is authoritative.
+
+## Internal architecture
 
 Storage key: `lp.admin.authoring.records.v2`.
 

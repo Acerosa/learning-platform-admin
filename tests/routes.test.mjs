@@ -2,53 +2,75 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderText } from "./helpers/render.mjs";
 
-const routes = [
+const primaryRoutes = [
   ["/", "Dashboard"],
-  ["/hubs", "Hub registry"],
-  ["/courses", "Courses"],
-  ["/curriculum", "Curriculum authoring"],
+  ["/hubs", "Hubs & Curriculum"],
+  ["/people", "People"],
+  ["/assessment", "Assignments & Results"],
+  ["/analytics", "Analytics"],
+  ["/system", "System"],
+];
+
+for (const [route, heading] of primaryRoutes) {
+  test(`${route} renders the ${heading} primary area`, async () => {
+    const { response, html } = await renderText(route);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+    assert.match(html, new RegExp(`<h1>${heading.replace(/&/g, "&amp;")}<\\/h1>`));
+    assert.match(html, /Learning Platform Administration/);
+    assert.match(html, /admin_api 0\.2\.0 · draft/);
+  });
+}
+
+const legacyRoutes = [
+  ["/courses", "Hubs & Curriculum"],
+  ["/curriculum", "Curriculum"],
   ["/content-library", "Content Library"],
   ["/composition", "Composition"],
   ["/activities", "Activity catalogue"],
   ["/learners", "Learners"],
-  ["/teachers", "Teachers"],
+  ["/teachers", "Staff"],
   ["/groups", "Groups"],
   ["/enrolments", "Enrolments"],
   ["/assignments", "Assignments"],
+  ["/results", "Results"],
   ["/attempts", "Attempts"],
-  ["/analytics", "Analytics"],
   ["/monitoring", "Monitoring"],
   ["/certification", "Certification"],
   ["/configuration", "Configuration"],
   ["/audit", "Audit"],
 ];
 
-for (const [route, heading] of routes) {
-  test(`${route} renders the ${heading} module`, async () => {
+for (const [route, heading] of legacyRoutes) {
+  test(`legacy ${route} still resolves (${heading})`, async () => {
     const { response, html } = await renderText(route);
     assert.equal(response.status, 200);
-    assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-    assert.match(html, new RegExp(`<h1>${heading}<\\/h1>`));
-    assert.match(html, /Learning Platform Administration/);
-    assert.match(html, /admin_api 0\.2\.0 · draft/);
-    assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+    assert.match(html, new RegExp(`<h1>${heading.replace(/&/g, "&amp;")}<\\/h1>`));
   });
 }
 
-test("curriculum authoring exposes local draft workspace tabs", async () => {
+test("primary navigation exposes only six destinations", async () => {
+  const { html } = await renderText("/");
+  for (const label of ["Dashboard", "Hubs &amp; Curriculum", "People", "Assignments &amp; Results", "Analytics", "System"]) {
+    assert.match(html, new RegExp(label));
+  }
+  for (const hidden of ["Content Library", "Composition", "Enrolments", "Monitoring", "Certification", "Configuration"]) {
+    assert.doesNotMatch(html, new RegExp(`<span>${hidden}</span>`));
+  }
+});
+
+test("curriculum authoring exposes simplified workspace", async () => {
   const { html } = await renderText("/curriculum");
   assert.match(html, /Authoring views/);
   assert.match(html, /Curriculum/);
   assert.match(html, /Weeks/);
   assert.match(html, /Activities/);
-  assert.match(html, /Imports/);
-  assert.match(html, /Drafts/);
-  assert.match(html, /Ready for Review/);
-  assert.match(html, /Publication/);
-  assert.match(html, /History/);
-  assert.match(html, /Compare/);
-  assert.match(html, /Archive/);
-  assert.match(html, /Learners consume published content only/);
+  assert.match(html, /Save draft/);
+  assert.match(html, /Preview/);
+  assert.match(html, /Publish/);
+  assert.match(html, /Review \(advanced\)/);
+  assert.match(html, /Publication \(advanced\)/);
+  assert.match(html, /Published means the backend platform catalogue is updated/);
 });
 
 test("unknown module routes return not found", async () => {

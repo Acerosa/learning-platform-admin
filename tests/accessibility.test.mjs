@@ -46,7 +46,7 @@ test("dashboard exposes navigation, main landmark and skip link", async () => {
 
 test("curriculum authoring exposes labelled controls and accessible tabs", async () => {
   const { html } = await renderText("/curriculum");
-  assert.match(html, /<h1>Curriculum authoring<\/h1>/);
+  assert.match(html, /<h1>Curriculum<\/h1>/);
   assert.match(html, /for="authoring-hub"/);
   assert.match(html, /for="authoring-course"/);
   assert.match(html, /role="tablist"/);

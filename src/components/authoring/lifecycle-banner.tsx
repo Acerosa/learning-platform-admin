@@ -1,5 +1,6 @@
 import { StatusBadge, type BadgeTone } from "../status-badge";
-import { isEditableStatus, LIFECYCLE_LABELS } from "../../content/lifecycle";
+import { isEditableStatus } from "../../content/lifecycle";
+import { userLifecycleLabel } from "../../content/user-lifecycle";
 import { weekVisibilityRecoveryAction } from "../../content/publication-guidance";
 import type { AuthoringDraft, LifecycleStatus } from "../../content/types";
 
@@ -24,7 +25,7 @@ export function LifecycleBanner({
   const platformDone = record.status === "published" && record.platformPublicationState === "published";
   return (
     <div className="authoring-banner" role="status">
-      <StatusBadge label={LIFECYCLE_LABELS[record.status]} tone={lifecycleTone(record.status)} />
+      <StatusBadge label={userLifecycleLabel(record)} tone={lifecycleTone(record.status)} />
       {record.version ? <span>Version {record.version}</span> : <span>Working copy</span>}
       {record.basedOnVersion ? <span>Based on {record.basedOnVersion}</span> : null}
       <p>

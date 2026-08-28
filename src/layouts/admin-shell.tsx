@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminLink } from "../components/admin-link";
 import { DataSourceBanner } from "../components/data-source-banner";
 import {
-  ADMIN_MODULES,
-  ADMIN_NAVIGATION_GROUPS,
   getAdminModule,
   getModuleHref,
+  primaryNavigationModules,
+  resolveNavigationModule,
   type AdminModuleId,
+  type PrimaryNavigationId,
 } from "../router/modules";
 import type { AdminDataSourceStatus } from "../stores/admin-portal";
 import type { AdminSessionSnapshot } from "../stores/admin-session";
@@ -31,24 +32,25 @@ export function AdminShell({
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const { resolvedTheme, toggleTheme } = usePlatformTheme();
-  const currentModule = getAdminModule(activeModule);
+  const navigationModule = resolveNavigationModule(activeModule);
+  const currentModule = getAdminModule(navigationModule);
+  const primaryModules = primaryNavigationModules();
   const searchResults = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return [];
-    return ADMIN_MODULES.filter((module) =>
-      module.visibleInNavigation !== false
-      && `${module.label} ${module.description}`.toLowerCase().includes(query),
+    return primaryModules.filter((module) =>
+      `${module.label} ${module.description}`.toLowerCase().includes(query),
     ).slice(0, 6);
-  }, [search]);
+  }, [search, primaryModules]);
 
   useEffect(() => {
     function focusSearch(event: KeyboardEvent) {
       if (
-        event.key === "/" &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !(event.target instanceof HTMLInputElement) &&
-        !(event.target instanceof HTMLTextAreaElement)
+        event.key === "/"
+        && !event.metaKey
+        && !event.ctrlKey
+        && !(event.target instanceof HTMLInputElement)
+        && !(event.target instanceof HTMLTextAreaElement)
       ) {
         event.preventDefault();
         searchRef.current?.focus();
@@ -68,26 +70,24 @@ export function AdminShell({
           <span><strong>Learning Platform</strong><small>Administration</small></span>
         </div>
         <nav className="admin-navigation">
-          {ADMIN_NAVIGATION_GROUPS.map((group) => (
-            <section className="admin-navigation__group" key={group} aria-labelledby={`nav-${group.toLowerCase()}`}>
-              <h2 id={`nav-${group.toLowerCase()}`}>{group}</h2>
-              <ul>
-                {ADMIN_MODULES.filter((module) => module.group === group && module.visibleInNavigation !== false).map((module) => (
-                  <li key={module.id}>
-                    <AdminLink
-                      href={getModuleHref(module.id)}
-                      aria-current={activeModule === module.id ? "page" : undefined}
-                      onClick={() => setNavigationOpen(false)}
-                    >
-                      <span className="admin-navigation__icon" aria-hidden="true">{module.shortLabel}</span>
-                      <span>{module.label}</span>
-                      {module.dataState === "pending" ? <span className="admin-navigation__pending" aria-label="Integration pending" /> : null}
-                    </AdminLink>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+          <section className="admin-navigation__group" aria-labelledby="nav-primary">
+            <h2 id="nav-primary" className="sr-only">Primary navigation</h2>
+            <ul>
+              {primaryModules.map((module) => (
+                <li key={module.id}>
+                  <AdminLink
+                    href={getModuleHref(module.id as PrimaryNavigationId)}
+                    aria-current={navigationModule === module.id ? "page" : undefined}
+                    onClick={() => setNavigationOpen(false)}
+                  >
+                    <span className="admin-navigation__icon" aria-hidden="true">{module.shortLabel}</span>
+                    <span>{module.label}</span>
+                    {module.dataState === "pending" ? <span className="admin-navigation__pending" aria-label="Integration pending" /> : null}
+                  </AdminLink>
+                </li>
+              ))}
+            </ul>
+          </section>
         </nav>
         <div className="admin-sidebar__footer">
           <span className="environment-pill"><span aria-hidden="true" /> {dataSource.mode === "live" ? "Live" : "Demo"}</span>
@@ -111,13 +111,13 @@ export function AdminShell({
             <strong>{currentModule.label}</strong>
           </div>
           <div className="admin-search">
-            <label className="sr-only" htmlFor="admin-global-search">Search administration modules</label>
+            <label className="sr-only" htmlFor="admin-global-search">Search administration areas</label>
             <span aria-hidden="true" className="admin-search__icon">⌕</span>
             <input
               id="admin-global-search"
               ref={searchRef}
               type="search"
-              placeholder="Search modules"
+              placeholder="Search areas"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               autoComplete="off"
@@ -127,7 +127,7 @@ export function AdminShell({
               <ul className="admin-search__results" aria-label="Search results">
                 {searchResults.map((module) => (
                   <li key={module.id}>
-                    <AdminLink href={getModuleHref(module.id)} onClick={() => setSearch("")}>
+                    <AdminLink href={getModuleHref(module.id as PrimaryNavigationId)} onClick={() => setSearch("")}>
                       <strong>{module.label}</strong>
                       <span>{module.description}</span>
                     </AdminLink>
