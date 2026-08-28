@@ -9,15 +9,14 @@ import {
 import { AdminShell } from "../layouts/admin-shell";
 import type { AdminModuleId } from "../router/modules";
 import {
-  AdminPortalProvider,
   useAdminPortal,
 } from "../stores/admin-portal";
 import { ModuleContent } from "./module-content";
 
-function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
+export function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
   const portal = useAdminPortal();
 
-  if (portal.status === "loading") return <AdminLoadingState />;
+  if (portal.status === "loading" && !portal.data) return <AdminLoadingState />;
   if (portal.status === "signed-out") {
     return (
       <AdminSignIn
@@ -51,13 +50,5 @@ function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
     >
       <ModuleContent moduleId={moduleId} />
     </AdminShell>
-  );
-}
-
-export function AdminPortalPage({ moduleId }: { moduleId: AdminModuleId }) {
-  return (
-    <AdminPortalProvider>
-      <AdminPortalFrame moduleId={moduleId} />
-    </AdminPortalProvider>
   );
 }

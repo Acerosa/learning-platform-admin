@@ -3,8 +3,9 @@ import { createRoot } from "react-dom/client";
 import "@learning-platform/core/tokens.css";
 import "@learning-platform/core/theme.css";
 import "../app/globals.css";
+import { AdminPortalProvider } from "../src/stores/admin-portal";
 import { isAdminModuleId, type AdminModuleId } from "../src/router/modules";
-import { AdminPortalPage } from "../src/views/admin-portal-page";
+import { AdminPortalFrame } from "../src/views/admin-portal-page";
 
 function readModuleFromHash(): AdminModuleId {
   const moduleId = window.location.hash.replace(/^#\/?/, "").split("/")[0];
@@ -20,11 +21,13 @@ function GitHubPagesApp() {
     return () => window.removeEventListener("hashchange", updateModule);
   }, []);
 
-  return <AdminPortalPage moduleId={moduleId} />;
+  return <AdminPortalFrame moduleId={moduleId} />;
 }
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <GitHubPagesApp />
+    <AdminPortalProvider>
+      <GitHubPagesApp />
+    </AdminPortalProvider>
   </StrictMode>,
 );

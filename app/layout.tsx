@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "@learning-platform/core/tokens.css";
 import "@learning-platform/core/theme.css";
 import "./globals.css";
+import { AdminPortalRoot } from "@/src/providers/admin-portal-root";
 
 export const metadata: Metadata = {
   title: {
@@ -19,7 +20,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AdminPortalRoot>{children}</AdminPortalRoot>
+      </body>
     </html>
   );
 }

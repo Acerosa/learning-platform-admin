@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AdminPortalPage } from "@/src/views/admin-portal-page";
+import { AdminPortalFrame } from "@/src/views/admin-portal-page";
 import {
   ADMIN_MODULES,
   isAdminModuleId,
@@ -22,5 +22,5 @@ export default async function ModuleRoute({
     notFound();
   }
 
-  return <AdminPortalPage moduleId={module} />;
+  return <AdminPortalFrame moduleId={module} />;
 }
