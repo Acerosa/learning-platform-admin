@@ -468,7 +468,7 @@ test("userLifecycleLabel does not report Published when backend publication fail
     platformPublicationError: "Curriculum could not be published to the platform.",
   });
   assert.notEqual(userLifecycleLabel(failed), USER_LIFECYCLE_LABELS.published);
-  assert.equal(userLifecycleLabel(failed), "Published (pending platform sync)");
+  assert.equal(userLifecycleLabel(failed), "Platform publish failed");
   const succeeded = withPlatformPublication(locallyPublished, {
     platformPublicationState: "published",
     platformPublishedAt: new Date().toISOString(),
