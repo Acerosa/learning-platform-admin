@@ -74,6 +74,7 @@ import {
   suggestNextVersionForDraft,
   updateReviewMetadata,
   publishVersion,
+  resolveHostedPublicationVersion,
   withPlatformPublication,
 } from "../content/versioning";
 
@@ -415,12 +416,23 @@ export function CurriculumAuthoringPage({
 
     setVisibilityPublishBusy(true);
     try {
+      let hostedPublicationVersion = resolveHostedPublicationVersion(
+        publications,
+        draft.hubId,
+        draft.courseKey,
+      );
+      if (!hostedPublicationVersion && onLoadPublishedPackage) {
+        const hosted = await onLoadPublishedPackage(draft.hubId, draft.courseKey);
+        hostedPublicationVersion = hosted.packageVersion;
+      }
+
       const prepared = prepareWeekVisibilityPublish(
         compareRecords,
         draft,
         selectedVisibilityWeek.id,
         action,
         actor,
+        { hostedPublicationVersion },
       );
       let nextRecords = prepared.records;
       persistDrafts(nextRecords);
@@ -458,7 +470,7 @@ export function CurriculumAuthoringPage({
         const failed = withPlatformPublication(publishing, {
           platformPublicationState: "failed",
           platformPublicationError: error instanceof Error
-            ? error.message
+            ? ("code" in error && typeof error.code === "string" ? error.code : error.message)
             : "Curriculum could not be published to the platform.",
         });
         const withFailed = nextRecords.map((item) => (item.id === failed.id ? failed : item));

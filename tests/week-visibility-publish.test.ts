@@ -8,6 +8,7 @@ import {
   createDraft,
   createWorkingCopyFromPackage,
   replaceRecord,
+  resolveHostedPublicationVersion,
   suggestNextVersion,
   withPlatformPublication,
 } from "../src/content/versioning.ts";
@@ -161,4 +162,53 @@ test("authoritative version never regresses below basedOnVersion or platform pub
     basedOnVersion: "0.3.0",
   });
   assert.equal(fromPlatform, "0.3.0");
+});
+
+test("stale local history uses hosted publication baseline for week visibility publish", () => {
+  const pkg = hostedWorkingCopy("0.3.0").package;
+  const stalePublished = withPlatformPublication({
+    ...createDraft(HUB, "T Level Digital Software Development Hub", COURSE, "Ada Author"),
+    status: "published",
+    version: "0.1.0",
+    package: pkg,
+  }, {
+    platformPublicationState: "published",
+    platformPublishedAt: "2026-01-01T00:00:00.000Z",
+    platformPublicationId: "stale",
+  });
+  const emptyDraft = createDraft(HUB, "T Level Digital Software Development Hub", COURSE, "Ada Author");
+  emptyDraft.package = pkg;
+
+  const withoutHosted = prepareWeekVisibilityPublish([stalePublished], emptyDraft, "week-2", "post", "Ada Author");
+  assert.equal(withoutHosted.published.version, "0.1.1");
+
+  const withHosted = prepareWeekVisibilityPublish(
+    [stalePublished],
+    emptyDraft,
+    "week-2",
+    "post",
+    "Ada Author",
+    { hostedPublicationVersion: "0.3.0" },
+  );
+  assert.equal(withHosted.published.version, "0.3.1");
+  assert.equal(withHosted.published.basedOnVersion, "0.3.0");
+  assert.equal(withHosted.published.package.weeks.find((week) => week.id === "week-2")?.metadata.status, "available");
+});
+
+test("resolveHostedPublicationVersion reads the active platform publication", () => {
+  const version = resolveHostedPublicationVersion([
+    {
+      hubCode: HUB,
+      courseKey: COURSE,
+      packageVersion: "0.2.0",
+      status: "superseded",
+    },
+    {
+      hubCode: HUB,
+      courseKey: COURSE,
+      packageVersion: "0.3.0",
+      status: "published",
+    },
+  ], HUB, COURSE);
+  assert.equal(version, "0.3.0");
 });
