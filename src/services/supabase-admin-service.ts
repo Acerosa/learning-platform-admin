@@ -7,6 +7,7 @@ import type {
   AssessmentOverviewRecord,
   AssignmentRecord,
   AttemptRecord,
+  RecentAttemptRecord,
   AuditEventRecord,
   CurrentStaffContextRecord,
   CourseRecord,
@@ -778,6 +779,23 @@ export function createSupabaseAdminReadService(
         completedAt: textValue(row.completed_at),
         requiresReview: booleanValue(row.requires_review),
         questionCount: nullableNumber(row.question_count),
+      }));
+    },
+
+    async listRecentAttempts() {
+      const data = await rows(
+        "recent_attempts",
+        "attempt_id,student_number,activity_key,activity_version,status,score,max_score,completed_at",
+      );
+      return data.map((row): RecentAttemptRecord => ({
+        attemptId: textValue(row.attempt_id),
+        learnerNumber: textValue(row.student_number),
+        activityKey: textValue(row.activity_key),
+        activityVersion: textValue(row.activity_version),
+        status: textValue(row.status),
+        score: numberValue(row.score),
+        maxScore: numberValue(row.max_score),
+        completedAt: textValue(row.completed_at),
       }));
     },
 
