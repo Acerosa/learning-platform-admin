@@ -69,6 +69,7 @@ export function latestAssignedVersion(records: readonly AuthoringDraft[], hubId:
 
 export type PublicationVersionContext = {
   basedOnVersion?: string | null;
+  hostedPublicationVersion?: string | null;
 };
 
 function publicationVersionCandidates(
@@ -80,6 +81,9 @@ function publicationVersionCandidates(
   const candidates = assignedVersions(records, hubId, courseKey);
   if (context.basedOnVersion && isSemver(context.basedOnVersion)) {
     candidates.push(context.basedOnVersion);
+  }
+  if (context.hostedPublicationVersion && isSemver(context.hostedPublicationVersion)) {
+    candidates.push(context.hostedPublicationVersion);
   }
   for (const item of records) {
     if (item.hubId !== hubId || item.courseKey !== courseKey) continue;
@@ -118,8 +122,29 @@ export function suggestNextVersion(
 export function suggestNextVersionForDraft(
   records: readonly AuthoringDraft[],
   draft: Pick<AuthoringDraft, "hubId" | "courseKey" | "basedOnVersion">,
+  context: Omit<PublicationVersionContext, "basedOnVersion"> = {},
 ): string {
-  return suggestNextVersion(records, draft.hubId, draft.courseKey, { basedOnVersion: draft.basedOnVersion });
+  return suggestNextVersion(records, draft.hubId, draft.courseKey, {
+    basedOnVersion: draft.basedOnVersion,
+    ...context,
+  });
+}
+
+export function resolveHostedPublicationVersion(
+  publications: readonly {
+    hubCode: string;
+    courseKey: string;
+    packageVersion: string;
+    status: string;
+  }[],
+  hubId: string,
+  courseKey: string,
+): string | null {
+  const versions = publications
+    .filter((item) => item.hubCode === hubId && item.courseKey === courseKey && item.status === "published")
+    .map((item) => item.packageVersion)
+    .filter(isSemver);
+  return versions.length ? [...versions].sort(compareSemver).at(-1) ?? null : null;
 }
 
 export function currentPublished(records: readonly AuthoringDraft[], hubId: string, courseKey: string) {

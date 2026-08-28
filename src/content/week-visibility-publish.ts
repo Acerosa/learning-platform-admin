@@ -13,6 +13,7 @@ import {
   suggestNextVersion,
   touchDraft,
 } from "./versioning.ts";
+import { compareSemver, isSemver } from "./semver.ts";
 import {
   canPostWeek,
   canRemoveWeek,
@@ -105,6 +106,10 @@ function ensureEditableDraft(
   throw new LifecycleError("This record cannot be prepared for week visibility publish.");
 }
 
+export type WeekVisibilityPublishOptions = {
+  hostedPublicationVersion?: string | null;
+};
+
 /**
  * Atomic local prepare: working copy (if needed) → Post/Remove → validate →
  * auto-approve → immutable publish. Does not call the platform RPC.
@@ -117,6 +122,7 @@ export function prepareWeekVisibilityPublish(
   weekId: string,
   action: WeekVisibilityAction,
   actor: string,
+  options?: WeekVisibilityPublishOptions,
 ): WeekVisibilityPublishResult {
   if (draft.platformPublicationState === "publishing") {
     throw new WeekVisibilityPublishError("Platform publication is already in progress.");
@@ -125,6 +131,18 @@ export function prepareWeekVisibilityPublish(
   const ensured = ensureEditableDraft(records, draft, actor);
   let workingRecords = ensured.records;
   let working = ensured.draft;
+
+  const versionContext = {
+    basedOnVersion: working.basedOnVersion,
+    hostedPublicationVersion: options?.hostedPublicationVersion ?? null,
+  };
+  if (versionContext.hostedPublicationVersion && isSemver(versionContext.hostedPublicationVersion)) {
+    const hosted = versionContext.hostedPublicationVersion;
+    if (!working.basedOnVersion || compareSemver(working.basedOnVersion, hosted) < 0) {
+      working = { ...working, basedOnVersion: hosted };
+      workingRecords = replaceRecord(workingRecords, working);
+    }
+  }
 
   const week = working.package.weeks.find((item) => item.id === weekId);
   if (!week) {
@@ -161,9 +179,7 @@ export function prepareWeekVisibilityPublish(
   const approved = approveForWeekVisibilityPublish(working, action, weekId, actor);
   workingRecords = replaceRecord(workingRecords, approved);
 
-  const version = suggestNextVersion(workingRecords, approved.hubId, approved.courseKey, {
-    basedOnVersion: working.basedOnVersion,
-  });
+  const version = suggestNextVersion(workingRecords, approved.hubId, approved.courseKey, versionContext);
   const notes = `Week visibility: ${action} ${weekId}`;
   const nextRecords = publishVersion(workingRecords, approved, {
     version,
