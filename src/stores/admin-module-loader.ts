@@ -69,6 +69,27 @@ export function invalidateModuleCache(
   return next;
 }
 
+/** Stale-while-revalidate: keep module data visible while background refresh runs. */
+export function markModuleCacheRefreshing(
+  cache: AdminModuleCacheState,
+  keys: readonly AdminModuleDataKey[],
+): AdminModuleCacheState {
+  let next = cache;
+  for (const key of keys) {
+    const entry = cache[key];
+    if (isModuleReady(entry)) {
+      next = setModuleCacheEntry(next, key, { status: "refreshing", error: null });
+      continue;
+    }
+    next = setModuleCacheEntry(next, key, {
+      status: "loading",
+      data: entry.data,
+      error: null,
+    });
+  }
+  return next;
+}
+
 export function setModuleCacheEntry<K extends AdminModuleDataKey>(
   cache: AdminModuleCacheState,
   key: K,

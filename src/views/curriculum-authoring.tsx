@@ -24,6 +24,15 @@ import {
   resolveActiveDraftForContext,
 } from "../content/authoring-context";
 import {
+  loadAuthoringWorkspaceContext,
+  mergeSelectionWithWorkspace,
+  resolveWorkspaceCourseKey,
+  resolveWorkspaceHubCode,
+  resolveWorkspaceTab,
+  saveAuthoringWorkspaceContext,
+  type AuthoringWorkspaceTab,
+} from "../content/authoring-workspace-context";
+import {
   createDraft,
   deleteDraft,
   duplicateDraft,
@@ -162,27 +171,44 @@ export function CurriculumAuthoringPage({
   onLoadPublishedPackage?: (hubCode: string, courseKey: string) => Promise<{ package: ContentPackage; packageVersion: string }>;
   onLoadRemoteDrafts?: () => Promise<AuthoringDraft[]>;
 }) {
-  const defaultHub = hubs[0];
-  const defaultLink = links.find((link) => link.hubCode === defaultHub?.hubCode) || links[0];
-  const initialHubCode = defaultHub?.hubCode || "authoring-hub";
-  const initialCourseKey = defaultLink?.courseKey || "course";
-  const [tab, setTab] = useState<AuthoringTab>("curriculum");
+  const initialWorkspaceRef = useRef<{
+    stored: ReturnType<typeof loadAuthoringWorkspaceContext>;
+    hubCode: string;
+    courseKey: string;
+    tab: AuthoringWorkspaceTab;
+  } | null>(null);
+  if (!initialWorkspaceRef.current) {
+    const stored = loadAuthoringWorkspaceContext();
+    const defaultHub = hubs[0];
+    const defaultLink = links.find((link) => link.hubCode === defaultHub?.hubCode) || links[0];
+    const fallbackHub = defaultHub?.hubCode || "authoring-hub";
+    const fallbackCourse = defaultLink?.courseKey || "course";
+    initialWorkspaceRef.current = {
+      stored,
+      hubCode: resolveWorkspaceHubCode(stored, hubs, fallbackHub),
+      courseKey: resolveWorkspaceCourseKey(stored, links, resolveWorkspaceHubCode(stored, hubs, fallbackHub), fallbackCourse),
+      tab: resolveWorkspaceTab(stored),
+    };
+  }
+  const { stored: workspaceStored, hubCode: initialHubCode, courseKey: initialCourseKey, tab: initialTab } = initialWorkspaceRef.current;
+  const defaultHub = hubs.find((hub) => hub.hubCode === initialHubCode) || hubs[0];
+  const [tab, setTab] = useState<AuthoringTab>(initialTab);
   const [drafts, setDrafts] = useState<AuthoringDraft[]>([]);
   const [selectedHubCode, setSelectedHubCode] = useState(initialHubCode);
   const [selectedCourseKey, setSelectedCourseKey] = useState(initialCourseKey);
   const [draft, setDraft] = useState<AuthoringDraft>(() => createDraft(
     initialHubCode,
-    defaultHub?.hubName || "Authoring hub",
+    defaultHub?.hubName || initialHubCode,
     initialCourseKey,
     actor,
   ));
-  const [selectedActivityId, setSelectedActivityId] = useState<string>("");
+  const [selectedActivityId, setSelectedActivityId] = useState(workspaceStored?.activityId || "");
   const [hydrated, setHydrated] = useState(false);
   const [contextReady, setContextReady] = useState(false);
   const [message, setMessage] = useState("");
   const [storageWarning, setStorageWarning] = useState("");
-  const [previewId, setPreviewId] = useState("");
-  const [previewWeekId, setPreviewWeekId] = useState("");
+  const [previewId, setPreviewId] = useState(workspaceStored?.previewId || "");
+  const [previewWeekId, setPreviewWeekId] = useState(workspaceStored?.previewWeekId || "");
   const [previewMode, setPreviewMode] = useState<"week" | "activity">("week");
   const [compareLeft, setCompareLeft] = useState("");
   const [compareRight, setCompareRight] = useState("");
@@ -191,8 +217,8 @@ export function CurriculumAuthoringPage({
   const [saveStatus, setSaveStatus] = useState<"idle" | "unsaved" | "saving" | "saved" | "failed" | "offline">("idle");
   const [loadStatus, setLoadStatus] = useState<"idle" | "loading" | "loaded" | "empty" | "error">("idle");
   const [editingWeekId, setEditingWeekId] = useState<string | null>(null);
-  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
-  const [visibilityWeekId, setVisibilityWeekId] = useState("");
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(workspaceStored?.sessionId || null);
+  const [visibilityWeekId, setVisibilityWeekId] = useState(workspaceStored?.weekId || "");
   const [visibilityPublishBusy, setVisibilityPublishBusy] = useState(false);
   const [curriculumPublishBusy, setCurriculumPublishBusy] = useState(false);
   const [remoteDraftStatus, setRemoteDraftStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
@@ -216,8 +242,11 @@ export function CurriculumAuthoringPage({
     return result;
   }
 
-  function applySelectionForDraft(next: AuthoringDraft, records: AuthoringDraft[]) {
-    const selection = applyDraftSelection(next, records);
+  function applySelectionForDraft(next: AuthoringDraft, records: AuthoringDraft[], preserveWorkspace = false) {
+    const base = applyDraftSelection(next, records);
+    const selection = preserveWorkspace
+      ? mergeSelectionWithWorkspace(base, loadAuthoringWorkspaceContext(), next)
+      : base;
     setSelectedActivityId(selection.selectedActivityId);
     setPreviewId(selection.previewId);
     setCompareLeft(selection.compareLeft);
@@ -232,23 +261,52 @@ export function CurriculumAuthoringPage({
     hubCode: string,
     courseKey: string,
     hubName?: string,
+    preserveWorkspace = false,
   ) {
     const next = resolveActiveDraftForContext(records, hubCode, courseKey, hubName || hubNameFor(hubCode), actor);
-    applySelectionForDraft(next, records);
+    applySelectionForDraft(next, records, preserveWorkspace);
     return next;
   }
 
+  const hydratedFromStorage = useRef(false);
+
   useEffect(() => {
+    if (hydratedFromStorage.current) return;
+    hydratedFromStorage.current = true;
     const stored = loadDrafts();
     /* eslint-disable react-hooks/set-state-in-effect -- restore local drafts after SSR hydration */
     setDrafts(stored);
     const next = resolveActiveDraftForContext(stored, initialHubCode, initialCourseKey, defaultHub?.hubName || initialHubCode, actor);
     setDraft(next);
-    applySelectionForDraft(next, stored);
+    applySelectionForDraft(next, stored, true);
     setHydrated(true);
     setContextReady(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [actor, defaultHub?.hubName, initialCourseKey, initialHubCode]);
+
+  useEffect(() => {
+    if (!contextReady) return;
+    saveAuthoringWorkspaceContext({
+      hubCode: selectedHubCode,
+      courseKey: selectedCourseKey,
+      tab,
+      weekId: visibilityWeekId || undefined,
+      sessionId: editingSessionId || undefined,
+      activityId: selectedActivityId || undefined,
+      previewId: previewId || undefined,
+      previewWeekId: previewWeekId || undefined,
+    });
+  }, [
+    contextReady,
+    editingSessionId,
+    previewId,
+    previewWeekId,
+    selectedActivityId,
+    selectedCourseKey,
+    selectedHubCode,
+    tab,
+    visibilityWeekId,
+  ]);
 
   useEffect(() => {
     if (!hydrated || remoteLoaded.current || !platformAvailable || !onLoadRemoteDrafts) return;
@@ -260,7 +318,7 @@ export function CurriculumAuthoringPage({
         const merged = mergeRemoteAuthoringDrafts(stored, remotes);
         noteStoragePersist(merged);
         setDrafts(merged);
-        const next = activateDraftForContext(merged, selectedHubCode, selectedCourseKey);
+        const next = activateDraftForContext(merged, selectedHubCode, selectedCourseKey, undefined, true);
         setDraft(next);
         setRemoteDraftStatus("loaded");
       })
