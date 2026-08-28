@@ -234,6 +234,19 @@ test("analytics failure does not affect merged bootstrap snapshot", () => {
   assert.equal(cache.analytics.status, "error");
 });
 
+test("merge uses bootstrap dashboard summary before dashboard module loads", () => {
+  const cache = createEmptyModuleCache();
+  const bootstrap = {
+    dashboardSummary: {
+      ...DEMO_ADMIN_DATA.dashboardSummary,
+      registeredHubs: 99,
+    },
+  };
+  const snapshot = mergeModuleCacheToSnapshot(cache, bootstrap);
+  assert.equal(snapshot.dashboardSummary.registeredHubs, 99);
+  assert.equal(snapshot.learners.length, 0);
+});
+
 test("performance snapshot records bootstrap read count", async () => {
   resetAdminModulePerformance();
   const service = createTrackingService();

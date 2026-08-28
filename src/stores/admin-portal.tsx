@@ -387,10 +387,6 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     await Promise.all(keys.map((key) => loadModuleData(key, { refresh: true })));
   }, [loadModuleData]);
 
-  const completeDashboardBootstrap = useCallback(async () => {
-    await loadModuleData("dashboard");
-  }, [loadModuleData]);
-
   const bootstrapSession = useCallback(async (
     session: Session | null,
     options?: { background?: boolean },
@@ -451,7 +447,6 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         refreshing: false,
       });
       markBootstrapCompleted();
-      void completeDashboardBootstrap();
     } catch (error) {
       const denied = error instanceof AdminReadError && error.code === "access-denied";
       setState((current) => ({
@@ -473,7 +468,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         refreshing: false,
       }));
     }
-  }, [client, completeDashboardBootstrap]);
+  }, [client]);
 
   const refresh = useCallback(async (options?: { background?: boolean }) => {
     if (!client) return;
@@ -772,8 +767,8 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   }, [client]);
 
   const data = useMemo(
-    () => (state.bootstrapReady ? mergeModuleCacheToSnapshot(state.moduleCache) : null),
-    [state.bootstrapReady, state.moduleCache],
+    () => (state.bootstrapReady ? mergeModuleCacheToSnapshot(state.moduleCache, state.bootstrap) : null),
+    [state.bootstrap, state.bootstrapReady, state.moduleCache],
   );
 
   const dataSource = useMemo<AdminDataSourceStatus>(() => {
