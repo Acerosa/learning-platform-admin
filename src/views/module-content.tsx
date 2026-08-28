@@ -5,6 +5,7 @@ import type {
   AdminDataSnapshot,
   HubRecord,
 } from "../api/admin-api";
+import type { DashboardData } from "../api/admin-module-data";
 import { AdminLink } from "../components/admin-link";
 import { HubDetailDialog } from "../components/hub-detail-dialog";
 import { RegisterHubDialog } from "../components/register-hub-dialog";
@@ -21,7 +22,7 @@ import { legacyRouteContext } from "../router/legacy-routes";
 import { getAdminModule, type AdminModuleId } from "../router/modules";
 import { AdminHubRegistrationError } from "../services/supabase-admin-service";
 import { useAdminPortal } from "../stores/admin-portal";
-import { moduleDataKeyForRoute } from "../api/admin-module-data";
+import { moduleDataKeyForRoute, sliceDemoModuleData } from "../api/admin-module-data";
 import { ModuleDataShell } from "../components/module-data-shell";
 import { formatDate } from "../utils/format";
 import { AssessmentArea } from "./assessment-area";
@@ -111,9 +112,9 @@ function weekCountForHub(hubCode: string, localDrafts: ReturnType<typeof loadDra
   return draft?.package.weeks.length ?? null;
 }
 
-function DashboardPage({ data }: { data: AdminDataSnapshot }) {
+function DashboardPage({ data }: { data: DashboardData }) {
   const summary = data.dashboardSummary;
-  const recentAttempts = data.attempts.slice(0, 5);
+  const recentAttempts = data.recentAttempts;
   return (
     <>
       <PageHeader moduleId="dashboard" />
@@ -272,7 +273,7 @@ function legacyHeading(moduleId: AdminModuleId): string | undefined {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, publishCurriculum, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, bootstrapReady } = useAdminPortal();
+  const { data, session, dataSource, moduleCache, publishCurriculum, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, bootstrapReady } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
@@ -309,7 +310,9 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
 
   switch (moduleId) {
     case "dashboard":
-      content = <DashboardPage data={data} />;
+      content = moduleCache.dashboard.data
+        ? <DashboardPage data={moduleCache.dashboard.data} />
+        : null;
       break;
     case "hubs":
     case "courses":
@@ -408,7 +411,11 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
       );
       break;
     default:
-      content = <DashboardPage data={data} />;
+      content = (
+        <DashboardPage
+          data={moduleCache.dashboard.data ?? sliceDemoModuleData(data, "dashboard")}
+        />
+      );
   }
 
   return (

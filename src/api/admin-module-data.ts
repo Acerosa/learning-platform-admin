@@ -5,6 +5,7 @@ import type {
   AssessmentOverviewRecord,
   AssignmentRecord,
   AttemptRecord,
+  RecentAttemptRecord,
   AuditEventRecord,
   CourseRecord,
   CurriculumDraftSummary,
@@ -44,7 +45,7 @@ export interface AdminBootstrapData {
 export interface DashboardData {
   dashboardSummary: DashboardSummaryRecord;
   health: readonly HealthRecord[];
-  attempts: readonly AttemptRecord[];
+  recentAttempts: readonly RecentAttemptRecord[];
   hubs: readonly HubRecord[];
   contracts: readonly PlatformContractRecord[];
 }
@@ -199,7 +200,10 @@ export function moduleLoadingLabel(key: AdminModuleDataKey): string {
   }
 }
 
-export function mergeModuleCacheToSnapshot(cache: AdminModuleCacheState): AdminDataSnapshot {
+export function mergeModuleCacheToSnapshot(
+  cache: AdminModuleCacheState,
+  bootstrap?: AdminBootstrapData | null,
+): AdminDataSnapshot {
   const dashboard = cache.dashboard.data;
   const hubs = cache["hubs-curriculum"].data;
   const people = cache.people.data;
@@ -208,7 +212,7 @@ export function mergeModuleCacheToSnapshot(cache: AdminModuleCacheState): AdminD
   const system = cache.system.data;
 
   return Object.freeze({
-    dashboardSummary: dashboard?.dashboardSummary ?? EMPTY_DASHBOARD_SUMMARY,
+    dashboardSummary: dashboard?.dashboardSummary ?? bootstrap?.dashboardSummary ?? EMPTY_DASHBOARD_SUMMARY,
     health: system?.health ?? dashboard?.health ?? [],
     hubs: hubs?.hubs ?? dashboard?.hubs ?? system?.hubs ?? [],
     hubCourseLinks: hubs?.hubCourseLinks ?? [],
@@ -219,7 +223,7 @@ export function mergeModuleCacheToSnapshot(cache: AdminModuleCacheState): AdminD
     groups: people?.groups ?? [],
     enrolments: people?.enrolments ?? [],
     assignments: assignments?.assignments ?? [],
-    attempts: assignments?.attempts ?? dashboard?.attempts ?? [],
+    attempts: assignments?.attempts ?? [],
     responses: assignments?.responses ?? [],
     activityPerformance: assignments?.activityPerformance ?? [],
     assessmentOverview: analytics?.assessmentOverview ?? null,
@@ -250,7 +254,16 @@ export function sliceDemoModuleData(
       return {
         dashboardSummary: snapshot.dashboardSummary,
         health: snapshot.health,
-        attempts: snapshot.attempts,
+        recentAttempts: snapshot.attempts.slice(0, 5).map((attempt) => ({
+          attemptId: attempt.attemptId,
+          learnerNumber: attempt.learnerNumber,
+          activityKey: attempt.activityKey,
+          activityVersion: attempt.activityVersion,
+          status: attempt.status,
+          score: attempt.score,
+          maxScore: attempt.maxScore,
+          completedAt: attempt.completedAt,
+        })),
         hubs: snapshot.hubs,
         contracts: snapshot.contracts,
       };

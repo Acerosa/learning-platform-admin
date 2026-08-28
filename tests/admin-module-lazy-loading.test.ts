@@ -55,6 +55,7 @@ function createTrackingService(): AdminReadService & { calls: string[] } {
     listEnrolments: async () => track("listEnrolments"),
     listAssignments: async () => track("listAssignments"),
     listAttempts: async () => track("listAttempts"),
+    listRecentAttempts: async () => track("listRecentAttempts"),
     listResponses: async () => track("listResponses"),
     listActivityPerformance: async () => track("listActivityPerformance"),
     getAssessmentOverview: async () => {
@@ -160,15 +161,16 @@ test("system module loads its own datasets", async () => {
   );
 });
 
-test("dashboard module reuses bootstrap summary when provided", async () => {
+test("dashboard module loads recent attempts instead of full attempt history", async () => {
   const service = createTrackingService();
   const bootstrap = await loadAdminBootstrapData(service);
   service.calls.length = 0;
   await loadDashboardData(service, bootstrap);
   assert.deepEqual(
     service.calls.sort(),
-    ["listAttempts", "listContracts", "listHealth", "listHubs"].sort(),
+    ["listContracts", "listHealth", "listHubs", "listRecentAttempts"].sort(),
   );
+  assert.equal(service.calls.includes("listAttempts"), false);
 });
 
 test("demo slices derive module data without backend reads", async () => {
@@ -232,6 +234,19 @@ test("analytics failure does not affect merged bootstrap snapshot", () => {
   assert.ok(snapshot.dashboardSummary.registeredHubs >= 0);
   assert.equal(snapshot.groupPerformance.length, 0);
   assert.equal(cache.analytics.status, "error");
+});
+
+test("merge uses bootstrap dashboard summary before dashboard module loads", () => {
+  const cache = createEmptyModuleCache();
+  const bootstrap = {
+    dashboardSummary: {
+      ...DEMO_ADMIN_DATA.dashboardSummary,
+      registeredHubs: 99,
+    },
+  };
+  const snapshot = mergeModuleCacheToSnapshot(cache, bootstrap);
+  assert.equal(snapshot.dashboardSummary.registeredHubs, 99);
+  assert.equal(snapshot.learners.length, 0);
 });
 
 test("performance snapshot records bootstrap read count", async () => {

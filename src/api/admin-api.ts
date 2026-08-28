@@ -215,6 +215,17 @@ export interface AttemptRecord {
   questionCount: number | null;
 }
 
+export interface RecentAttemptRecord {
+  attemptId: string;
+  learnerNumber: string;
+  activityKey: string;
+  activityVersion: string;
+  status: string;
+  score: number;
+  maxScore: number;
+  completedAt: string;
+}
+
 export interface ResponseRecord {
   responseId: string;
   attemptId: string;
@@ -537,6 +548,7 @@ export interface AdminReadService {
   listEnrolments(): Promise<readonly EnrolmentRecord[]>;
   listAssignments(): Promise<readonly AssignmentRecord[]>;
   listAttempts(): Promise<readonly AttemptRecord[]>;
+  listRecentAttempts(): Promise<readonly RecentAttemptRecord[]>;
   listResponses(): Promise<readonly ResponseRecord[]>;
   listActivityPerformance(): Promise<readonly ActivityPerformanceRecord[]>;
   getAssessmentOverview(): Promise<AssessmentOverviewRecord | null>;
