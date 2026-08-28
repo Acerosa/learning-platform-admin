@@ -55,6 +55,8 @@ import {
 import {
   canRunWeekVisibilityPublish,
   prepareWeekVisibilityPublish,
+  recoverFromFailedWeekVisibilityPublish,
+  weekVisibilityPlatformPublishFailureMessage,
   weekVisibilityPublishSuccessMessage,
   type WeekVisibilityAction,
 } from "../content/week-visibility-publish";
@@ -69,7 +71,7 @@ import {
   restoreAsDraft,
   returnToDraft,
   startReview,
-  suggestNextVersion,
+  suggestNextVersionForDraft,
   updateReviewMetadata,
   publishVersion,
   withPlatformPublication,
@@ -195,7 +197,7 @@ export function CurriculumAuthoringPage({
       setPreviewId(stored[0].id);
       setCompareLeft(stored[0].id);
       setCompareRight(stored[1]?.id || stored[0].id);
-      setPublishVersionValue(suggestNextVersion(stored, stored[0].hubId, stored[0].courseKey));
+      setPublishVersionValue(suggestNextVersionForDraft(stored, stored[0]));
       setPublishNotes(stored[0].publicationNotes);
     }
     setHydrated(true);
@@ -221,7 +223,7 @@ export function CurriculumAuthoringPage({
           setPreviewId(preferred.id);
           setCompareLeft(preferred.id);
           setCompareRight(merged.find((item) => item.id !== preferred.id)?.id || preferred.id);
-          setPublishVersionValue(suggestNextVersion(merged, preferred.hubId, preferred.courseKey));
+          setPublishVersionValue(suggestNextVersionForDraft(merged, preferred));
           setPublishNotes(preferred.publicationNotes);
         }
         setRemoteDraftStatus("loaded");
@@ -300,7 +302,7 @@ export function CurriculumAuthoringPage({
     try {
       const copy = createWorkingCopy(published, actor);
       commit(copy);
-      setPublishVersionValue(suggestNextVersion(compareRecords, copy.hubId, copy.courseKey));
+      setPublishVersionValue(suggestNextVersionForDraft(compareRecords, copy));
       setPublishNotes("");
       setTab("weeks");
       setMessage("New editable draft created from the published snapshot. Use Post week & publish / Remove week & publish for visibility, or edit content then use Review and Publication.");
@@ -325,7 +327,7 @@ export function CurriculumAuthoringPage({
       setLoadStatus("loaded");
       setSelectedActivityId(working.package.activities[0]?.id || "");
       setVisibilityWeekId(working.package.weeks[0]?.id || "");
-      setPublishVersionValue(suggestNextVersion(saveDraft(drafts, working), working.hubId, working.courseKey));
+      setPublishVersionValue(suggestNextVersionForDraft(saveDraft(drafts, working), working));
       setTab("weeks");
       setMessage(
         weekCount
@@ -425,7 +427,7 @@ export function CurriculumAuthoringPage({
       setDrafts(nextRecords);
       setDraft(prepared.published);
       setPreviewId(prepared.published.id);
-      setPublishVersionValue(suggestNextVersion(nextRecords, prepared.published.hubId, prepared.published.courseKey));
+      setPublishVersionValue(suggestNextVersionForDraft(nextRecords, prepared.published));
       setVisibilityWeekId(prepared.weekId);
       setMessage("Publishing to the platform…");
 
@@ -459,11 +461,14 @@ export function CurriculumAuthoringPage({
             ? error.message
             : "Curriculum could not be published to the platform.",
         });
-        nextRecords = nextRecords.map((item) => (item.id === failed.id ? failed : item));
-        persistDrafts(nextRecords);
-        setDrafts(nextRecords);
-        setDraft(failed);
+        const withFailed = nextRecords.map((item) => (item.id === failed.id ? failed : item));
+        const recovered = recoverFromFailedWeekVisibilityPublish(withFailed, failed, actor);
+        persistDrafts(recovered.records);
+        setDrafts(recovered.records);
+        setDraft(recovered.draft);
+        setPreviewId(recovered.draft.id);
         showError(error);
+        setMessage(weekVisibilityPlatformPublishFailureMessage(action));
       }
     } catch (error) {
       showError(error);
@@ -493,7 +498,7 @@ export function CurriculumAuthoringPage({
       setDrafts(nextRecords);
       setDraft(prepared.published);
       setPreviewId(prepared.published.id);
-      setPublishVersionValue(suggestNextVersion(nextRecords, prepared.published.hubId, prepared.published.courseKey));
+      setPublishVersionValue(suggestNextVersionForDraft(nextRecords, prepared.published));
       setMessage("Publishing to the platform…");
 
       const publishing = withPlatformPublication(prepared.published, { platformPublicationState: "publishing" });
@@ -953,7 +958,7 @@ export function CurriculumAuthoringPage({
                     <button className="button button--small button--secondary" type="button" onClick={() => {
                       setDraft(item);
                       setPreviewId(item.id);
-                      setPublishVersionValue(suggestNextVersion(drafts, item.hubId, item.courseKey));
+                      setPublishVersionValue(suggestNextVersionForDraft(drafts, item));
                       setPublishNotes(item.publicationNotes);
                     }}>Resume</button>
                     <button className="button button--small button--secondary" type="button" onClick={() => {
@@ -1026,13 +1031,13 @@ export function CurriculumAuthoringPage({
             notes={publishNotes}
             gateOk={gate.ok}
             issues={gate.issues}
-            suggestedVersion={suggestNextVersion(compareRecords, draft.hubId, draft.courseKey)}
+            suggestedVersion={suggestNextVersionForDraft(compareRecords, draft)}
             onVersionChange={setPublishVersionValue}
             onNotesChange={setPublishNotes}
             onPublish={() => {
               try {
                 const nextRecords = publishVersion(compareRecords, draft, {
-                  version: publishVersionValue || suggestNextVersion(compareRecords, draft.hubId, draft.courseKey),
+                  version: publishVersionValue || suggestNextVersionForDraft(compareRecords, draft),
                   publishedBy: actor,
                   notes: publishNotes,
                 });
