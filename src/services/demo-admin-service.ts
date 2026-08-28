@@ -197,6 +197,19 @@ export const ATTEMPTS: readonly AttemptRecord[] = Object.freeze([
   { attemptId: "demo-attempt-b", learnerNumber: "SYNTH-0002", groupCode: "TEST-GROUP-B", activityKey: "foundations-programming-diagnostic", activityVersion: "2.0.0", attemptNumber: 1, status: "completed", score: 6, maxScore: 10, markingSource: "server", evidenceLevel: "question_level", receivedAt: "2026-08-11T09:10:00Z", completedAt: "2026-08-11T09:20:00Z", requiresReview: true, questionCount: 2 },
 ]);
 
+export const RECENT_ATTEMPTS = Object.freeze(
+  ATTEMPTS.map((attempt) => ({
+    attemptId: attempt.attemptId,
+    learnerNumber: attempt.learnerNumber,
+    activityKey: attempt.activityKey,
+    activityVersion: attempt.activityVersion,
+    status: attempt.status,
+    score: attempt.score,
+    maxScore: attempt.maxScore,
+    completedAt: attempt.completedAt,
+  })),
+);
+
 export const RESPONSES: readonly ResponseRecord[] = Object.freeze([
   {
     responseId: "demo-response-a1",
@@ -481,6 +494,7 @@ export const demoAdminService: AdminReadService = Object.freeze({
   async listEnrolments() { return ENROLMENTS; },
   async listAssignments() { return ASSIGNMENTS; },
   async listAttempts() { return ATTEMPTS; },
+  async listRecentAttempts() { return RECENT_ATTEMPTS; },
   async listResponses() { return RESPONSES; },
   async listActivityPerformance() { return ACTIVITY_PERFORMANCE; },
   async getAssessmentOverview() { return ASSESSMENT_OVERVIEW; },

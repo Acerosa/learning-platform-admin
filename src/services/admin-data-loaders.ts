@@ -26,14 +26,14 @@ export async function loadDashboardData(
   bootstrap?: AdminBootstrapData | null,
 ): Promise<DashboardData> {
   const reads = bootstrap?.dashboardSummary
-    ? ["health", "attempts", "hubs", "contracts"]
-    : ["dashboardSummary", "health", "attempts", "hubs", "contracts"];
+    ? ["health", "recentAttempts", "hubs", "contracts"]
+    : ["dashboardSummary", "health", "recentAttempts", "hubs", "contracts"];
   recordModuleReads("dashboard", reads);
 
-  const [dashboardSummary, health, attempts, hubs, contracts] = await Promise.all([
+  const [dashboardSummary, health, recentAttempts, hubs, contracts] = await Promise.all([
     bootstrap?.dashboardSummary ?? service.getDashboardSummary(),
     service.listHealth(),
-    service.listAttempts(),
+    service.listRecentAttempts(),
     service.listHubs(),
     service.listContracts(),
   ]);
@@ -41,7 +41,7 @@ export async function loadDashboardData(
   return Object.freeze({
     dashboardSummary,
     health,
-    attempts,
+    recentAttempts,
     hubs,
     contracts,
   });
