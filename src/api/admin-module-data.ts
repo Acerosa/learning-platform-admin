@@ -17,9 +17,11 @@ import type {
   HealthRecord,
   HubCourseLinkRecord,
   HubRecord,
+  LearnerActivityPerformanceRecord,
   LearnerPerformanceRecord,
   LearnerRecord,
   PlatformContractRecord,
+  QuestionGroupPerformanceRecord,
   QuestionPerformanceRecord,
   ResponseRecord,
   SkillPerformanceRecord,
@@ -77,8 +79,10 @@ export interface AnalyticsData {
   assessmentOverview: AssessmentOverviewRecord | null;
   groupPerformance: readonly GroupPerformanceRecord[];
   learnerPerformance: readonly LearnerPerformanceRecord[];
+  learnerActivityPerformance: readonly LearnerActivityPerformanceRecord[];
   activityAnalytics: readonly ActivityAnalyticsRecord[];
   questionPerformance: readonly QuestionPerformanceRecord[];
+  questionGroupPerformance: readonly QuestionGroupPerformanceRecord[];
   topicPerformance: readonly TopicPerformanceRecord[];
   skillPerformance: readonly SkillPerformanceRecord[];
 }
@@ -229,8 +233,10 @@ export function mergeModuleCacheToSnapshot(
     assessmentOverview: analytics?.assessmentOverview ?? null,
     groupPerformance: analytics?.groupPerformance ?? [],
     learnerPerformance: analytics?.learnerPerformance ?? [],
+    learnerActivityPerformance: analytics?.learnerActivityPerformance ?? [],
     activityAnalytics: analytics?.activityAnalytics ?? [],
     questionPerformance: analytics?.questionPerformance ?? [],
+    questionGroupPerformance: analytics?.questionGroupPerformance ?? [],
     topicPerformance: analytics?.topicPerformance ?? [],
     skillPerformance: analytics?.skillPerformance ?? [],
     auditEvents: system?.auditEvents ?? hubs?.auditEvents ?? [],
@@ -295,8 +301,10 @@ export function sliceDemoModuleData(
         assessmentOverview: snapshot.assessmentOverview,
         groupPerformance: snapshot.groupPerformance,
         learnerPerformance: snapshot.learnerPerformance,
+        learnerActivityPerformance: snapshot.learnerActivityPerformance,
         activityAnalytics: snapshot.activityAnalytics,
         questionPerformance: snapshot.questionPerformance,
+        questionGroupPerformance: snapshot.questionGroupPerformance,
         topicPerformance: snapshot.topicPerformance,
         skillPerformance: snapshot.skillPerformance,
       };

@@ -25,8 +25,10 @@ export const ADMIN_API_VIEWS = Object.freeze({
   assessmentOverview: "admin_api.assessment_overview",
   groupPerformance: "admin_api.group_performance",
   learnerPerformance: "admin_api.learner_performance",
+  learnerActivityPerformance: "admin_api.learner_activity_performance",
   activityAnalytics: "admin_api.activity_analytics",
   questionPerformance: "admin_api.question_performance",
+  questionGroupPerformance: "admin_api.question_group_performance",
   topicPerformance: "admin_api.topic_performance",
   skillPerformance: "admin_api.skill_performance",
   curriculumPublications: "admin_api.curriculum_publications",
@@ -297,6 +299,7 @@ export interface GroupPerformanceRecord {
   groupCode: string;
   groupName: string;
   courseKey: string;
+  courseTitle?: string | null;
   activeLearnerCount: number;
   participatingLearnerCount: number;
   completedAttempts: number;
@@ -329,13 +332,19 @@ export interface LearnerPerformanceRecord {
 
 export interface ActivityAnalyticsRecord {
   groupCode: string;
+  groupName?: string | null;
   courseKey: string;
+  courseTitle?: string | null;
+  assignmentId?: string | null;
+  activityId?: string | null;
   activityKey: string;
+  activityTitle?: string | null;
   activityVersion: string;
   assignedLearnerCount: number;
   attemptedLearnerCount: number;
   completedLearnerCount: number;
   completionPercentage: number | null;
+  participationPercentage?: number | null;
   attemptCount: number;
   completedAttempts: number;
   averageScorePercentage: number | null;
@@ -344,6 +353,64 @@ export interface ActivityAnalyticsRecord {
   requiresReviewCount: number;
   reviewedResponseCount: number;
   latestCompletedAt: string | null;
+}
+
+export interface LearnerActivityPerformanceRecord {
+  learnerId: string;
+  studentNumber: string;
+  displayName: string;
+  courseId: string;
+  courseKey: string;
+  courseTitle: string;
+  groupId: string;
+  groupCode: string;
+  groupName: string;
+  assignmentId: string;
+  activityId: string;
+  activityKey: string;
+  activityTitle: string;
+  activityVersion: string;
+  hubCodes: readonly string[];
+  hubNames: readonly string[];
+  weekNumber: number | null;
+  weekTitle: string | null;
+  attemptCount: number;
+  completedAttemptCount: number;
+  firstScorePercentage: number | null;
+  latestScorePercentage: number | null;
+  bestScorePercentage: number | null;
+  averageScorePercentage: number | null;
+  firstCompletedAt: string | null;
+  latestCompletedAt: string | null;
+  requiresReviewCount: number;
+  reviewedResponseCount: number;
+}
+
+export interface QuestionGroupPerformanceRecord {
+  groupCode: string;
+  groupName: string;
+  courseKey: string;
+  courseTitle: string;
+  assignmentId: string;
+  activityKey: string;
+  activityTitle: string;
+  activityVersion: string;
+  questionKey: string;
+  questionTitle: string;
+  questionType: string;
+  sectionKey: string | null;
+  ordinal: number;
+  topicKeys: readonly string[];
+  skillKeys: readonly string[];
+  responseCount: number;
+  correctCount: number;
+  incorrectCount: number;
+  unansweredCount: number;
+  requiresReviewCount: number;
+  reviewedResponseCount: number;
+  correctnessPercentage: number | null;
+  averageAwardedScore: number | null;
+  averageMaxScore: number | null;
 }
 
 export interface QuestionPerformanceRecord {
@@ -525,8 +592,10 @@ export interface AdminDataSnapshot {
   assessmentOverview: AssessmentOverviewRecord | null;
   groupPerformance: readonly GroupPerformanceRecord[];
   learnerPerformance: readonly LearnerPerformanceRecord[];
+  learnerActivityPerformance: readonly LearnerActivityPerformanceRecord[];
   activityAnalytics: readonly ActivityAnalyticsRecord[];
   questionPerformance: readonly QuestionPerformanceRecord[];
+  questionGroupPerformance: readonly QuestionGroupPerformanceRecord[];
   topicPerformance: readonly TopicPerformanceRecord[];
   skillPerformance: readonly SkillPerformanceRecord[];
   dashboardSummary: DashboardSummaryRecord;
@@ -554,8 +623,10 @@ export interface AdminReadService {
   getAssessmentOverview(): Promise<AssessmentOverviewRecord | null>;
   listGroupPerformance(): Promise<readonly GroupPerformanceRecord[]>;
   listLearnerPerformance(): Promise<readonly LearnerPerformanceRecord[]>;
+  listLearnerActivityPerformance(): Promise<readonly LearnerActivityPerformanceRecord[]>;
   listActivityAnalytics(): Promise<readonly ActivityAnalyticsRecord[]>;
   listQuestionPerformance(): Promise<readonly QuestionPerformanceRecord[]>;
+  listQuestionGroupPerformance(): Promise<readonly QuestionGroupPerformanceRecord[]>;
   listTopicPerformance(): Promise<readonly TopicPerformanceRecord[]>;
   listSkillPerformance(): Promise<readonly SkillPerformanceRecord[]>;
   getDashboardSummary(): Promise<DashboardSummaryRecord>;
