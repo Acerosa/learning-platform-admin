@@ -21,6 +21,12 @@ import {
   scopedPlatformQuestions,
   searchFromAnalyticsState,
 } from "../src/analytics/scope.ts";
+import {
+  attentionReasonLabel,
+  attemptDistribution,
+  groupDerivedMetrics,
+  latestResultDistribution,
+} from "../src/analytics/presentation.ts";
 import { DEMO_ADMIN_DATA } from "../src/services/demo-admin-service.ts";
 import {
   assessmentOverviewFromSnapshot,
@@ -194,6 +200,7 @@ test("search params round-trip analytics scope without a router rewrite", () => 
     pane: "learners",
     learnerId: "learner-a",
     assignmentId: null,
+    inspectGroup: "TEST-GROUP-A",
     scope: {
       hubCode: "unit-3-cyber-security",
       courseKey: "ocr-level-3-it",
@@ -210,4 +217,46 @@ test("search params round-trip analytics scope without a router rewrite", () => 
   assert.equal(parsed.groupCode, "TEST-GROUP-A");
   assert.equal(parsed.activityKey, "week3-attacker-types");
   assert.equal(parsed.learnerId, "learner-a");
+  assert.equal(parsed.inspectGroup, "TEST-GROUP-A");
 });
+
+test("latest-result distribution uses existing scores and does not treat missing as 0%", () => {
+  const rows = scopedLearnerActivity(DEMO_ADMIN_DATA, constrainScope({
+    hubCode: ALL_SCOPE, courseKey: "ocr-level-3-it", groupCode: ALL_SCOPE, activityKey: ALL_SCOPE, topicKey: ALL_SCOPE, skillKey: ALL_SCOPE,
+  }, DEMO_ADMIN_DATA));
+  const buckets = latestResultDistribution(rows);
+  const high = buckets.find((bucket) => bucket.id === "high");
+  const none = buckets.find((bucket) => bucket.id === "none");
+  const low = buckets.find((bucket) => bucket.id === "low");
+  assert.equal(high?.count, 1);
+  assert.equal(none?.count, 1);
+  assert.equal(low?.count, 0);
+  assert.equal(buckets.reduce((sum, bucket) => sum + bucket.count, 0), 2);
+});
+
+test("attempt distribution includes not started without inventing a score", () => {
+  const rows = scopedLearnerActivity(DEMO_ADMIN_DATA, constrainScope({
+    hubCode: ALL_SCOPE, courseKey: ALL_SCOPE, groupCode: ALL_SCOPE, activityKey: "week3-attacker-types", topicKey: ALL_SCOPE, skillKey: ALL_SCOPE,
+  }, DEMO_ADMIN_DATA));
+  const buckets = attemptDistribution(rows);
+  assert.equal(buckets.find((bucket) => bucket.id === "0")?.count, 1);
+  assert.equal(buckets.find((bucket) => bucket.id === "3")?.count, 1);
+});
+
+test("group drill-down metrics stay on the selected teaching group", () => {
+  const group = DEMO_ADMIN_DATA.groupPerformance.find((row) => row.groupCode === "TEST-GROUP-A");
+  assert.ok(group);
+  const derived = groupDerivedMetrics(group, DEMO_ADMIN_DATA.learnerActivityPerformance, DEMO_ADMIN_DATA.activityAnalytics);
+  assert.equal(derived.assignedLearners, 1);
+  assert.equal(derived.completedLearners, 1);
+  assert.equal(derived.completionPercentage, 100);
+  assert.ok(derived.lastActivity);
+});
+
+test("needs attention reasons stay on existing deterministic signals", () => {
+  assert.equal(attentionReasonLabel("assigned-never-attempted"), "No activity");
+  assert.equal(attentionReasonLabel("low-completion"), "Completion risk");
+  assert.equal(attentionReasonLabel("unresolved-review-backlog"), "Awaiting review");
+  assert.equal(attentionReasonLabel("repeated-attempts-no-improvement"), "Low performance");
+});
+
