@@ -37,7 +37,7 @@ test("module registry has six primary areas and legacy route aliases", async () 
 
 test("admin API names match the documented backend surface", async () => {
   const source = await readFile(new URL("src/api/admin-api.ts", root), "utf8");
-  for (const view of ["current_staff_context", "hubs", "hub_course_links", "courses", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "responses", "dashboard_summary", "activity_performance", "assessment_overview", "group_performance", "learner_performance", "activity_analytics", "question_performance", "topic_performance", "skill_performance", "curriculum_publications", "curriculum_drafts"]) {
+  for (const view of ["current_staff_context", "hubs", "hub_course_links", "courses", "platform_contracts", "staff_roles", "audit_events", "operational_health", "learners", "groups", "enrolments", "assignments", "attempts", "responses", "dashboard_summary", "activity_performance", "assessment_overview", "group_performance", "learner_performance", "learner_activity_performance", "activity_analytics", "question_performance", "question_group_performance", "topic_performance", "skill_performance", "curriculum_publications", "curriculum_drafts"]) {
     assert.match(source, new RegExp(`admin_api\\.${view}`));
   }
   assert.match(source, /status: "draft"/);

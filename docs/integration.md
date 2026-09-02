@@ -58,9 +58,11 @@ The documented administrative boundary is `admin_api` version 0.2.0.
 | Activity analytics | `admin_api.activity_performance` |
 | Assessment overview | `admin_api.assessment_overview` |
 | Group performance | `admin_api.group_performance` |
-| Learner performance | `admin_api.learner_performance` |
+| Learner performance (learner-wide summary) | `admin_api.learner_performance` |
+| Learner activity performance (learner + assignment) | `admin_api.learner_activity_performance` |
 | Activity analytics (assignment-level) | `admin_api.activity_analytics` |
-| Question performance | `admin_api.question_performance` |
+| Question performance (platform-wide) | `admin_api.question_performance` |
+| Question group performance | `admin_api.question_group_performance` |
 | Topic performance | `admin_api.topic_performance` |
 | Skill performance | `admin_api.skill_performance` |
 | Curriculum publications | `admin_api.curriculum_publications` |
@@ -70,9 +72,12 @@ The documented administrative boundary is `admin_api` version 0.2.0.
 | Teacher review | `admin_api.review_response` |
 
 Assessment analytics views expose summary counts and percentages only. They do
-not return response payloads or answer keys. “Needs attention” signals are
-interpreted in `@learning-platform/results` from those aggregates and are never
-clinical/predictive risk scores.
+not return response payloads or answer keys. Learner first/latest/best scores
+are read from `admin_api.learner_activity_performance` for the same learner and
+assignment; they are not mixed across unrelated activities. Topic and skill
+views stay on existing metadata keys and are not inferred from free text.
+“Needs attention” signals are interpreted in `@learning-platform/results` from
+those aggregates and are never clinical/predictive risk scores.
 
 All views rely on backend RLS. The portal must use an authenticated staff session and the public browser credential only. A service-role key must never be placed in this application.
 
