@@ -167,9 +167,13 @@ export function attentionEntityLabel(
 }
 
 export function groupAverage(groups: readonly GroupPerformanceRecord[]) {
+  const highests = groups
+    .map((row) => row.bestScorePercentage)
+    .filter((value): value is number => value != null);
   return {
     latest: mean(groups.map((row) => row.latestScorePercentage).filter((value): value is number => value != null)),
-    best: mean(groups.map((row) => row.bestScorePercentage).filter((value): value is number => value != null)),
+    best: mean(highests),
+    highest: highests.length ? Math.max(...highests) : null,
     review: groups.reduce((sum, row) => sum + row.requiresReviewCount, 0),
     learners: groups.reduce((sum, row) => sum + row.activeLearnerCount, 0),
   };

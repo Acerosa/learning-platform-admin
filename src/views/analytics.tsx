@@ -520,7 +520,7 @@ function ActivityDetail({
             <MetricCard label="Completed" value={String(activity.completedLearnerCount)} detail="Learners with a completed attempt" />
             <MetricCard label="Completion" value={percentageLabel(activity.completionPercentage)} detail={METRIC_DEFINITIONS.completion.definition} definition={METRIC_DEFINITIONS.completion.definition} />
             <MetricCard label="Latest-result Average" value={percentageLabel(activity.latestScorePercentage)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
-            <MetricCard label="Best-result Average" value={percentageLabel(activity.bestScorePercentage)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+            <MetricCard label={METRIC_DEFINITIONS.highestResult.label} value={percentageLabel(activity.bestScorePercentage)} detail={METRIC_DEFINITIONS.highestResult.definition} definition={METRIC_DEFINITIONS.highestResult.definition} />
             <MetricCard label="Awaiting review" value={String(activity.requiresReviewCount)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
           </section>
           <div className="analytics-visuals">
@@ -636,7 +636,7 @@ function GroupDetail({
             <MetricCard label="Participating" value={String(metrics.participatingLearners)} detail={METRIC_DEFINITIONS.participation.definition} definition={METRIC_DEFINITIONS.participation.definition} />
             <MetricCard label="Completed" value={String(metrics.completedLearners)} detail={METRIC_DEFINITIONS.completion.definition} definition={METRIC_DEFINITIONS.completion.definition} />
             <MetricCard label="Latest-result Average" value={percentageLabel(metrics.latestResultAverage)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
-            <MetricCard label="Best-result Average" value={percentageLabel(metrics.bestResultAverage)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+            <MetricCard label={METRIC_DEFINITIONS.highestResult.label} value={percentageLabel(metrics.bestResultAverage)} detail={METRIC_DEFINITIONS.highestResult.definition} definition={METRIC_DEFINITIONS.highestResult.definition} />
             <MetricCard label="Awaiting review" value={String(metrics.awaitingReview)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
           </section>
           <DistributionPanel
@@ -655,7 +655,7 @@ function GroupDetail({
                   <th scope="col">Completed</th>
                   <th scope="col">Completion</th>
                   <th scope="col">Latest Result</th>
-                  <th scope="col">Best Result</th>
+                  <th scope="col">{METRIC_DEFINITIONS.highestResult.label}</th>
                   <th scope="col">Awaiting Review</th>
                   <th scope="col">Last Activity</th>
                 </tr>
@@ -979,7 +979,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
             <MetricCard label="Completed" value={String(overview.completedLearners)} detail="Learners with a completed attempt" />
             <MetricCard label="Completion" value={percentageLabel(overview.completionPercentage)} detail={METRIC_DEFINITIONS.completion.definition} definition={METRIC_DEFINITIONS.completion.definition} />
             <MetricCard label="Latest-result Average" value={percentageLabel(overview.latestResultAverage)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
-            <MetricCard label="Best-result Average" value={percentageLabel(overview.bestResultAverage)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+            <MetricCard label={METRIC_DEFINITIONS.bestResultAverage.label} value={percentageLabel(overview.bestResultAverage)} detail={METRIC_DEFINITIONS.bestResultAverage.definition} definition={METRIC_DEFINITIONS.bestResultAverage.definition} />
             <MetricCard label="Attempts" value={String(overview.attemptCount)} detail={METRIC_DEFINITIONS.attempts.definition} definition={METRIC_DEFINITIONS.attempts.definition} />
             <MetricCard label="Awaiting review" value={String(overview.awaitingReview)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
           </section>
@@ -1023,7 +1023,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
               <MetricCard label="Groups" value={String(groups.length)} detail="Groups matching the current filters" />
               <MetricCard label="Learners" value={String(groupSummary.learners)} detail="Assigned learners across these groups" />
               <MetricCard label="Latest-result Average" value={percentageLabel(groupSummary.latest)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
-              <MetricCard label="Best-result Average" value={percentageLabel(groupSummary.best)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+              <MetricCard label={METRIC_DEFINITIONS.highestResult.label} value={percentageLabel(groupSummary.highest)} detail={METRIC_DEFINITIONS.highestResult.definition} definition={METRIC_DEFINITIONS.highestResult.definition} />
               <MetricCard label="Awaiting review" value={String(groupSummary.review)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
             </section>
             {groups.length ? (
@@ -1037,7 +1037,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
                       <th scope="col">Completed</th>
                       <th scope="col">Completion</th>
                       <th scope="col">Latest-result Average</th>
-                      <th scope="col">Best-result Average</th>
+                      <th scope="col">{METRIC_DEFINITIONS.highestResult.label}</th>
                       <th scope="col">Needs Review</th>
                       <th scope="col">Last Activity</th>
                     </tr>
@@ -1175,7 +1175,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
                       <th scope="col">Completed</th>
                       <th scope="col">Completion</th>
                       <th scope="col">Latest-result Average</th>
-                      <th scope="col">Best-result Average</th>
+                      <th scope="col">{METRIC_DEFINITIONS.highestResult.label}</th>
                       <th scope="col">Awaiting Review</th>
                       <th scope="col">Last Activity</th>
                     </tr>
@@ -1436,7 +1436,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
                     return (
                       <tr key={`${signal.key}:${signal.entityType}:${signal.entityKey}`}>
                         <th scope="row">
-                          {attentionEntityLabel(signal, { learners, groups, activities })}
+                          <span className="table-primary">{attentionEntityLabel(signal, { learners, groups, activities })}</span>
                           <small><code>{signal.entityKey}</code></small>
                         </th>
                         <td>{group?.groupName ?? (learner?.groupName ?? "—")}</td>

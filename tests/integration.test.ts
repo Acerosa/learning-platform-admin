@@ -64,17 +64,26 @@ function fakeClient(options: {
       schemas.push(schema);
       return {
         from(view: string) {
+          let queryRange: { from: number; to: number } | null = null;
           const query = {
             select(columns: string) {
               selections.push(`${view}:${columns}`);
               return query;
             },
             order() { return query; },
+            range(from: number, to: number) {
+              queryRange = { from, to };
+              return query;
+            },
             then(resolve: (value: unknown) => unknown) {
+              const all = viewRows[view] ?? [];
+              const data = queryRange
+                ? all.slice(queryRange.from, queryRange.to + 1)
+                : all;
               return Promise.resolve(resolve(
                 options.failView === view
                   ? { data: null, error: { code: "503" } }
-                  : { data: viewRows[view] ?? [], error: null },
+                  : { data, error: null },
               ));
             },
           };

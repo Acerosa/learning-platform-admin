@@ -568,22 +568,62 @@ export async function reviewResponse(
   };
 }
 
+export const ADMIN_READ_PAGE_SIZE = 1000;
+
+export type AdminReadOrder = {
+  column: string;
+  ascending?: boolean;
+};
+
+function orderSpecs(order?: AdminReadOrder | readonly AdminReadOrder[]) {
+  if (!order) return [];
+  return Array.isArray(order) ? order : [order];
+}
+
 export function createSupabaseAdminReadService(
   client: AdminSupabaseClient,
 ): AdminReadService {
+  function applyOrder<T extends { order: (column: string, options?: { ascending?: boolean }) => T }>(
+    query: T,
+    order?: AdminReadOrder | readonly AdminReadOrder[],
+  ) {
+    let next = query;
+    for (const spec of orderSpecs(order)) {
+      next = next.order(spec.column, { ascending: spec.ascending ?? true });
+    }
+    return next;
+  }
+
   async function rows(
     view: string,
     columns: string,
-    order?: { column: string; ascending?: boolean },
+    order?: AdminReadOrder | readonly AdminReadOrder[],
   ): Promise<readonly AdminRow[]> {
-    let query = client.schema("admin_api").from(view).select(columns);
-    if (order) {
-      query = query.order(order.column, { ascending: order.ascending ?? true });
-    }
+    const query = applyOrder(client.schema("admin_api").from(view).select(columns), order);
     const { data, error } = await query;
     if (error) throw new AdminReadError(errorCode(error), view);
     if (!Array.isArray(data)) throw new AdminReadError("invalid-response", view);
     return data as unknown as readonly AdminRow[];
+  }
+
+  async function pagedRows(
+    view: string,
+    columns: string,
+    order: AdminReadOrder | readonly AdminReadOrder[],
+  ): Promise<readonly AdminRow[]> {
+    const collected: AdminRow[] = [];
+    let from = 0;
+    for (;;) {
+      const to = from + ADMIN_READ_PAGE_SIZE - 1;
+      const query = applyOrder(client.schema("admin_api").from(view).select(columns), order);
+      const { data, error } = await query.range(from, to);
+      if (error) throw new AdminReadError(errorCode(error), view);
+      if (!Array.isArray(data)) throw new AdminReadError("invalid-response", view);
+      collected.push(...(data as unknown as AdminRow[]));
+      if (data.length < ADMIN_READ_PAGE_SIZE) break;
+      from += ADMIN_READ_PAGE_SIZE;
+    }
+    return collected;
   }
 
   return Object.freeze({
@@ -924,10 +964,14 @@ export function createSupabaseAdminReadService(
     },
 
     async listLearnerActivityPerformance() {
-      const data = await rows(
+      const data = await pagedRows(
         "learner_activity_performance",
         "learner_id,student_number,display_name,course_id,course_key,course_title,group_id,group_code,group_name,assignment_id,activity_id,activity_key,activity_title,activity_version,hub_codes,hub_names,week_number,week_title,attempt_count,completed_attempt_count,first_score_percentage,latest_score_percentage,best_score_percentage,average_score_percentage,first_completed_at,latest_completed_at,requires_review_count,reviewed_response_count",
-        { column: "display_name" },
+        [
+          { column: "learner_id" },
+          { column: "assignment_id" },
+          { column: "activity_id" },
+        ],
       );
       return data.map((row): LearnerActivityPerformanceRecord => ({
         learnerId: textValue(row.learner_id),
@@ -962,10 +1006,15 @@ export function createSupabaseAdminReadService(
     },
 
     async listActivityAnalytics() {
-      const data = await rows(
+      const data = await pagedRows(
         "activity_analytics",
         "group_code,group_name,course_key,course_title,assignment_id,activity_id,activity_key,activity_title,activity_version,assigned_learner_count,attempted_learner_count,completed_learner_count,completion_percentage,participation_percentage,attempt_count,completed_attempts,average_score_percentage,best_score_percentage,latest_score_percentage,requires_review_count,reviewed_response_count,latest_completed_at",
-        { column: "activity_key" },
+        [
+          { column: "assignment_id" },
+          { column: "group_code" },
+          { column: "activity_key" },
+          { column: "activity_version" },
+        ],
       );
       return data.map((row): ActivityAnalyticsRecord => ({
         groupCode: textValue(row.group_code),
@@ -994,10 +1043,14 @@ export function createSupabaseAdminReadService(
     },
 
     async listQuestionPerformance() {
-      const data = await rows(
+      const data = await pagedRows(
         "question_performance",
         "activity_key,activity_version,question_key,question_type,section_key,topic_keys,skill_keys,response_count,correct_count,incorrect_count,requires_review_count,reviewed_response_count,correctness_percentage,average_awarded_score,average_max_score",
-        { column: "question_key" },
+        [
+          { column: "activity_key" },
+          { column: "activity_version" },
+          { column: "question_key" },
+        ],
       );
       return data.map((row): QuestionPerformanceRecord => ({
         activityKey: textValue(row.activity_key),
@@ -1019,10 +1072,14 @@ export function createSupabaseAdminReadService(
     },
 
     async listQuestionGroupPerformance() {
-      const data = await rows(
+      const data = await pagedRows(
         "question_group_performance",
         "group_code,group_name,course_key,course_title,assignment_id,activity_key,activity_title,activity_version,question_key,question_title,question_type,section_key,ordinal,topic_keys,skill_keys,response_count,correct_count,incorrect_count,unanswered_count,requires_review_count,reviewed_response_count,correctness_percentage,average_awarded_score,average_max_score",
-        { column: "ordinal" },
+        [
+          { column: "assignment_id" },
+          { column: "activity_version" },
+          { column: "question_key" },
+        ],
       );
       return data.map((row): QuestionGroupPerformanceRecord => ({
         groupCode: textValue(row.group_code),
