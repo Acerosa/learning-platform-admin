@@ -72,6 +72,7 @@ export interface LearnerSummaryRow {
   latestResultAveragePercentage: number | null;
   attemptAveragePercentage: number | null;
   requiresReviewCount: number;
+  latestCompletedAt: string | null;
   rows: readonly LearnerActivityPerformanceRecord[];
 }
 
@@ -333,6 +334,7 @@ export function learnerSummaries(
             .filter((value): value is number => value != null),
         ),
         requiresReviewCount: rows.reduce((sum, row) => sum + row.requiresReviewCount, 0),
+        latestCompletedAt: latestCompleted?.latestCompletedAt ?? null,
         rows,
       };
     })
@@ -452,12 +454,14 @@ export const SCOPE_SEARCH_KEYS = [
   "pane",
   "learner",
   "assignment",
+  "inspectGroup",
 ] as const;
 
 export function scopeFromSearch(search: string): Partial<AnalyticsScope> & {
   pane?: AnalyticsPane;
   learnerId?: string;
   assignmentId?: string;
+  inspectGroup?: string;
 } {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const pane = params.get("pane");
@@ -471,6 +475,7 @@ export function scopeFromSearch(search: string): Partial<AnalyticsScope> & {
     pane: pane && pane in PANE_FILTERS ? pane as AnalyticsPane : undefined,
     learnerId: params.get("learner") || undefined,
     assignmentId: params.get("assignment") || undefined,
+    inspectGroup: params.get("inspectGroup") || undefined,
   };
 }
 
@@ -479,6 +484,7 @@ export function searchFromAnalyticsState(input: {
   pane: AnalyticsPane;
   learnerId: string | null;
   assignmentId: string | null;
+  inspectGroup?: string | null;
 }) {
   const params = new URLSearchParams();
   if (input.pane !== "overview") params.set("pane", input.pane);
@@ -490,6 +496,7 @@ export function searchFromAnalyticsState(input: {
   if (!isAll(input.scope.skillKey)) params.set("skill", input.scope.skillKey);
   if (input.learnerId) params.set("learner", input.learnerId);
   if (input.assignmentId) params.set("assignment", input.assignmentId);
+  if (input.inspectGroup) params.set("inspectGroup", input.inspectGroup);
   const encoded = params.toString();
   return encoded ? `?${encoded}` : "";
 }
