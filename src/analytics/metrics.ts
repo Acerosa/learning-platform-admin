@@ -9,7 +9,15 @@ export const METRIC_DEFINITIONS = Object.freeze({
   },
   bestResult: {
     label: "Best Result",
-    definition: "Highest score achieved across completed attempts.",
+    definition: "Highest score achieved across completed attempts for the same learner and activity.",
+  },
+  bestResultAverage: {
+    label: "Best-result Average",
+    definition: "Average of each assigned learner-activity Best Result in the current scope.",
+  },
+  highestResult: {
+    label: "Highest Result",
+    definition: "Highest completed-attempt score observed in this group or activity aggregate. This is not an average.",
   },
   attemptAverage: {
     label: "Attempt Average",
