@@ -22,8 +22,10 @@ import {
   searchFromAnalyticsState,
 } from "../src/analytics/scope.ts";
 import {
+  attentionEntityLabel,
   attentionReasonLabel,
   attemptDistribution,
+  groupAverage,
   groupDerivedMetrics,
   latestResultDistribution,
 } from "../src/analytics/presentation.ts";
@@ -59,11 +61,15 @@ test("metric labels use agreed terminology", () => {
   assert.equal(METRIC_DEFINITIONS.firstResult.label, "First Result");
   assert.equal(METRIC_DEFINITIONS.latestResult.label, "Latest Result");
   assert.equal(METRIC_DEFINITIONS.bestResult.label, "Best Result");
+  assert.equal(METRIC_DEFINITIONS.bestResultAverage.label, "Best-result Average");
+  assert.equal(METRIC_DEFINITIONS.highestResult.label, "Highest Result");
   assert.equal(METRIC_DEFINITIONS.attemptAverage.label, "Attempt Average");
   assert.equal(METRIC_DEFINITIONS.completion.label, "Completion");
   assert.equal(METRIC_DEFINITIONS.participation.label, "Participation");
   assert.match(METRIC_DEFINITIONS.firstResult.definition, /first completed attempt/);
   assert.match(METRIC_DEFINITIONS.latestResult.definition, /most recent completed attempt/);
+  assert.match(METRIC_DEFINITIONS.bestResultAverage.definition, /Average of each assigned learner-activity Best Result/);
+  assert.match(METRIC_DEFINITIONS.highestResult.definition, /not an average/i);
 });
 
 test("invalid percentages are not rendered", () => {
@@ -258,5 +264,110 @@ test("needs attention reasons stay on existing deterministic signals", () => {
   assert.equal(attentionReasonLabel("low-completion"), "Completion risk");
   assert.equal(attentionReasonLabel("unresolved-review-backlog"), "Awaiting review");
   assert.equal(attentionReasonLabel("repeated-attempts-no-improvement"), "Low performance");
+});
+
+test("needs attention entity labels stay on the friendly name without concatenating the key", () => {
+  const label = attentionEntityLabel(
+    { entityType: "group", entityKey: "CYBER-TEST-A" },
+    {
+      learners: [],
+      groups: [{ groupCode: "CYBER-TEST-A", groupName: "Cyber Security Synthetic Test Group A" }],
+      activities: [],
+    },
+  );
+  assert.equal(label, "Cyber Security Synthetic Test Group A");
+  assert.doesNotMatch(label, /ACYBER-TEST-A/);
+});
+
+test("group highest result is the maximum group best, not the average of bests", () => {
+  const summary = groupAverage([
+    { ...DEMO_ADMIN_DATA.groupPerformance[0], bestScorePercentage: 74 },
+    { ...DEMO_ADMIN_DATA.groupPerformance[1], bestScorePercentage: 100 },
+  ]);
+  assert.equal(summary.best, 87);
+  assert.equal(summary.highest, 100);
+});
+
+test("activity learner rows remain after the first simulated page", () => {
+  const filler = Array.from({ length: 1001 }, (_, index) => ({
+    ...DEMO_ADMIN_DATA.learnerActivityPerformance[0],
+    learnerId: `filler-${index}`,
+    studentNumber: `PAD-${index}`,
+    displayName: `Filler ${index}`,
+    assignmentId: `filler-assignment-${index}`,
+    activityKey: `filler-activity-${index}`,
+    activityTitle: `Filler ${index}`,
+  }));
+  const synth = {
+    ...DEMO_ADMIN_DATA.learnerActivityPerformance[0],
+    learnerId: "synth-0001",
+    studentNumber: "SYNTH-0001",
+    displayName: "Synthetic Student A",
+    groupCode: "TEST-GROUP-A",
+    assignmentId: "assignment-requirements",
+    activityKey: "foundations-requirements-classification",
+    activityTitle: "Requirements Classification",
+    attemptCount: 9,
+    completedAttemptCount: 9,
+    firstScorePercentage: 50,
+    latestScorePercentage: 5,
+    bestScorePercentage: 100,
+    averageScorePercentage: 78.33,
+  };
+  const data = {
+    ...DEMO_ADMIN_DATA,
+    learnerActivityPerformance: [...filler, synth],
+    activityAnalytics: [
+      ...DEMO_ADMIN_DATA.activityAnalytics,
+      {
+        ...DEMO_ADMIN_DATA.activityAnalytics[1],
+        groupCode: "TEST-GROUP-A",
+        assignmentId: "assignment-requirements",
+        activityKey: "foundations-requirements-classification",
+        activityTitle: "Requirements Classification",
+      },
+    ],
+  };
+  const rows = scopedLearnerActivity(data, constrainScope({
+    hubCode: ALL_SCOPE,
+    courseKey: ALL_SCOPE,
+    groupCode: "TEST-GROUP-A",
+    activityKey: "foundations-requirements-classification",
+    topicKey: ALL_SCOPE,
+    skillKey: ALL_SCOPE,
+  }, data));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].displayName, "Synthetic Student A");
+  assert.equal(rows[0].attemptCount, 9);
+  assert.equal(rows[0].firstScorePercentage, 50);
+  assert.equal(rows[0].latestScorePercentage, 5);
+  assert.equal(rows[0].bestScorePercentage, 100);
+  assert.equal(rows[0].averageScorePercentage, 78.33);
+  assert.equal(activityStatus(rows[0].attemptCount, rows[0].completedAttemptCount), "Complete");
+});
+
+test("questions pane count uses the complete loaded dataset rather than a 1000-row cap", () => {
+  const questionPerformance = Array.from({ length: 1562 }, (_, index) => ({
+    activityKey: "foundations-requirements-classification",
+    activityVersion: "1.0.0",
+    questionKey: `Q-${index}`,
+    questionType: "single",
+    sectionKey: "section-a",
+    topicKeys: [],
+    skillKeys: [],
+    responseCount: 0,
+    correctCount: 0,
+    incorrectCount: 0,
+    requiresReviewCount: 0,
+    reviewedResponseCount: 0,
+    correctnessPercentage: null,
+    averageAwardedScore: null,
+    averageMaxScore: null,
+  }));
+  const data = { ...DEMO_ADMIN_DATA, questionPerformance };
+  const rows = scopedPlatformQuestions(data, constrainScope({
+    hubCode: ALL_SCOPE, courseKey: ALL_SCOPE, groupCode: ALL_SCOPE, activityKey: ALL_SCOPE, topicKey: ALL_SCOPE, skillKey: ALL_SCOPE,
+  }, data));
+  assert.equal(rows.length, 1562);
 });
 
