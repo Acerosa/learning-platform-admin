@@ -7,6 +7,12 @@ here.
 
 ### Added
 
+- Contextual Analytics: hierarchical Hub → Course → Group → Activity filters,
+  an active scope bar, learner and activity drill-down, and metric definitions
+  for First Result, Latest Result, Best Result, Attempt Average, Completion and
+  Participation. Learner scores are shown per assignment from
+  `admin_api.learner_activity_performance`.
+
 - Database-backed curriculum drafts with debounced autosave, Open published
   content, Duplicate / Foundation / Challenge variants, and awaited Publish to
   Platform. Teaching-content publication does not require a GitHub deploy.
