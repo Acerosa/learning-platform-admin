@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   ActivityAnalyticsRecord,
   AdminDataSnapshot,
+  GroupPerformanceRecord,
   LearnerActivityPerformanceRecord,
   QuestionGroupPerformanceRecord,
   QuestionPerformanceRecord,
@@ -39,7 +40,19 @@ import {
   type LearnerSummaryRow,
 } from "../analytics/scope.ts";
 import { METRIC_DEFINITIONS, displayLabel, percentageLabel, secondaryKey } from "../analytics/metrics.ts";
-import { StatusBadge } from "../components/status-badge";
+import {
+  attentionEntityLabel,
+  attentionReasonLabel,
+  attentionTabForEntity,
+  attemptDistribution,
+  groupAverage,
+  groupDerivedMetrics,
+  latestResultDistribution,
+  latestTimestamp,
+  type AttentionTab,
+  type DistributionBucket,
+} from "../analytics/presentation.ts";
+import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import { getAdminModule } from "../router/modules";
 import {
   assessmentReadinessFromSnapshot,
@@ -47,9 +60,18 @@ import {
 } from "../results/from-admin-snapshot";
 import { formatDate } from "../utils/format";
 
+type GroupTab = "overview" | "learners" | "activities" | "questions";
+type ActivityTab = "overview" | "learners" | "questions";
+
 function canUseSearchParams() {
   return typeof document !== "undefined"
     && document.querySelector('meta[name="learning-platform-admin-router"][content="hash"]') == null;
+}
+
+function statusTone(status: string): BadgeTone {
+  if (status === "Complete") return "positive";
+  if (status === "In progress") return "info";
+  return "neutral";
 }
 
 function MetricCard({
@@ -113,23 +135,52 @@ function EmptyState({ title, body }: { title: string; body: string }) {
   );
 }
 
-function DefinitionList() {
+function PaneTabs({
+  value,
+  onChange,
+  items,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  items: ReadonlyArray<{ id: string; label: string }>;
+}) {
+  return (
+    <div className="toolbar analytics-inner-tabs" role="tablist">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          role="tab"
+          aria-selected={value === item.id}
+          className={`button button--small ${value === item.id ? "button--primary" : "button--secondary"}`}
+          onClick={() => onChange(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DefinitionList({ compact = false }: { compact?: boolean }) {
   return (
     <section className="panel analytics-definitions" aria-label="Metric definitions">
-      <div className="panel__header">
-        <div>
-          <p className="eyebrow">Metric definitions</p>
-          <h2>How these figures are calculated</h2>
-        </div>
-      </div>
-      <dl className="analytics-definitions__list">
-        {Object.values(METRIC_DEFINITIONS).map((item) => (
-          <div key={item.label}>
-            <dt>{item.label}</dt>
-            <dd>{item.definition}</dd>
+      <details open={!compact}>
+        <summary className="panel__header">
+          <div>
+            <p className="eyebrow">Metric definitions</p>
+            <h2>How these figures are calculated</h2>
           </div>
-        ))}
-      </dl>
+        </summary>
+        <dl className="analytics-definitions__list">
+          {Object.values(METRIC_DEFINITIONS).map((item) => (
+            <div key={item.label}>
+              <dt>{item.label}</dt>
+              <dd>{item.definition}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
     </section>
   );
 }
@@ -138,26 +189,182 @@ function ScoreCell({ value }: { value: number | null | undefined }) {
   return <td>{percentageLabel(value)}</td>;
 }
 
+function SelectName({
+  selected,
+  onSelect,
+  children,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button type="button" className="analytics-select" aria-pressed={selected} onClick={onSelect}>
+      {children}
+    </button>
+  );
+}
+
+function DistributionPanel({
+  title,
+  totalLabel,
+  buckets,
+}: {
+  title: string;
+  totalLabel: string;
+  buckets: readonly DistributionBucket[];
+}) {
+  const total = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
+  if (!total) return null;
+  return (
+    <section className="panel analytics-distribution" aria-label={title}>
+      <div className="panel__header">
+        <div>
+          <p className="eyebrow">Distribution</p>
+          <h2>{title}</h2>
+          <p>{totalLabel}</p>
+        </div>
+      </div>
+      <ul>
+        {buckets.map((bucket) => {
+          const width = total ? Math.round((1000 * bucket.count) / total) / 10 : 0;
+          return (
+            <li key={bucket.id}>
+              <span>{bucket.label}</span>
+              <span className="analytics-bar" aria-hidden="true">
+                <span style={{ width: `${width}%` }} />
+              </span>
+              <span>{bucket.count}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function isGroupQuestion(
   row: QuestionPerformanceRecord | QuestionGroupPerformanceRecord,
 ): row is QuestionGroupPerformanceRecord {
   return "assignmentId" in row;
 }
 
+function QuestionTable({
+  rows,
+  caption,
+  groupScoped,
+}: {
+  rows: readonly (QuestionPerformanceRecord | QuestionGroupPerformanceRecord)[];
+  caption: string;
+  groupScoped: boolean;
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <caption className="analytics-caption">{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Question</th>
+            <th scope="col">Activity</th>
+            {groupScoped ? <th scope="col">Group</th> : null}
+            <th scope="col">Correct</th>
+            <th scope="col">Incorrect</th>
+            {groupScoped ? <th scope="col">Not Answered</th> : null}
+            <th scope="col">Correct %</th>
+            <th scope="col">Review</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length ? rows.map((row) => {
+            const groupRow = isGroupQuestion(row) ? row : null;
+            return (
+              <tr key={`${groupRow?.assignmentId ?? "platform"}:${row.activityKey}:${row.questionKey}`}>
+                <th scope="row">
+                  <span className="table-primary">{displayLabel(groupRow?.questionTitle, row.questionKey)}</span>
+                  {groupRow && secondaryKey(groupRow.questionTitle, row.questionKey) ? <small><code>{row.questionKey}</code></small> : null}
+                </th>
+                <td>{displayLabel(groupRow?.activityTitle, row.activityKey)}</td>
+                {groupScoped ? <td>{groupRow?.groupName ?? "—"}</td> : null}
+                <td>{row.correctCount}</td>
+                <td>{row.incorrectCount}</td>
+                {groupScoped ? <td>{groupRow?.unansweredCount ?? "—"}</td> : null}
+                <td>{percentageLabel(row.correctnessPercentage)}</td>
+                <td>{row.requiresReviewCount || "—"}</td>
+              </tr>
+            );
+          }) : (
+            <tr><td colSpan={groupScoped ? 8 : 6}>No question aggregates for this scope. Answer keys are never shown here.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LearnerResultsTable({
+  learners,
+}: {
+  learners: readonly LearnerActivityPerformanceRecord[];
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <caption className="analytics-caption">Learner results</caption>
+        <thead>
+          <tr>
+            <th scope="col">Learner</th>
+            <th scope="col">Attempts</th>
+            <th scope="col">First Result</th>
+            <th scope="col">Latest Result</th>
+            <th scope="col">Best Result</th>
+            <th scope="col">Attempt Average</th>
+            <th scope="col">Review</th>
+            <th scope="col">Last Attempt</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {learners.length ? learners.map((row) => {
+            const status = learnerActivityStatus(row);
+            return (
+              <tr key={row.learnerId}>
+                <th scope="row">{row.displayName}</th>
+                <td>{row.attemptCount}</td>
+                <ScoreCell value={row.firstScorePercentage} />
+                <ScoreCell value={row.latestScorePercentage} />
+                <ScoreCell value={row.bestScorePercentage} />
+                <ScoreCell value={row.averageScorePercentage} />
+                <td>{row.requiresReviewCount || "—"}</td>
+                <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "—"}</td>
+                <td><StatusBadge tone={statusTone(status)} label={status} /></td>
+              </tr>
+            );
+          }) : (
+            <tr><td colSpan={9}>No assigned learners in this activity scope.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function LearnerDetail({
   learner,
   onClose,
+  onOpenActivity,
 }: {
   learner: LearnerSummaryRow;
   onClose: () => void;
+  onOpenActivity?: (assignmentId: string) => void;
 }) {
-  const latestCompleted = learner.rows
-    .filter((row) => row.completedAttemptCount > 0)
-    .sort((left, right) => (right.latestCompletedAt ?? "").localeCompare(left.latestCompletedAt ?? ""))[0];
   const best = learner.rows
     .map((row) => row.bestScorePercentage)
     .filter((value): value is number => value != null);
   const bestResult = best.length ? Math.max(...best) : null;
+  const lastCompleted = [...learner.rows]
+    .filter((row) => row.latestCompletedAt)
+    .sort((left, right) => (right.latestCompletedAt ?? "").localeCompare(left.latestCompletedAt ?? ""))[0];
+  const focusRow = lastCompleted ?? learner.rows[0];
 
   return (
     <section className="panel analytics-detail" aria-label={`${learner.displayName} activity performance`}>
@@ -174,62 +381,82 @@ function LearnerDetail({
           </p>
         </div>
         <button type="button" className="button button--small button--secondary" onClick={onClose}>
-          Close
+          Back
         </button>
       </div>
-      <div className="analytics-metric-split" aria-label="Learner summary">
-        <section>
-          <h3>Performance</h3>
-          <ul>
-            <li><span>Latest Result</span><strong>{percentageLabel(learner.latestResultPercentage)}</strong></li>
-            <li><span>Attempt Average</span><strong>{percentageLabel(learner.attemptAveragePercentage)}</strong></li>
-            <li><span>Best Result</span><strong>{percentageLabel(bestResult)}</strong></li>
-          </ul>
-        </section>
-        <section>
-          <h3>Engagement</h3>
-          <ul>
-            <li><span>Completed</span><strong>{learner.completedCount}</strong></li>
-            <li><span>Assigned</span><strong>{learner.assignedCount}</strong></li>
-            <li><span>Awaiting Review</span><strong>{learner.requiresReviewCount}</strong></li>
-            <li><span>Last Activity</span><strong>{latestCompleted?.latestCompletedAt ? formatDate(latestCompleted.latestCompletedAt) : "Not started"}</strong></li>
-          </ul>
-        </section>
-      </div>
+      <section className="metrics-grid metrics-grid--compact" aria-label="Learner summary">
+        <MetricCard label="Completed" value={String(learner.completedCount)} detail="Activities with a completed attempt" definition={METRIC_DEFINITIONS.completion.definition} />
+        <MetricCard label="Assigned" value={String(learner.assignedCount)} detail="Activities assigned in this scope" />
+        <MetricCard label="Latest Result" value={percentageLabel(learner.latestResultPercentage)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
+        <MetricCard label="Attempt Average" value={percentageLabel(learner.attemptAveragePercentage)} detail={METRIC_DEFINITIONS.attemptAverage.definition} definition={METRIC_DEFINITIONS.attemptAverage.definition} />
+        <MetricCard label="Best Result" value={percentageLabel(bestResult)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+        <MetricCard label="Awaiting Review" value={String(learner.requiresReviewCount)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
+      </section>
       <div className="table-wrap">
         <table>
+          <caption className="analytics-caption">Activity performance</caption>
           <thead>
             <tr>
               <th scope="col">Activity</th>
-              <th scope="col">Course</th>
-              <th scope="col">Group</th>
               <th scope="col">Attempts</th>
               <th scope="col">First Result</th>
               <th scope="col">Latest Result</th>
               <th scope="col">Best Result</th>
+              <th scope="col">Attempt Average</th>
               <th scope="col">Status</th>
               <th scope="col">Last Activity</th>
             </tr>
           </thead>
           <tbody>
-            {learner.rows.map((row) => (
-              <tr key={row.assignmentId}>
-                <th scope="row">
-                  <span className="table-primary">{displayLabel(row.activityTitle, row.activityKey)}</span>
-                  {secondaryKey(row.activityTitle, row.activityKey) ? <small><code>{row.activityKey}</code></small> : null}
-                </th>
-                <td>{row.courseTitle}</td>
-                <td>{row.groupName}</td>
-                <td>{row.attemptCount}</td>
-                <ScoreCell value={row.firstScorePercentage} />
-                <ScoreCell value={row.latestScorePercentage} />
-                <ScoreCell value={row.bestScorePercentage} />
-                <td>{learnerActivityStatus(row)}</td>
-                <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "Not started"}</td>
-              </tr>
-            ))}
+            {learner.rows.map((row) => {
+              const status = learnerActivityStatus(row);
+              return (
+                <tr key={row.assignmentId} className={onOpenActivity ? "analytics-row--linked" : undefined}>
+                  <th scope="row">
+                    {onOpenActivity ? (
+                      <SelectName selected={false} onSelect={() => onOpenActivity(row.assignmentId)}>
+                        <span className="table-primary">{displayLabel(row.activityTitle, row.activityKey)}</span>
+                        {secondaryKey(row.activityTitle, row.activityKey) ? <small><code>{row.activityKey}</code></small> : null}
+                      </SelectName>
+                    ) : (
+                      <>
+                        <span className="table-primary">{displayLabel(row.activityTitle, row.activityKey)}</span>
+                        {secondaryKey(row.activityTitle, row.activityKey) ? <small><code>{row.activityKey}</code></small> : null}
+                      </>
+                    )}
+                  </th>
+                  <td>{row.attemptCount}</td>
+                  <ScoreCell value={row.firstScorePercentage} />
+                  <ScoreCell value={row.latestScorePercentage} />
+                  <ScoreCell value={row.bestScorePercentage} />
+                  <ScoreCell value={row.averageScorePercentage} />
+                  <td><StatusBadge tone={statusTone(status)} label={status} /></td>
+                  <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "—"}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+      </div>
+      <div className="analytics-metric-split" aria-label="Performance and engagement">
+        <section>
+          <h3>Performance</h3>
+          <ul>
+            <li><span>First Result</span><strong>{percentageLabel(focusRow?.firstScorePercentage)}</strong></li>
+            <li><span>Latest Result</span><strong>{percentageLabel(focusRow?.latestScorePercentage)}</strong></li>
+            <li><span>Best Result</span><strong>{percentageLabel(focusRow?.bestScorePercentage)}</strong></li>
+            <li><span>Attempt Average</span><strong>{percentageLabel(focusRow?.averageScorePercentage)}</strong></li>
+          </ul>
+        </section>
+        <section>
+          <h3>Engagement</h3>
+          <ul>
+            <li><span>Attempts</span><strong>{focusRow?.attemptCount ?? 0}</strong></li>
+            <li><span>Completed attempts</span><strong>{focusRow?.completedAttemptCount ?? 0}</strong></li>
+            <li><span>Last attempt</span><strong>{focusRow?.latestCompletedAt ? formatDate(focusRow.latestCompletedAt) : "—"}</strong></li>
+            <li><span>First attempt</span><strong>{focusRow?.firstCompletedAt ? formatDate(focusRow.firstCompletedAt) : "—"}</strong></li>
+          </ul>
+        </section>
       </div>
     </section>
   );
@@ -240,14 +467,23 @@ function ActivityDetail({
   learners,
   questions,
   questionScopeLabel,
+  tab,
+  onTab,
   onClose,
+  onOpenLearner,
 }: {
   activity: ActivityAnalyticsRecord;
   learners: readonly LearnerActivityPerformanceRecord[];
-  questions: readonly { questionKey: string; questionTitle?: string; correctCount: number; incorrectCount: number; unansweredCount?: number; correctnessPercentage: number | null; requiresReviewCount: number }[];
+  questions: readonly QuestionGroupPerformanceRecord[];
   questionScopeLabel: string;
+  tab: ActivityTab;
+  onTab: (tab: ActivityTab) => void;
   onClose: () => void;
+  onOpenLearner?: (learnerId: string) => void;
 }) {
+  const resultBuckets = latestResultDistribution(learners);
+  const attemptBuckets = attemptDistribution(learners);
+
   return (
     <section className="panel analytics-detail" aria-label={`${displayLabel(activity.activityTitle, activity.activityKey)} summary`}>
       <div className="panel__header">
@@ -261,83 +497,261 @@ function ActivityDetail({
             {" · "}
             Version {activity.activityVersion}
           </p>
+          {secondaryKey(activity.activityTitle, activity.activityKey) ? <p><code>{activity.activityKey}</code></p> : null}
         </div>
         <button type="button" className="button button--small button--secondary" onClick={onClose}>
-          Close
+          Back
         </button>
       </div>
-      <section className="metrics-grid metrics-grid--compact" aria-label="Activity summary">
-        <MetricCard label="Learners" value={String(activity.assignedLearnerCount)} detail="Assigned" definition={METRIC_DEFINITIONS.completion.definition} />
-        <MetricCard label="Participating" value={`${activity.attemptedLearnerCount} / ${percentageLabel(activity.participationPercentage)}`} detail="At least one attempt" definition={METRIC_DEFINITIONS.participation.definition} />
-        <MetricCard label="Completed" value={`${activity.completedLearnerCount} / ${percentageLabel(activity.completionPercentage)}`} detail="Completed attempt" definition={METRIC_DEFINITIONS.completion.definition} />
-        <MetricCard label="Latest-result average" value={percentageLabel(activity.latestScorePercentage)} detail={METRIC_DEFINITIONS.latestResult.label} definition={METRIC_DEFINITIONS.latestResult.definition} />
-        <MetricCard label="Best-result average" value={percentageLabel(activity.bestScorePercentage)} detail={METRIC_DEFINITIONS.bestResult.label} definition={METRIC_DEFINITIONS.bestResult.definition} />
-        <MetricCard label="Attempts" value={String(activity.attemptCount)} detail={METRIC_DEFINITIONS.attempts.definition} definition={METRIC_DEFINITIONS.attempts.definition} />
-        <MetricCard label="Awaiting review" value={String(activity.requiresReviewCount)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
-      </section>
-      <div className="table-wrap">
-        <table>
-          <caption className="analytics-caption">Learner results</caption>
-          <thead>
-            <tr>
-              <th scope="col">Learner</th>
-              <th scope="col">Attempts</th>
-              <th scope="col">First Result</th>
-              <th scope="col">Latest Result</th>
-              <th scope="col">Best Result</th>
-              <th scope="col">Review</th>
-              <th scope="col">Last Attempt</th>
-            </tr>
-          </thead>
-          <tbody>
-            {learners.length ? learners.map((row) => (
-              <tr key={row.learnerId}>
-                <th scope="row">{row.displayName}</th>
-                <td>{row.attemptCount}</td>
-                <ScoreCell value={row.firstScorePercentage} />
-                <ScoreCell value={row.latestScorePercentage} />
-                <ScoreCell value={row.bestScorePercentage} />
-                <td>{row.requiresReviewCount || "—"}</td>
-                <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "Not started"}</td>
-              </tr>
-            )) : (
-              <tr><td colSpan={7}>No assigned learners in this activity scope.</td></tr>
-            )}
-          </tbody>
-        </table>
+      <PaneTabs
+        value={tab}
+        onChange={(value) => onTab(value as ActivityTab)}
+        items={[
+          { id: "overview", label: "Overview" },
+          { id: "learners", label: "Learners" },
+          { id: "questions", label: "Questions" },
+        ]}
+      />
+      {tab === "overview" ? (
+        <>
+          <section className="metrics-grid metrics-grid--compact" aria-label="Activity summary">
+            <MetricCard label="Assigned" value={String(activity.assignedLearnerCount)} detail="Assigned learners" />
+            <MetricCard label="Participating" value={`${activity.attemptedLearnerCount} / ${percentageLabel(activity.participationPercentage ?? null)}`} detail={METRIC_DEFINITIONS.participation.definition} definition={METRIC_DEFINITIONS.participation.definition} />
+            <MetricCard label="Completed" value={String(activity.completedLearnerCount)} detail="Learners with a completed attempt" />
+            <MetricCard label="Completion" value={percentageLabel(activity.completionPercentage)} detail={METRIC_DEFINITIONS.completion.definition} definition={METRIC_DEFINITIONS.completion.definition} />
+            <MetricCard label="Latest-result Average" value={percentageLabel(activity.latestScorePercentage)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
+            <MetricCard label="Best-result Average" value={percentageLabel(activity.bestScorePercentage)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+            <MetricCard label="Awaiting review" value={String(activity.requiresReviewCount)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
+          </section>
+          <div className="analytics-visuals">
+            <DistributionPanel title="Results distribution (Latest Result)" totalLabel={`${learners.length} assigned learners`} buckets={resultBuckets} />
+            <DistributionPanel title="Attempt distribution" totalLabel="Assigned learners by recorded attempts" buckets={attemptBuckets} />
+          </div>
+        </>
+      ) : null}
+      {tab === "learners" ? (
+        onOpenLearner ? (
+          <div className="table-wrap">
+            <table>
+              <caption className="analytics-caption">Learner results</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Learner</th>
+                  <th scope="col">Attempts</th>
+                  <th scope="col">First Result</th>
+                  <th scope="col">Latest Result</th>
+                  <th scope="col">Best Result</th>
+                  <th scope="col">Attempt Average</th>
+                  <th scope="col">Review</th>
+                  <th scope="col">Last Attempt</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {learners.map((row) => {
+                  const status = learnerActivityStatus(row);
+                  return (
+                    <tr key={row.learnerId}>
+                      <th scope="row">
+                        <SelectName selected={false} onSelect={() => onOpenLearner(row.learnerId)}>
+                          {row.displayName}
+                        </SelectName>
+                      </th>
+                      <td>{row.attemptCount}</td>
+                      <ScoreCell value={row.firstScorePercentage} />
+                      <ScoreCell value={row.latestScorePercentage} />
+                      <ScoreCell value={row.bestScorePercentage} />
+                      <ScoreCell value={row.averageScorePercentage} />
+                      <td>{row.requiresReviewCount || "—"}</td>
+                      <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "—"}</td>
+                      <td><StatusBadge tone={statusTone(status)} label={status} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : <LearnerResultsTable learners={learners} />
+      ) : null}
+      {tab === "questions" ? (
+        <QuestionTable
+          rows={questions}
+          caption={`Questions · ${questionScopeLabel}`}
+          groupScoped
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function GroupDetail({
+  group,
+  metrics,
+  learners,
+  activities,
+  questions,
+  tab,
+  onTab,
+  onClose,
+  onOpenLearner,
+  onOpenActivity,
+}: {
+  group: GroupPerformanceRecord;
+  metrics: ReturnType<typeof groupDerivedMetrics>;
+  learners: readonly LearnerSummaryRow[];
+  activities: readonly ActivityAnalyticsRecord[];
+  questions: readonly QuestionGroupPerformanceRecord[];
+  tab: GroupTab;
+  onTab: (tab: GroupTab) => void;
+  onClose: () => void;
+  onOpenLearner: (learnerId: string) => void;
+  onOpenActivity: (assignmentId: string) => void;
+}) {
+  return (
+    <section className="panel analytics-detail" aria-label={`${group.groupName} group analytics`}>
+      <div className="panel__header">
+        <div>
+          <p className="eyebrow">Group</p>
+          <h2>{group.groupName}</h2>
+          <p>{displayLabel(group.courseTitle, group.courseKey)} · <code>{group.groupCode}</code></p>
+        </div>
+        <button type="button" className="button button--small button--secondary" onClick={onClose}>
+          Back
+        </button>
       </div>
-      <div className="table-wrap">
-        <table>
-          <caption className="analytics-caption">Questions · {questionScopeLabel}</caption>
-          <thead>
-            <tr>
-              <th scope="col">Question</th>
-              <th scope="col">Correct</th>
-              <th scope="col">Incorrect</th>
-              <th scope="col">Not Answered</th>
-              <th scope="col">Correct %</th>
-              <th scope="col">Review Required</th>
-            </tr>
-          </thead>
-          <tbody>
-            {questions.length ? questions.map((row) => (
-              <tr key={row.questionKey}>
-                <th scope="row">
-                  <span className="table-primary">{displayLabel(row.questionTitle, row.questionKey)}</span>
-                  {secondaryKey(row.questionTitle, row.questionKey) ? <small><code>{row.questionKey}</code></small> : null}
-                </th>
-                <td>{row.correctCount}</td>
-                <td>{row.incorrectCount}</td>
-                <td>{row.unansweredCount == null ? "—" : row.unansweredCount}</td>
-                <td>{percentageLabel(row.correctnessPercentage)}</td>
-                <td>{row.requiresReviewCount}</td>
+      <PaneTabs
+        value={tab}
+        onChange={(value) => onTab(value as GroupTab)}
+        items={[
+          { id: "overview", label: "Overview" },
+          { id: "learners", label: "Learners" },
+          { id: "activities", label: "Activities" },
+          { id: "questions", label: "Questions" },
+        ]}
+      />
+      {tab === "overview" ? (
+        <>
+          <section className="metrics-grid metrics-grid--compact" aria-label="Group summary">
+            <MetricCard label="Learners" value={String(metrics.assignedLearners)} detail="Assigned" />
+            <MetricCard label="Participating" value={String(metrics.participatingLearners)} detail={METRIC_DEFINITIONS.participation.definition} definition={METRIC_DEFINITIONS.participation.definition} />
+            <MetricCard label="Completed" value={String(metrics.completedLearners)} detail={METRIC_DEFINITIONS.completion.definition} definition={METRIC_DEFINITIONS.completion.definition} />
+            <MetricCard label="Latest-result Average" value={percentageLabel(metrics.latestResultAverage)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
+            <MetricCard label="Best-result Average" value={percentageLabel(metrics.bestResultAverage)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+            <MetricCard label="Awaiting review" value={String(metrics.awaitingReview)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
+          </section>
+          <DistributionPanel
+            title="Results distribution (Latest Result)"
+            totalLabel={`${learners.length} learners in this group`}
+            buckets={latestResultDistribution(learners.flatMap((row) => row.rows))}
+          />
+          <div className="table-wrap">
+            <table>
+              <caption className="analytics-caption">Activity performance</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Activity</th>
+                  <th scope="col">Assigned</th>
+                  <th scope="col">Participating</th>
+                  <th scope="col">Completed</th>
+                  <th scope="col">Completion</th>
+                  <th scope="col">Latest Result</th>
+                  <th scope="col">Best Result</th>
+                  <th scope="col">Awaiting Review</th>
+                  <th scope="col">Last Activity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activities.map((row) => (
+                  <tr key={activityRowKey(row)}>
+                    <th scope="row">
+                      <SelectName selected={false} onSelect={() => onOpenActivity(activityRowKey(row))}>
+                        <span className="table-primary">{displayLabel(row.activityTitle, row.activityKey)}</span>
+                        <small>Version {row.activityVersion}</small>
+                      </SelectName>
+                    </th>
+                    <td>{row.assignedLearnerCount}</td>
+                    <td>{row.attemptedLearnerCount}</td>
+                    <td>{row.completedLearnerCount}</td>
+                    <td>{percentageLabel(row.completionPercentage)}</td>
+                    <ScoreCell value={row.latestScorePercentage} />
+                    <ScoreCell value={row.bestScorePercentage} />
+                    <td>{row.requiresReviewCount}</td>
+                    <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+      {tab === "learners" ? (
+        <div className="table-wrap">
+          <table>
+            <caption className="analytics-caption">Learners in this group</caption>
+            <thead>
+              <tr>
+                <th scope="col">Learner</th>
+                <th scope="col">Completed / Assigned</th>
+                <th scope="col">Completion</th>
+                <th scope="col">Latest Result</th>
+                <th scope="col">Needs Review</th>
+                <th scope="col">Last Activity</th>
               </tr>
-            )) : (
-              <tr><td colSpan={6}>No question aggregates for this activity. Answer keys are never shown here.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {learners.map((row) => (
+                <tr key={row.learnerId}>
+                  <th scope="row">
+                    <SelectName selected={false} onSelect={() => onOpenLearner(row.learnerId)}>
+                      {row.displayName}
+                      <small><code>{row.studentNumber}</code></small>
+                    </SelectName>
+                  </th>
+                  <td>{row.completedCount} / {row.assignedCount}</td>
+                  <td>{percentageLabel(row.completionPercentage)}</td>
+                  <ScoreCell value={row.latestResultPercentage} />
+                  <td>{row.requiresReviewCount}</td>
+                  <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {tab === "activities" ? (
+        <div className="table-wrap">
+          <table>
+            <caption className="analytics-caption">Activities assigned to this group</caption>
+            <thead>
+              <tr>
+                <th scope="col">Activity</th>
+                <th scope="col">Assigned</th>
+                <th scope="col">Completion</th>
+                <th scope="col">Latest-result Average</th>
+                <th scope="col">Awaiting Review</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activities.map((row) => (
+                <tr key={activityRowKey(row)}>
+                  <th scope="row">
+                    <SelectName selected={false} onSelect={() => onOpenActivity(activityRowKey(row))}>
+                      {displayLabel(row.activityTitle, row.activityKey)}
+                    </SelectName>
+                  </th>
+                  <td>{row.assignedLearnerCount}</td>
+                  <td>{percentageLabel(row.completionPercentage)}</td>
+                  <ScoreCell value={row.latestScorePercentage} />
+                  <td>{row.requiresReviewCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {tab === "questions" ? (
+        <QuestionTable rows={questions} caption={`Questions · ${group.groupName}`} groupScoped />
+      ) : null}
     </section>
   );
 }
@@ -362,6 +776,10 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
   }, data));
   const [selectedLearnerId, setSelectedLearnerId] = useState<string | null>(initial.learnerId ?? null);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(initial.assignmentId ?? null);
+  const [selectedGroupCode, setSelectedGroupCode] = useState<string | null>(initial.inspectGroup ?? null);
+  const [groupTab, setGroupTab] = useState<GroupTab>("overview");
+  const [activityTab, setActivityTab] = useState<ActivityTab>("overview");
+  const [attentionTab, setAttentionTab] = useState<AttentionTab>("learner");
 
   const constrained = useMemo(() => constrainScope(scope, data), [data, scope]);
   const activeFilters = PANE_FILTERS[pane];
@@ -371,6 +789,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
   const groups = useMemo(() => scopedGroups(data, constrained), [constrained, data]);
   const learners = useMemo(() => learnerSummaries(data, constrained), [constrained, data]);
   const activities = useMemo(() => scopedActivities(data, constrained), [constrained, data]);
+  const learnerActivity = useMemo(() => scopedLearnerActivity(data, constrained), [constrained, data]);
   const platformQuestions = useMemo(() => scopedPlatformQuestions(data, constrained), [constrained, data]);
   const groupQuestions = useMemo(() => scopedGroupQuestions(data, constrained), [constrained, data]);
   const topics = data.topicPerformance.filter(
@@ -384,8 +803,9 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
   const selectedActivity = activities.find((row) => activityRowKey(row) === selectedAssignmentId)
     ?? activities.find((row) => row.assignmentId === selectedAssignmentId)
     ?? null;
+  const selectedGroup = groups.find((row) => row.groupCode === selectedGroupCode) ?? null;
   const selectedActivityLearners = selectedActivity
-    ? scopedLearnerActivity(data, constrained).filter((row) =>
+    ? learnerActivity.filter((row) =>
       row.assignmentId === selectedActivity.assignmentId
       || (row.activityKey === selectedActivity.activityKey && row.groupCode === selectedActivity.groupCode && row.activityVersion === selectedActivity.activityVersion),
     )
@@ -403,16 +823,29 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
       pane,
       learnerId: selectedLearnerId,
       assignmentId: selectedAssignmentId,
+      inspectGroup: selectedGroupCode,
     });
     if (window.location.search !== next) {
       window.history.replaceState(null, "", `${window.location.pathname}${next}${window.location.hash}`);
     }
-  }, [constrained, pane, selectedAssignmentId, selectedLearnerId]);
+  }, [constrained, pane, selectedAssignmentId, selectedGroupCode, selectedLearnerId]);
 
   function updateScope(patch: Partial<AnalyticsScope>) {
     setScope((current) => constrainScope({ ...current, ...patch }, data));
     setSelectedLearnerId(null);
     setSelectedAssignmentId(null);
+    setSelectedGroupCode(null);
+  }
+
+  function focusLearner(learnerId: string) {
+    setSelectedLearnerId(learnerId);
+    setPane("learners");
+  }
+
+  function focusActivity(assignmentId: string) {
+    setSelectedAssignmentId(assignmentId);
+    setPane("activities");
+    setActivityTab("overview");
   }
 
   const trail = scopeTrail(data, constrained);
@@ -436,6 +869,9 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
     groupCodes: groups.map((row) => row.groupCode),
     activities: activities.map((row) => ({ groupCode: row.groupCode, activityKey: row.activityKey })),
   }));
+  const attentionByTab = scopedSignals.filter((signal) => attentionTabForEntity(signal.entityType) === attentionTab);
+  const groupSummary = groupAverage(groups);
+  const resultBuckets = latestResultDistribution(learnerActivity);
 
   return (
     <>
@@ -450,25 +886,11 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
         </div>
       </header>
 
-      <section className="panel analytics-scope" aria-label="Active analytics scope">
+      <section className="panel" aria-label="Analytics filters">
         <div className="panel__header">
           <div>
-            <p className="eyebrow">Scope</p>
-            <h2>
-              {trail.map((part, index) => (
-                <span key={`${part}:${index}`}>
-                  {index ? <span aria-hidden="true"> › </span> : null}
-                  {part}
-                </span>
-              ))}
-            </h2>
-            <p>
-              {pane === "topics-skills"
-                ? "Topic and skill tables use existing metadata keys only and are not filtered by hub, course or group."
-                : pane === "readiness"
-                  ? "Completion, latest-result average and review counts follow this scope. Topic coverage and learner-summary trend remain platform-wide."
-                  : "Every metric below relates to this selected scope."}
-            </p>
+            <p className="eyebrow">Filters</p>
+            <h2>Narrow the current teaching context</h2>
           </div>
           <button
             type="button"
@@ -477,33 +899,12 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
               setScope(EMPTY_SCOPE);
               setSelectedLearnerId(null);
               setSelectedAssignmentId(null);
+              setSelectedGroupCode(null);
             }}
           >
             Reset filters
           </button>
         </div>
-      </section>
-
-      <div className="toolbar" role="tablist" aria-label="Analytics views">
-        {panes.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={pane === item.id}
-            className={`button button--small ${pane === item.id ? "button--primary" : "button--secondary"}`}
-            onClick={() => {
-              setPane(item.id);
-              setSelectedLearnerId(null);
-              setSelectedAssignmentId(null);
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      <section className="panel" aria-label="Analytics filters">
         <div className="toolbar">
           {activeFilters.has("hubCode") ? (
             <FilterSelect id="analytics-hub" label="Hub" value={constrained.hubCode} options={hubOptions(data)} onChange={(hubCode) => updateScope({ hubCode, courseKey: ALL_SCOPE, groupCode: ALL_SCOPE, activityKey: ALL_SCOPE })} />
@@ -532,67 +933,159 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
         ) : null}
       </section>
 
+      <section className="panel analytics-scope" aria-label="Active analytics scope">
+        <div className="panel__header">
+          <div>
+            <p className="eyebrow">Scope</p>
+            <h2>
+              {trail.map((part, index) => (
+                <span key={`${part}:${index}`}>
+                  {index ? <span aria-hidden="true"> › </span> : null}
+                  {part}
+                </span>
+              ))}
+            </h2>
+            <p>
+              {pane === "topics-skills"
+                ? "Topic and skill tables use existing metadata keys only and are not filtered by hub, course or group."
+                : pane === "readiness"
+                  ? "Completion, latest-result average and review counts follow this scope. Topic coverage and learner-summary trend remain platform-wide."
+                  : "Every metric below relates to this selected scope."}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div className="toolbar" role="tablist" aria-label="Analytics views">
+        {panes.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={pane === item.id}
+            className={`button button--small ${pane === item.id ? "button--primary" : "button--secondary"}`}
+            onClick={() => setPane(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
       {pane === "overview" ? (
         <>
           <section className="metrics-grid" aria-label="Assessment overview">
             <MetricCard label="Learners" value={String(overview.assignedLearners)} detail="Assigned in this scope" />
             <MetricCard label="Participating" value={`${overview.participatingLearners} / ${percentageLabel(overview.participationPercentage)}`} detail={METRIC_DEFINITIONS.participation.definition} definition={METRIC_DEFINITIONS.participation.definition} />
-            <MetricCard label="Completed" value={`${overview.completedLearners} / ${percentageLabel(overview.completionPercentage)}`} detail={METRIC_DEFINITIONS.completion.definition} definition={METRIC_DEFINITIONS.completion.definition} />
-            <MetricCard label="Latest-result average" value={percentageLabel(overview.latestResultAverage)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
-            <MetricCard label="Best-result average" value={percentageLabel(overview.bestResultAverage)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+            <MetricCard label="Completed" value={String(overview.completedLearners)} detail="Learners with a completed attempt" />
+            <MetricCard label="Completion" value={percentageLabel(overview.completionPercentage)} detail={METRIC_DEFINITIONS.completion.definition} definition={METRIC_DEFINITIONS.completion.definition} />
+            <MetricCard label="Latest-result Average" value={percentageLabel(overview.latestResultAverage)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
+            <MetricCard label="Best-result Average" value={percentageLabel(overview.bestResultAverage)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
             <MetricCard label="Attempts" value={String(overview.attemptCount)} detail={METRIC_DEFINITIONS.attempts.definition} definition={METRIC_DEFINITIONS.attempts.definition} />
             <MetricCard label="Awaiting review" value={String(overview.awaitingReview)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
           </section>
+          {learnerActivity.length ? (
+            <DistributionPanel
+              title="Results distribution (Latest Result)"
+              totalLabel={`${overview.assignedLearners} learners in this scope`}
+              buckets={resultBuckets}
+            />
+          ) : null}
+          <nav className="card-grid card-grid--3" aria-label="Analytics sections">
+            {([
+              ["groups", "Groups", "Participation and performance by teaching group"],
+              ["learners", "Learners", "Assignment-level learner summaries and drill-down"],
+              ["activities", "Activities", "Assigned, participating and completed work"],
+              ["questions", "Questions", questionGrainLabel],
+              ["attention", "Needs attention", "Deterministic signals for teaching follow-up"],
+            ] as const).map(([id, title, body]) => (
+              <button key={id} type="button" className="insight-card analytics-nav-card" onClick={() => setPane(id)}>
+                <span className="eyebrow">{title}</span>
+                <h2>{title}</h2>
+                <p>{body}</p>
+              </button>
+            ))}
+          </nav>
           <DefinitionList />
         </>
       ) : null}
 
       {pane === "groups" ? (
-        <section className="panel">
-          <div className="panel__header">
-            <div>
-              <p className="eyebrow">Group analytics</p>
-              <h2>Participation and performance</h2>
+        <div className={selectedGroup ? "analytics-split" : undefined}>
+          <section className="panel">
+            <div className="panel__header">
+              <div>
+                <p className="eyebrow">Groups analytics</p>
+                <h2>Teaching groups in this scope</h2>
+              </div>
+              <span className="toolbar__count" role="status">{groups.length} groups</span>
             </div>
-            <span className="toolbar__count" role="status">{groups.length} groups</span>
-          </div>
-          {groups.length ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Group</th>
-                    <th scope="col">Course</th>
-                    <th scope="col">Assigned</th>
-                    <th scope="col">Participating</th>
-                    <th scope="col">Attempts</th>
-                    <th scope="col">Attempt Average</th>
-                    <th scope="col">Best Result</th>
-                    <th scope="col">Latest Result</th>
-                    <th scope="col">Awaiting review</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groups.map((row) => (
-                    <tr key={row.groupCode}>
-                      <th scope="row">{row.groupName}<br /><code>{row.groupCode}</code></th>
-                      <td>{displayLabel(row.courseTitle, row.courseKey)}</td>
-                      <td>{row.activeLearnerCount}</td>
-                      <td>{row.participatingLearnerCount}</td>
-                      <td>{row.attemptCount}</td>
-                      <ScoreCell value={row.averageScorePercentage} />
-                      <ScoreCell value={row.bestScorePercentage} />
-                      <ScoreCell value={row.latestScorePercentage} />
-                      <td>{row.requiresReviewCount}</td>
+            <section className="metrics-grid metrics-grid--compact" aria-label="Group totals">
+              <MetricCard label="Groups" value={String(groups.length)} detail="Groups matching the current filters" />
+              <MetricCard label="Learners" value={String(groupSummary.learners)} detail="Assigned learners across these groups" />
+              <MetricCard label="Latest-result Average" value={percentageLabel(groupSummary.latest)} detail={METRIC_DEFINITIONS.latestResult.definition} definition={METRIC_DEFINITIONS.latestResult.definition} />
+              <MetricCard label="Best-result Average" value={percentageLabel(groupSummary.best)} detail={METRIC_DEFINITIONS.bestResult.definition} definition={METRIC_DEFINITIONS.bestResult.definition} />
+              <MetricCard label="Awaiting review" value={String(groupSummary.review)} detail={METRIC_DEFINITIONS.awaitingReview.definition} definition={METRIC_DEFINITIONS.awaitingReview.definition} />
+            </section>
+            {groups.length ? (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Group</th>
+                      <th scope="col">Course</th>
+                      <th scope="col">Learners</th>
+                      <th scope="col">Completed</th>
+                      <th scope="col">Completion</th>
+                      <th scope="col">Latest-result Average</th>
+                      <th scope="col">Best-result Average</th>
+                      <th scope="col">Needs Review</th>
+                      <th scope="col">Last Activity</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState title="No group analytics" body="No group analytics rows for the current filters." />
-          )}
-        </section>
+                  </thead>
+                  <tbody>
+                    {groups.map((row) => {
+                      const derived = groupDerivedMetrics(row, learnerActivity, activities);
+                      return (
+                        <tr key={row.groupCode} className={selectedGroupCode === row.groupCode ? "analytics-row--selected" : undefined}>
+                          <th scope="row">
+                            <SelectName selected={selectedGroupCode === row.groupCode} onSelect={() => { setSelectedGroupCode(row.groupCode); setGroupTab("overview"); }}>
+                              <span className="table-primary">{row.groupName}</span>
+                              <small><code>{row.groupCode}</code></small>
+                            </SelectName>
+                          </th>
+                          <td>{displayLabel(row.courseTitle, row.courseKey)}</td>
+                          <td>{row.activeLearnerCount}</td>
+                          <td>{derived.completedLearners}</td>
+                          <td>{percentageLabel(derived.completionPercentage)}</td>
+                          <ScoreCell value={row.latestScorePercentage} />
+                          <ScoreCell value={row.bestScorePercentage} />
+                          <td>{row.requiresReviewCount}</td>
+                          <td>{derived.lastActivity ? formatDate(derived.lastActivity) : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState title="No group analytics" body="No group analytics rows for the current filters." />
+            )}
+          </section>
+          {selectedGroup ? (
+            <GroupDetail
+              group={selectedGroup}
+              metrics={groupDerivedMetrics(selectedGroup, learnerActivity, activities)}
+              learners={learners.filter((row) => row.groupCode === selectedGroup.groupCode)}
+              activities={activities.filter((row) => row.groupCode === selectedGroup.groupCode)}
+              questions={groupQuestions.filter((row) => row.groupCode === selectedGroup.groupCode)}
+              tab={groupTab}
+              onTab={setGroupTab}
+              onClose={() => setSelectedGroupCode(null)}
+              onOpenLearner={focusLearner}
+              onOpenActivity={focusActivity}
+            />
+          ) : null}
+        </div>
       ) : null}
 
       {pane === "learners" ? (
@@ -600,7 +1093,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
           <section className="panel">
             <div className="panel__header">
               <div>
-                <p className="eyebrow">Learner summary</p>
+                <p className="eyebrow">Learners analytics</p>
                 <h2>Assignment participation in this scope</h2>
               </div>
               <span className="toolbar__count" role="status">{learners.length} learners</span>
@@ -613,30 +1106,24 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
                       <th scope="col">Learner</th>
                       <th scope="col">Group</th>
                       <th scope="col">Course</th>
-                      <th scope="col">Activities Completed / Assigned</th>
+                      <th scope="col">Completed / Assigned</th>
                       <th scope="col">Completion</th>
                       <th scope="col">Latest Activity</th>
                       <th scope="col">Latest Result</th>
                       <th scope="col">Latest-result Average</th>
                       <th scope="col">Needs Review</th>
+                      <th scope="col">Last Activity</th>
                     </tr>
                   </thead>
                   <tbody>
                     {learners.map((row) => (
-                      <tr
-                        key={row.learnerId}
-                        className={`analytics-row--selectable ${selectedLearnerId === row.learnerId ? "analytics-row--selected" : ""}`}
-                        tabIndex={0}
-                        aria-selected={selectedLearnerId === row.learnerId}
-                        onClick={() => setSelectedLearnerId(row.learnerId)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            setSelectedLearnerId(row.learnerId);
-                          }
-                        }}
-                      >
-                        <th scope="row">{row.displayName}<br /><code>{row.studentNumber}</code></th>
+                      <tr key={row.learnerId} className={selectedLearnerId === row.learnerId ? "analytics-row--selected" : undefined}>
+                        <th scope="row">
+                          <SelectName selected={selectedLearnerId === row.learnerId} onSelect={() => setSelectedLearnerId(row.learnerId)}>
+                            <span className="table-primary">{row.displayName}</span>
+                            <small><code>{row.studentNumber}</code></small>
+                          </SelectName>
+                        </th>
                         <td>{row.groupName}</td>
                         <td>{row.courseTitle}</td>
                         <td>{row.completedCount} / {row.assignedCount}</td>
@@ -645,6 +1132,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
                         <td>{percentageLabel(row.latestResultPercentage)}</td>
                         <td>{percentageLabel(row.latestResultAveragePercentage)}</td>
                         <td>{row.requiresReviewCount}</td>
+                        <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -654,7 +1142,13 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
               <EmptyState title="No learner analytics" body="No learner analytics rows for the current filters." />
             )}
           </section>
-          {selectedLearner ? <LearnerDetail learner={selectedLearner} onClose={() => setSelectedLearnerId(null)} /> : null}
+          {selectedLearner ? (
+            <LearnerDetail
+              learner={selectedLearner}
+              onClose={() => setSelectedLearnerId(null)}
+              onOpenActivity={focusActivity}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -678,43 +1172,36 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
                       <th scope="col">Group</th>
                       <th scope="col">Assigned</th>
                       <th scope="col">Participating</th>
+                      <th scope="col">Completed</th>
                       <th scope="col">Completion</th>
-                      <th scope="col">Attempts</th>
-                      <th scope="col">Latest Result</th>
-                      <th scope="col">Best Result</th>
-                      <th scope="col">Review</th>
+                      <th scope="col">Latest-result Average</th>
+                      <th scope="col">Best-result Average</th>
+                      <th scope="col">Awaiting Review</th>
+                      <th scope="col">Last Activity</th>
                     </tr>
                   </thead>
                   <tbody>
                     {activities.map((row) => {
                       const key = activityRowKey(row);
+                      const selected = selectedAssignmentId === key || selectedAssignmentId === row.assignmentId;
                       return (
-                        <tr
-                          key={key}
-                          className={`analytics-row--selectable ${selectedAssignmentId === key || selectedAssignmentId === row.assignmentId ? "analytics-row--selected" : ""}`}
-                          tabIndex={0}
-                          aria-selected={selectedAssignmentId === key || selectedAssignmentId === row.assignmentId}
-                          onClick={() => setSelectedAssignmentId(key)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              setSelectedAssignmentId(key);
-                            }
-                          }}
-                        >
+                        <tr key={key} className={selected ? "analytics-row--selected" : undefined}>
                           <th scope="row">
-                            <span className="table-primary">{displayLabel(row.activityTitle, row.activityKey)}</span>
-                            <small>Version {row.activityVersion}{secondaryKey(row.activityTitle, row.activityKey) ? <> · <code>{row.activityKey}</code></> : null}</small>
+                            <SelectName selected={selected} onSelect={() => { setSelectedAssignmentId(key); setActivityTab("overview"); }}>
+                              <span className="table-primary">{displayLabel(row.activityTitle, row.activityKey)}</span>
+                              <small>Version {row.activityVersion}{secondaryKey(row.activityTitle, row.activityKey) ? <> · <code>{row.activityKey}</code></> : null}</small>
+                            </SelectName>
                           </th>
                           <td>{displayLabel(row.courseTitle, row.courseKey)}</td>
                           <td>{displayLabel(row.groupName, row.groupCode)}</td>
                           <td>{row.assignedLearnerCount}</td>
                           <td>{row.attemptedLearnerCount}</td>
+                          <td>{row.completedLearnerCount}</td>
                           <td>{percentageLabel(row.completionPercentage)}</td>
-                          <td>{row.attemptCount}</td>
                           <td>{percentageLabel(row.latestScorePercentage)}</td>
                           <td>{percentageLabel(row.bestScorePercentage)}</td>
                           <td>{row.requiresReviewCount}</td>
+                          <td>{row.latestCompletedAt ? formatDate(row.latestCompletedAt) : "—"}</td>
                         </tr>
                       );
                     })}
@@ -731,7 +1218,10 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
               learners={selectedActivityLearners}
               questions={selectedActivityQuestions}
               questionScopeLabel={selectedActivity.groupName || selectedActivity.groupCode}
+              tab={activityTab}
+              onTab={setActivityTab}
               onClose={() => setSelectedAssignmentId(null)}
+              onOpenLearner={focusLearner}
             />
           ) : null}
         </div>
@@ -743,50 +1233,20 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
             <div>
               <p className="eyebrow">Question analytics</p>
               <h2>{questionGrainLabel}</h2>
+              {constrained.activityKey !== ALL_SCOPE ? (
+                <p>
+                  {displayLabel(
+                    activities.find((row) => row.activityKey === constrained.activityKey)?.activityTitle,
+                    constrained.activityKey,
+                  )}
+                  {constrained.groupCode !== ALL_SCOPE ? ` · ${displayLabel(groups.find((row) => row.groupCode === constrained.groupCode)?.groupName, constrained.groupCode)}` : ""}
+                </p>
+              ) : null}
             </div>
             <span className="toolbar__count" role="status">{questionRows.length} questions</span>
           </div>
           {questionRows.length ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">Question</th>
-                    <th scope="col">Activity</th>
-                    {questionsAreGroupScoped(constrained) ? <th scope="col">Group</th> : null}
-                    <th scope="col">Correct</th>
-                    <th scope="col">Incorrect</th>
-                    {questionsAreGroupScoped(constrained) ? <th scope="col">Not Answered</th> : null}
-                    <th scope="col">Correct %</th>
-                    <th scope="col">Review Required</th>
-                    <th scope="col">Topics</th>
-                    <th scope="col">Skills</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {questionRows.map((row) => {
-                    const groupRow = isGroupQuestion(row) ? row : null;
-                    return (
-                    <tr key={`${groupRow?.assignmentId ?? "platform"}:${row.activityKey}:${row.questionKey}`}>
-                      <th scope="row">
-                        <span className="table-primary">{displayLabel(groupRow?.questionTitle, row.questionKey)}</span>
-                        {groupRow && secondaryKey(groupRow.questionTitle, row.questionKey) ? <small><code>{row.questionKey}</code></small> : null}
-                      </th>
-                      <td>{displayLabel(groupRow?.activityTitle, row.activityKey)}</td>
-                      {questionsAreGroupScoped(constrained) ? <td>{groupRow?.groupName ?? "—"}</td> : null}
-                      <td>{row.correctCount}</td>
-                      <td>{row.incorrectCount}</td>
-                      {questionsAreGroupScoped(constrained) ? <td>{groupRow?.unansweredCount ?? "—"}</td> : null}
-                      <td>{percentageLabel(row.correctnessPercentage)}</td>
-                      <td>{row.requiresReviewCount}</td>
-                      <td>{row.topicKeys.join(", ") || "—"}</td>
-                      <td>{row.skillKeys.join(", ") || "—"}</td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <QuestionTable rows={questionRows} caption={questionGrainLabel} groupScoped={questionsAreGroupScoped(constrained)} />
           ) : (
             <EmptyState title="No question analytics" body="No question analytics rows for the current filters. Answer keys are never shown here." />
           )}
@@ -798,8 +1258,9 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
           <section className="panel">
             <div className="panel__header">
               <div>
-                <p className="eyebrow">Topic analytics</p>
-                <h2>Existing topic keys only</h2>
+                <p className="eyebrow">Topics & skills</p>
+                <h2>Existing metadata keys only</h2>
+                <p>This view is broader-grain than group or activity analytics and is not inferred from free text.</p>
               </div>
             </div>
             {topics.length ? (
@@ -808,16 +1269,16 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
                   <thead>
                     <tr>
                       <th scope="col">Topic</th>
-                      <th scope="col">Responses</th>
+                      <th scope="col">Learners Covered</th>
                       <th scope="col">Success</th>
-                      <th scope="col">Review</th>
+                      <th scope="col">Needs Review</th>
                     </tr>
                   </thead>
                   <tbody>
                     {topics.map((row) => (
                       <tr key={row.topicKey}>
                         <th scope="row"><code>{row.topicKey}</code></th>
-                        <td>{row.responseCount}</td>
+                        <td>{row.learnerCount}</td>
                         <td>{percentageLabel(row.successPercentage)}</td>
                         <td>{row.requiresReviewCount}</td>
                       </tr>
@@ -832,7 +1293,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
           <section className="panel">
             <div className="panel__header">
               <div>
-                <p className="eyebrow">Skill analytics</p>
+                <p className="eyebrow">Skills</p>
                 <h2>Existing skill keys only</h2>
               </div>
             </div>
@@ -842,16 +1303,16 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
                   <thead>
                     <tr>
                       <th scope="col">Skill</th>
-                      <th scope="col">Responses</th>
+                      <th scope="col">Learners Covered</th>
                       <th scope="col">Success</th>
-                      <th scope="col">Review</th>
+                      <th scope="col">Needs Review</th>
                     </tr>
                   </thead>
                   <tbody>
                     {skills.map((row) => (
                       <tr key={row.skillKey}>
                         <th scope="row"><code>{row.skillKey}</code></th>
-                        <td>{row.responseCount}</td>
+                        <td>{row.learnerCount}</td>
                         <td>{percentageLabel(row.successPercentage)}</td>
                         <td>{row.requiresReviewCount}</td>
                       </tr>
@@ -932,42 +1393,70 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
             </div>
             <span className="toolbar__count" role="status">{scopedSignals.length} signals</span>
           </div>
-          {scopedSignals.length ? (
+          <PaneTabs
+            value={attentionTab}
+            onChange={(value) => setAttentionTab(value as AttentionTab)}
+            items={[
+              { id: "learner", label: "Learners" },
+              { id: "group", label: "Groups" },
+              { id: "activity", label: "Activities" },
+              ...(scopedSignals.some((signal) => attentionTabForEntity(signal.entityType) === "other")
+                ? [{ id: "other", label: "Other" }]
+                : []),
+            ]}
+          />
+          {attentionByTab.length ? (
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">Signal</th>
-                    <th scope="col">Entity</th>
+                    <th scope="col">{attentionTab === "group" ? "Group" : attentionTab === "activity" ? "Activity" : attentionTab === "learner" ? "Learner" : "Entity"}</th>
+                    <th scope="col">Group</th>
+                    <th scope="col">Course</th>
                     <th scope="col">Reason</th>
+                    <th scope="col">Detail</th>
+                    <th scope="col">Last Activity</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {scopedSignals.map((signal) => (
-                    <tr key={`${signal.key}:${signal.entityType}:${signal.entityKey}`}>
-                      <th scope="row">
-                        <StatusBadge tone="warning" label="Needs attention" />
-                        <br />
-                        <code>{signal.key}</code>
-                      </th>
-                      <td>
-                        {signal.entityType}
-                        <br />
-                        <code>{signal.entityKey}</code>
-                      </td>
-                      <td>{signal.reason}</td>
-                    </tr>
-                  ))}
+                  {attentionByTab.map((signal) => {
+                    const learner = learners.find((row) => row.studentNumber === signal.entityKey);
+                    const group = signal.entityType === "group"
+                      ? groups.find((row) => row.groupCode === signal.entityKey)
+                      : signal.entityType === "activity"
+                        ? groups.find((row) => signal.entityKey.startsWith(`${row.groupCode}:`))
+                        : learner
+                          ? groups.find((row) => row.groupCode === learner.groupCode)
+                          : undefined;
+                    const last = signal.entityType === "learner"
+                      ? learner?.latestCompletedAt
+                      : signal.entityType === "group" && group
+                        ? groupDerivedMetrics(group, learnerActivity, activities).lastActivity
+                        : latestTimestamp(activities.filter((row) => `${row.groupCode}:${row.activityKey}` === signal.entityKey).map((row) => row.latestCompletedAt));
+                    return (
+                      <tr key={`${signal.key}:${signal.entityType}:${signal.entityKey}`}>
+                        <th scope="row">
+                          {attentionEntityLabel(signal, { learners, groups, activities })}
+                          <small><code>{signal.entityKey}</code></small>
+                        </th>
+                        <td>{group?.groupName ?? (learner?.groupName ?? "—")}</td>
+                        <td>{group ? displayLabel(group.courseTitle, group.courseKey) : (learner?.courseTitle ?? "—")}</td>
+                        <td><StatusBadge tone="warning" label={attentionReasonLabel(signal.key)} /></td>
+                        <td>{signal.reason}</td>
+                        <td>{last ? formatDate(last) : "—"}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           ) : (
-            <EmptyState title="No attention signals" body="No deterministic attention signals for the current scope." />
+            <EmptyState title="No attention signals" body="No deterministic attention signals for this tab in the current scope." />
           )}
         </section>
       ) : null}
 
-      {pane !== "overview" ? <DefinitionList /> : null}
+      {pane !== "overview" ? <DefinitionList compact /> : null}
     </>
   );
 }
