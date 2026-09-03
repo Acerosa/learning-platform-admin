@@ -10,7 +10,7 @@ Primary navigation (from `src/router/modules.ts`):
 | Hubs & Curriculum | `/hubs` | Hub registry, course context, curriculum publication state, link to curriculum editor |
 | People | `/people` | Learners, groups, staff (platform authority) and enrolment relationships |
 | Assignments & Results | `/assessment` | Assignments and the results markbook (attempts drill down from Results) |
-| Analytics | `/analytics` | Completion, performance and attention signals |
+| Analytics | `/analytics` | Completion, performance and attention signals. Includes **Readiness Diagnostic** (`?pane=readiness-diagnostic`): diagnostic completion and Not-sure indicators, not academic scores. See [Readiness Diagnostic](readiness-diagnostic.md). |
 | System | `/system` | Status, audit, access and advanced configuration |
 
 ## Legacy routes (hidden from primary navigation)
