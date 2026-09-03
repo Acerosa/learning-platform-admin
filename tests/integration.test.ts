@@ -50,6 +50,9 @@ const viewRows: Record<string, readonly Record<string, unknown>[]> = {
   dashboard_summary: [{ registered_hubs: 1, active_hubs: 1, active_learners: 1, active_groups: 1, active_enrolments: 1, assignments: 1, recent_attempts: 1, completed_attempts: 1, average_score_percentage: 80, healthy_services: 1, service_count: 1, active_contracts: 0, contract_count: 1 }],
   audit_events: [{ event_key: "admin.read", actor_type: "staff", entity_type: "hub", entity_key: "hub-a", outcome: "succeeded", occurred_at: "2026-08-11T00:02:00Z" }],
   curriculum_publications: [{ id: "pub-1", hub_code: "hub-a", course_key: "course-a", package_version: "0.1.0", schema_version: "0.1.0", source_package_version: "0.1.0", status: "published", author: "Ada Author", reviewer: "Riley Reviewer", publication_notes: "First platform snapshot.", published_by_staff_reference: "STAFF-1", created_at: "2026-08-13T00:00:00Z", published_at: "2026-08-13T00:01:00Z", content_hash: "a".repeat(64) }],
+  diagnostic_sessions: [{ session_id: "diag-1", student_name: "Alex Rivera", student_id: "STU1001", hub_code: "level-3-it-year-1-readiness", hub_name: "Level 3 IT Year 1 Readiness Hub", course_key: "ocr-level-3-it", course_title: "OCR Level 3 IT", status: "completed", started_at: "2026-09-02T09:00:00Z", completed_at: "2026-09-02T09:22:00Z", response_count: 1, not_sure_count: 0 }],
+  diagnostic_responses: [{ response_id: "diag-r-1", session_id: "diag-1", student_name: "Alex Rivera", student_id: "STU1001", hub_code: "level-3-it-year-1-readiness", course_key: "ocr-level-3-it", activity_id: "readiness-opening-confidence", unit_key: "general", topic_key: "confidence", question_key: "RDY-OPEN-001", evidence: "somewhat", is_not_sure: false, confidence: "somewhat", is_correct: null, created_at: "2026-09-02T09:01:00Z", updated_at: "2026-09-02T09:01:00Z" }],
+  diagnostic_summary: [{ hub_code: "level-3-it-year-1-readiness", course_key: "ocr-level-3-it", started_count: 1, completed_count: 1, completion_percentage: 100, response_count: 1, not_sure_count: 0, not_sure_percentage: 0 }],
 };
 
 function fakeClient(options: {
@@ -231,9 +234,16 @@ test("live service reads every MVP surface through admin_api and maps safe rows"
   assert.equal(data.curriculumPublications[0].packageVersion, "0.1.0");
   assert.equal(data.curriculumPublications[0].status, "published");
   assert.equal(data.courses[0].courseKey, "course-a");
+  assert.equal(data.diagnosticSessions[0].studentName, "Alex Rivera");
+  assert.equal(data.diagnosticSessions[0].studentId, "STU1001");
+  assert.equal(data.diagnosticResponses[0].isCorrect, null);
+  assert.equal(data.diagnosticSummary[0].courseKey, "ocr-level-3-it");
   assert.ok(fake.schemas.every((schema) => schema === "admin_api"));
   const selected = fake.selections.join("\n");
   assert.match(selected, /responses:.*response_payload/);
+  assert.match(selected, /diagnostic_sessions:/);
+  assert.match(selected, /diagnostic_responses:/);
+  assert.match(selected, /diagnostic_summary:/);
   assert.doesNotMatch(selected, /contact_email|diagnostics/);
 });
 

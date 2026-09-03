@@ -59,6 +59,7 @@ import {
   interventionSignalsFromSnapshot,
 } from "../results/from-admin-snapshot";
 import { formatDate } from "../utils/format";
+import { ReadinessDiagnosticPage } from "./readiness-diagnostic";
 
 type GroupTab = "overview" | "learners" | "activities" | "questions";
 type ActivityTab = "overview" | "learners" | "questions";
@@ -857,6 +858,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
     { id: "questions", label: "Questions" },
     { id: "topics-skills", label: "Topics & skills" },
     { id: "readiness", label: "Readiness" },
+    { id: "readiness-diagnostic", label: "Readiness Diagnostic" },
     { id: "attention", label: "Needs attention" },
   ];
   const questionRows = questionsAreGroupScoped(constrained) ? groupQuestions : platformQuestions;
@@ -886,6 +888,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
         </div>
       </header>
 
+      {pane !== "readiness-diagnostic" ? (
       <section className="panel" aria-label="Analytics filters">
         <div className="panel__header">
           <div>
@@ -932,7 +935,9 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
           <p className="analytics-filter-note">{questionGrainLabel}. Partially correct is not shown because marking evidence does not distinguish it.</p>
         ) : null}
       </section>
+      ) : null}
 
+      {pane !== "readiness-diagnostic" ? (
       <section className="panel analytics-scope" aria-label="Active analytics scope">
         <div className="panel__header">
           <div>
@@ -955,6 +960,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
           </div>
         </div>
       </section>
+      ) : null}
 
       <div className="toolbar" role="tablist" aria-label="Analytics views">
         {panes.map((item) => (
@@ -1327,6 +1333,14 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
         </div>
       ) : null}
 
+      {pane === "readiness-diagnostic" ? (
+        <ReadinessDiagnosticPage
+          sessions={data.diagnosticSessions}
+          responses={data.diagnosticResponses}
+          summaries={data.diagnosticSummary}
+        />
+      ) : null}
+
       {pane === "readiness" ? (
         <section className="panel">
           <div className="panel__header">
@@ -1456,7 +1470,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
         </section>
       ) : null}
 
-      {pane !== "overview" ? <DefinitionList compact /> : null}
+      {pane !== "overview" && pane !== "readiness-diagnostic" ? <DefinitionList compact /> : null}
     </>
   );
 }

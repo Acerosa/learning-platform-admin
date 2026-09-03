@@ -7,6 +7,17 @@ export function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+export function formatDateTime(value: string | null | undefined) {
+  if (!value) return "Not completed";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export function titleCase(value: string) {
   return value
     .split(/[-_]/)

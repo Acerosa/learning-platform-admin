@@ -38,6 +38,9 @@ import type {
   SkillPerformanceRecord,
   TeacherRecord,
   TopicPerformanceRecord,
+  DiagnosticSessionRecord,
+  DiagnosticResponseRecord,
+  DiagnosticSummaryRecord,
 } from "../api/admin-api";
 import type { HubRegistrationRequest } from "../content/hub-registration.ts";
 import { platformPublicationArgs } from "../content/platform-publication.ts";
@@ -204,6 +207,16 @@ function nullableNumber(value: unknown) {
   if (value === null || value === undefined) return null;
   const parsed = numberValue(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  if (value === true) return true;
+  if (value === false) return false;
+  return null;
+}
+
+function jsonUnknown(value: unknown): unknown {
+  return value === undefined ? null : value;
 }
 
 function booleanValue(value: unknown) {
@@ -1147,6 +1160,72 @@ export function createSupabaseAdminReadService(
       }));
     },
 
+    async listDiagnosticSessions() {
+      const data = await pagedRows(
+        "diagnostic_sessions",
+        "session_id,student_name,student_id,hub_code,hub_name,course_key,course_title,status,started_at,completed_at,response_count,not_sure_count",
+        { column: "started_at", ascending: false },
+      );
+      return data.map((row): DiagnosticSessionRecord => ({
+        sessionId: textValue(row.session_id),
+        studentName: textValue(row.student_name),
+        studentId: textValue(row.student_id),
+        hubCode: textValue(row.hub_code),
+        hubName: textValue(row.hub_name),
+        courseKey: textValue(row.course_key),
+        courseTitle: textValue(row.course_title),
+        status: textValue(row.status) as DiagnosticSessionRecord["status"],
+        startedAt: textValue(row.started_at),
+        completedAt: nullableText(row.completed_at),
+        responseCount: numberValue(row.response_count),
+        notSureCount: numberValue(row.not_sure_count),
+      }));
+    },
+
+    async listDiagnosticResponses() {
+      const data = await pagedRows(
+        "diagnostic_responses",
+        "response_id,session_id,student_name,student_id,hub_code,course_key,activity_id,unit_key,topic_key,question_key,evidence,is_not_sure,confidence,is_correct,created_at,updated_at",
+        { column: "created_at" },
+      );
+      return data.map((row): DiagnosticResponseRecord => ({
+        responseId: textValue(row.response_id),
+        sessionId: textValue(row.session_id),
+        studentName: textValue(row.student_name),
+        studentId: textValue(row.student_id),
+        hubCode: textValue(row.hub_code),
+        courseKey: textValue(row.course_key),
+        activityId: textValue(row.activity_id),
+        unitKey: textValue(row.unit_key),
+        topicKey: nullableText(row.topic_key),
+        questionKey: textValue(row.question_key),
+        evidence: jsonUnknown(row.evidence),
+        isNotSure: booleanValue(row.is_not_sure),
+        confidence: nullableText(row.confidence),
+        isCorrect: nullableBoolean(row.is_correct),
+        createdAt: textValue(row.created_at),
+        updatedAt: textValue(row.updated_at),
+      }));
+    },
+
+    async listDiagnosticSummary() {
+      const data = await rows(
+        "diagnostic_summary",
+        "hub_code,course_key,started_count,completed_count,completion_percentage,response_count,not_sure_count,not_sure_percentage",
+        { column: "hub_code" },
+      );
+      return data.map((row): DiagnosticSummaryRecord => ({
+        hubCode: textValue(row.hub_code),
+        courseKey: textValue(row.course_key),
+        startedCount: numberValue(row.started_count),
+        completedCount: numberValue(row.completed_count),
+        completionPercentage: nullableNumber(row.completion_percentage),
+        responseCount: numberValue(row.response_count),
+        notSureCount: numberValue(row.not_sure_count),
+        notSurePercentage: nullableNumber(row.not_sure_percentage),
+      }));
+    },
+
     async getDashboardSummary() {
       const data = await rows(
         "dashboard_summary",
@@ -1242,6 +1321,9 @@ export async function loadAdminData(
     questionGroupPerformance,
     topicPerformance,
     skillPerformance,
+    diagnosticSessions,
+    diagnosticResponses,
+    diagnosticSummary,
     dashboardSummary,
     auditEvents,
     curriculumPublications,
@@ -1269,6 +1351,9 @@ export async function loadAdminData(
     service.listQuestionGroupPerformance(),
     service.listTopicPerformance(),
     service.listSkillPerformance(),
+    service.listDiagnosticSessions(),
+    service.listDiagnosticResponses(),
+    service.listDiagnosticSummary(),
     service.getDashboardSummary(),
     service.listAuditEvents(),
     service.listCurriculumPublications(),
@@ -1298,6 +1383,9 @@ export async function loadAdminData(
     questionGroupPerformance,
     topicPerformance,
     skillPerformance,
+    diagnosticSessions,
+    diagnosticResponses,
+    diagnosticSummary,
     dashboardSummary,
     auditEvents,
     curriculumPublications,

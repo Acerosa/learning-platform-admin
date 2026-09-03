@@ -91,6 +91,9 @@ function createTrackingService(): AdminReadService & { calls: string[] } {
     listAuditEvents: async () => track("listAuditEvents"),
     listCurriculumPublications: async () => track("listCurriculumPublications"),
     listCurriculumDrafts: async () => track("listCurriculumDrafts"),
+    listDiagnosticSessions: async () => track("listDiagnosticSessions"),
+    listDiagnosticResponses: async () => track("listDiagnosticResponses"),
+    listDiagnosticSummary: async () => track("listDiagnosticSummary"),
   };
 }
 
@@ -127,6 +130,9 @@ test("analytics module loads only analytics datasets", async () => {
       "listQuestionPerformance",
       "listSkillPerformance",
       "listTopicPerformance",
+      "listDiagnosticResponses",
+      "listDiagnosticSessions",
+      "listDiagnosticSummary",
     ].sort(),
   );
 });
