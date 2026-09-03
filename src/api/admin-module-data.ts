@@ -27,6 +27,9 @@ import type {
   SkillPerformanceRecord,
   TeacherRecord,
   TopicPerformanceRecord,
+  DiagnosticSessionRecord,
+  DiagnosticResponseRecord,
+  DiagnosticSummaryRecord,
 } from "./admin-api.ts";
 import type { AdminModuleId } from "../router/modules.ts";
 
@@ -85,6 +88,9 @@ export interface AnalyticsData {
   questionGroupPerformance: readonly QuestionGroupPerformanceRecord[];
   topicPerformance: readonly TopicPerformanceRecord[];
   skillPerformance: readonly SkillPerformanceRecord[];
+  diagnosticSessions: readonly DiagnosticSessionRecord[];
+  diagnosticResponses: readonly DiagnosticResponseRecord[];
+  diagnosticSummary: readonly DiagnosticSummaryRecord[];
 }
 
 export interface SystemData {
@@ -239,6 +245,9 @@ export function mergeModuleCacheToSnapshot(
     questionGroupPerformance: analytics?.questionGroupPerformance ?? [],
     topicPerformance: analytics?.topicPerformance ?? [],
     skillPerformance: analytics?.skillPerformance ?? [],
+    diagnosticSessions: analytics?.diagnosticSessions ?? [],
+    diagnosticResponses: analytics?.diagnosticResponses ?? [],
+    diagnosticSummary: analytics?.diagnosticSummary ?? [],
     auditEvents: system?.auditEvents ?? hubs?.auditEvents ?? [],
     curriculumPublications: hubs?.curriculumPublications ?? [],
     curriculumDrafts: hubs?.curriculumDrafts ?? [],
@@ -307,6 +316,9 @@ export function sliceDemoModuleData(
         questionGroupPerformance: snapshot.questionGroupPerformance,
         topicPerformance: snapshot.topicPerformance,
         skillPerformance: snapshot.skillPerformance,
+        diagnosticSessions: snapshot.diagnosticSessions,
+        diagnosticResponses: snapshot.diagnosticResponses,
+        diagnosticSummary: snapshot.diagnosticSummary,
       };
     case "system":
       return {

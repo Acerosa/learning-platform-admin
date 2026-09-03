@@ -19,6 +19,7 @@ export type AnalyticsPane =
   | "questions"
   | "topics-skills"
   | "readiness"
+  | "readiness-diagnostic"
   | "attention";
 
 export interface AnalyticsScope {
@@ -47,6 +48,7 @@ export const PANE_FILTERS: Record<AnalyticsPane, ReadonlySet<keyof AnalyticsScop
   questions: new Set(["hubCode", "courseKey", "groupCode", "activityKey", "topicKey", "skillKey"]),
   "topics-skills": new Set(["topicKey", "skillKey"]),
   readiness: new Set(["hubCode", "courseKey", "groupCode", "activityKey"]),
+  "readiness-diagnostic": new Set(),
   attention: new Set(["hubCode", "courseKey", "groupCode", "activityKey"]),
 };
 

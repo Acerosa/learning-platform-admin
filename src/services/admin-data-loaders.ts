@@ -119,6 +119,9 @@ export async function loadAnalyticsData(service: AdminReadService): Promise<Anal
     "questionGroupPerformance",
     "topicPerformance",
     "skillPerformance",
+    "diagnosticSessions",
+    "diagnosticResponses",
+    "diagnosticSummary",
   ]);
   const [
     assessmentOverview,
@@ -130,6 +133,9 @@ export async function loadAnalyticsData(service: AdminReadService): Promise<Anal
     questionGroupPerformance,
     topicPerformance,
     skillPerformance,
+    diagnosticSessions,
+    diagnosticResponses,
+    diagnosticSummary,
   ] = await Promise.all([
     service.getAssessmentOverview(),
     service.listGroupPerformance(),
@@ -140,6 +146,9 @@ export async function loadAnalyticsData(service: AdminReadService): Promise<Anal
     service.listQuestionGroupPerformance(),
     service.listTopicPerformance(),
     service.listSkillPerformance(),
+    service.listDiagnosticSessions(),
+    service.listDiagnosticResponses(),
+    service.listDiagnosticSummary(),
   ]);
   return Object.freeze({
     assessmentOverview,
@@ -151,6 +160,9 @@ export async function loadAnalyticsData(service: AdminReadService): Promise<Anal
     questionGroupPerformance,
     topicPerformance,
     skillPerformance,
+    diagnosticSessions,
+    diagnosticResponses,
+    diagnosticSummary,
   });
 }
 

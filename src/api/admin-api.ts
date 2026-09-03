@@ -42,6 +42,9 @@ export const ADMIN_API_VIEWS = Object.freeze({
   compositionReferences: "admin_api.composition_references",
   compositionTemplates: "admin_api.composition_templates",
   curriculumRecipes: "admin_api.curriculum_recipes",
+  diagnosticSessions: "admin_api.diagnostic_sessions",
+  diagnosticResponses: "admin_api.diagnostic_responses",
+  diagnosticSummary: "admin_api.diagnostic_summary",
 });
 
 export const ADMIN_API_RPCS = Object.freeze({
@@ -551,6 +554,53 @@ export interface PlatformPublicationResult {
   idempotent: boolean;
 }
 
+export type DiagnosticSessionStatus = "started" | "completed" | "abandoned";
+
+export interface DiagnosticSessionRecord {
+  sessionId: string;
+  studentName: string;
+  studentId: string;
+  hubCode: string;
+  hubName: string;
+  courseKey: string;
+  courseTitle: string;
+  status: DiagnosticSessionStatus;
+  startedAt: string;
+  completedAt: string | null;
+  responseCount: number;
+  notSureCount: number;
+}
+
+export interface DiagnosticResponseRecord {
+  responseId: string;
+  sessionId: string;
+  studentName: string;
+  studentId: string;
+  hubCode: string;
+  courseKey: string;
+  activityId: string;
+  unitKey: string;
+  topicKey: string | null;
+  questionKey: string;
+  evidence: unknown;
+  isNotSure: boolean;
+  confidence: string | null;
+  isCorrect: boolean | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiagnosticSummaryRecord {
+  hubCode: string;
+  courseKey: string;
+  startedCount: number;
+  completedCount: number;
+  completionPercentage: number | null;
+  responseCount: number;
+  notSureCount: number;
+  notSurePercentage: number | null;
+}
+
 export interface ReviewResponseRequest {
   responseId: string;
   awardedScore: number;
@@ -602,6 +652,9 @@ export interface AdminDataSnapshot {
   auditEvents: readonly AuditEventRecord[];
   curriculumPublications: readonly CurriculumPublicationRecord[];
   curriculumDrafts: readonly CurriculumDraftSummary[];
+  diagnosticSessions: readonly DiagnosticSessionRecord[];
+  diagnosticResponses: readonly DiagnosticResponseRecord[];
+  diagnosticSummary: readonly DiagnosticSummaryRecord[];
 }
 
 export interface AdminReadService {
@@ -633,6 +686,9 @@ export interface AdminReadService {
   listAuditEvents(): Promise<readonly AuditEventRecord[]>;
   listCurriculumPublications(): Promise<readonly CurriculumPublicationRecord[]>;
   listCurriculumDrafts(): Promise<readonly CurriculumDraftSummary[]>;
+  listDiagnosticSessions(): Promise<readonly DiagnosticSessionRecord[]>;
+  listDiagnosticResponses(): Promise<readonly DiagnosticResponseRecord[]>;
+  listDiagnosticSummary(): Promise<readonly DiagnosticSummaryRecord[]>;
 }
 
 export interface AdminMutationService {
