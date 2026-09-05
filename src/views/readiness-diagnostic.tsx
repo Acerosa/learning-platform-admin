@@ -7,19 +7,30 @@ import type {
   DiagnosticSummaryRecord,
 } from "../api/admin-api.ts";
 import {
+  EXPECTED_READINESS_QUESTION_COUNT,
   QUESTION_LABEL_GAP,
   READINESS_DIAGNOSTIC_NAME,
+  UNAVAILABLE_RESULT,
   correctnessLabel,
   diagnosticOverview,
+  diagnosticPercentageLabel,
+  diagnosticScoreLabel,
+  diagnosticVersionLabel,
+  diagnosticVersions,
   filterDiagnosticSessions,
   formatCompletionRate,
   formatDiagnosticStatus,
   formatEvidence,
   groupResponsesByUnit,
   hasAuthoritativeCorrectness,
+  lastActivityAt,
+  questionCatalogue,
   questionDistributions,
   recentDiagnosticSessions,
   responsesForSession,
+  sortDiagnosticSessionsByRecent,
+  unansweredQuestions,
+  type DiagnosticDateFilter,
   type DiagnosticStatusFilter,
 } from "../analytics/diagnostic.ts";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
@@ -67,22 +78,36 @@ export function ReadinessDiagnosticPage({
   responses,
   summaries,
   error = null,
+  loading = false,
   initialSessionId = null,
+  expectedQuestionCount = EXPECTED_READINESS_QUESTION_COUNT,
+  variant = "analytics",
 }: {
   sessions: readonly DiagnosticSessionRecord[];
   responses: readonly DiagnosticResponseRecord[];
   summaries: readonly DiagnosticSummaryRecord[];
   error?: string | null;
+  loading?: boolean;
   initialSessionId?: string | null;
+  expectedQuestionCount?: number;
+  variant?: "analytics" | "results";
 }) {
   const [statusFilter, setStatusFilter] = useState<DiagnosticStatusFilter>("all");
+  const [dateFilter, setDateFilter] = useState<DiagnosticDateFilter>("last-7-days");
+  const [versionFilter, setVersionFilter] = useState("");
   const [query, setQuery] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId);
 
   const overview = useMemo(() => diagnosticOverview(summaries, sessions), [sessions, summaries]);
+  const versions = useMemo(() => diagnosticVersions(sessions), [sessions]);
   const filteredSessions = useMemo(
-    () => filterDiagnosticSessions(sessions, { status: statusFilter, query }),
-    [query, sessions, statusFilter],
+    () => sortDiagnosticSessionsByRecent(filterDiagnosticSessions(sessions, {
+      status: statusFilter,
+      query,
+      version: versionFilter,
+      date: dateFilter,
+    })),
+    [dateFilter, query, sessions, statusFilter, versionFilter],
   );
   const recent = useMemo(() => recentDiagnosticSessions(sessions), [sessions]);
   const selected = sessions.find((row) => row.sessionId === selectedSessionId) ?? null;
@@ -90,6 +115,11 @@ export function ReadinessDiagnosticPage({
   const grouped = groupResponsesByUnit(selectedResponses);
   const showCorrectness = hasAuthoritativeCorrectness(selectedResponses);
   const distributions = useMemo(() => questionDistributions(responses), [responses]);
+  const catalogue = useMemo(() => questionCatalogue(responses), [responses]);
+  const missing = selected ? unansweredQuestions(selectedResponses, catalogue) : [];
+  const score = diagnosticScoreLabel(selectedResponses);
+  const percentage = diagnosticPercentageLabel(selectedResponses, expectedQuestionCount);
+  const eyebrow = variant === "results" ? "Results → Induction / Readiness" : "Readiness Diagnostic";
 
   if (error) {
     return (
@@ -102,16 +132,25 @@ export function ReadinessDiagnosticPage({
     );
   }
 
+  if (loading) {
+    return (
+      <section className="panel" aria-label="Readiness Diagnostic loading">
+        <EmptyState title="Loading diagnostic sittings" body="Fetching staff-only diagnostic sessions." />
+      </section>
+    );
+  }
+
   return (
     <div data-testid="readiness-diagnostic">
       <section className="panel">
         <div className="panel__header">
           <div>
-            <p className="eyebrow">Readiness Diagnostic</p>
+            <p className="eyebrow">{eyebrow}</p>
             <h2>{overview?.diagnosticName ?? READINESS_DIAGNOSTIC_NAME}</h2>
             <p>
               Readiness / diagnostic indicators, not assessment results. Student name and
-              student ID are learner-entered identifiers.
+              student ID are learner-entered identifiers. Score and percentage stay {UNAVAILABLE_RESULT} until
+              the server stores an authoritative mark.
             </p>
           </div>
         </div>
@@ -132,7 +171,7 @@ export function ReadinessDiagnosticPage({
             <MetricCard
               label="Responses"
               value={String(overview.responseCount)}
-              detail="Submitted diagnostic answers"
+              detail={`Current diagnostic has ${expectedQuestionCount} questions`}
             />
             <MetricCard
               label="Not sure"
@@ -177,11 +216,23 @@ export function ReadinessDiagnosticPage({
           <div>
             <p className="eyebrow">Sessions</p>
             <h2>Diagnostic sessions</h2>
-            <p>Learner-entered identifiers. These names and IDs are not authenticated.</p>
+            <p>Learner-entered identifiers. These names and IDs are not authenticated. Recent sittings are listed first.</p>
           </div>
           <span className="toolbar__count" role="status">{filteredSessions.length} sessions</span>
         </div>
         <div className="toolbar">
+          <div className="toolbar__search">
+            <label htmlFor="diagnostic-date">Date</label>
+            <select
+              id="diagnostic-date"
+              value={dateFilter}
+              onChange={(event) => setDateFilter(event.target.value as DiagnosticDateFilter)}
+            >
+              <option value="last-7-days">Last 7 days</option>
+              <option value="last-24-hours">Last 24 hours</option>
+              <option value="all">All dates</option>
+            </select>
+          </div>
           <div className="toolbar__search">
             <label htmlFor="diagnostic-status">Status</label>
             <select
@@ -191,7 +242,20 @@ export function ReadinessDiagnosticPage({
             >
               <option value="all">All</option>
               <option value="completed">Completed</option>
-              <option value="incomplete">Incomplete</option>
+              <option value="incomplete">In progress</option>
+            </select>
+          </div>
+          <div className="toolbar__search">
+            <label htmlFor="diagnostic-version">Diagnostic version</label>
+            <select
+              id="diagnostic-version"
+              value={versionFilter}
+              onChange={(event) => setVersionFilter(event.target.value)}
+            >
+              <option value="">All versions</option>
+              {versions.map((version) => (
+                <option key={version} value={version}>{version}</option>
+              ))}
             </select>
           </div>
           <div className="toolbar__search">
@@ -210,45 +274,56 @@ export function ReadinessDiagnosticPage({
             <table>
               <thead>
                 <tr>
-                  <th scope="col">Student name</th>
                   <th scope="col">Student ID</th>
+                  <th scope="col">Student name</th>
+                  <th scope="col">Group</th>
+                  <th scope="col">Version</th>
+                  <th scope="col">Status</th>
                   <th scope="col">Started</th>
                   <th scope="col">Completed</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Responses</th>
-                  <th scope="col">Not sure</th>
+                  <th scope="col">Answered</th>
+                  <th scope="col">Total questions</th>
+                  <th scope="col">Score</th>
+                  <th scope="col">Last activity</th>
                   <th scope="col"><span className="sr-only">Open</span></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredSessions.map((session) => (
-                  <tr key={session.sessionId} data-session-id={session.sessionId}>
-                    <th scope="row">
-                      <span className="table-primary">{session.studentName}</span>
-                      <small>{session.hubName}</small>
-                    </th>
-                    <td><code>{session.studentId}</code></td>
-                    <td>{formatDateTime(session.startedAt)}</td>
-                    <td>{formatDateTime(session.completedAt)}</td>
-                    <td>
-                      <StatusBadge
-                        label={formatDiagnosticStatus(session.status)}
-                        tone={statusTone(session.status)}
-                      />
-                    </td>
-                    <td>{session.responseCount}</td>
-                    <td>{session.notSureCount}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="button button--small button--secondary"
-                        onClick={() => setSelectedSessionId(session.sessionId)}
-                      >
-                        Open
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredSessions.map((session) => {
+                  const sessionResponses = responsesForSession(responses, session.sessionId);
+                  return (
+                    <tr key={session.sessionId} data-session-id={session.sessionId}>
+                      <th scope="row"><code>{session.studentId}</code></th>
+                      <td>
+                        <span className="table-primary">{session.studentName}</span>
+                        <small>{session.hubName}</small>
+                      </td>
+                      <td>{UNAVAILABLE_RESULT}</td>
+                      <td>{diagnosticVersionLabel(session)}</td>
+                      <td>
+                        <StatusBadge
+                          label={formatDiagnosticStatus(session.status)}
+                          tone={statusTone(session.status)}
+                        />
+                      </td>
+                      <td>{formatDateTime(session.startedAt)}</td>
+                      <td>{formatDateTime(session.completedAt)}</td>
+                      <td>{session.responseCount}</td>
+                      <td>{expectedQuestionCount}</td>
+                      <td>{diagnosticScoreLabel(sessionResponses)}</td>
+                      <td>{formatDateTime(lastActivityAt(session))}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="button button--small button--secondary"
+                          onClick={() => setSelectedSessionId(session.sessionId)}
+                        >
+                          Open
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -256,7 +331,7 @@ export function ReadinessDiagnosticPage({
           <EmptyState
             title={sessions.length ? "No matching sessions" : "No diagnostic sessions yet"}
             body={sessions.length
-              ? "Change the status or name filter to see other sittings."
+              ? "Change the date, status or name filter to see other sittings."
               : "Sessions appear after a learner starts the readiness diagnostic."}
           />
         )}
@@ -270,10 +345,15 @@ export function ReadinessDiagnosticPage({
               <h2>{selected.studentName}</h2>
               <p>
                 Student ID <code>{selected.studentId}</code> · learner-entered identifier ·{" "}
-                {formatDiagnosticStatus(selected.status)}
+                {formatDiagnosticStatus(selected.status)} · version {diagnosticVersionLabel(selected)}
               </p>
               <p>
                 Started {formatDateTime(selected.startedAt)}. Completed {formatDateTime(selected.completedAt)}.
+                Last activity {formatDateTime(lastActivityAt(selected))}.
+              </p>
+              <p>
+                Result {score}. Percentage {percentage}. Group {UNAVAILABLE_RESULT}.
+                Answered {selected.responseCount} of {expectedQuestionCount}.
               </p>
             </div>
             <button
@@ -284,6 +364,14 @@ export function ReadinessDiagnosticPage({
               Close
             </button>
           </div>
+          {missing.length ? (
+            <p>
+              Unanswered questions: {missing.map((item) => item.questionKey).join(", ")}.
+              Identifiers only — question text is not in the Admin diagnostic views.
+            </p>
+          ) : (
+            <p>Unanswered questions: none against the responses stored for this diagnostic.</p>
+          )}
           {grouped.length ? grouped.map((group) => (
             <section key={group.unitKey} aria-label={group.unitLabel}>
               <h3>{group.unitLabel}</h3>
@@ -306,8 +394,8 @@ export function ReadinessDiagnosticPage({
                           <small><code>{response.activityId}</code></small>
                         </th>
                         <td>{formatEvidence(response.evidence)}</td>
-                        <td>{response.isNotSure ? "Not sure" : "—"}</td>
-                        <td>{response.confidence ?? "—"}</td>
+                        <td>{response.isNotSure ? "Not sure" : UNAVAILABLE_RESULT}</td>
+                        <td>{response.confidence ?? UNAVAILABLE_RESULT}</td>
                         {showCorrectness ? (
                           <td>{correctnessLabel(response.isCorrect) ?? "Not marked"}</td>
                         ) : null}
@@ -362,7 +450,7 @@ export function ReadinessDiagnosticPage({
                     <td>
                       {row.confidenceCounts.length
                         ? row.confidenceCounts.map((item) => `${item.value} (${item.count})`).join(", ")
-                        : "—"}
+                        : UNAVAILABLE_RESULT}
                     </td>
                   </tr>
                 ))}

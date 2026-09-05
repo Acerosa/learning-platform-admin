@@ -7,6 +7,11 @@ here.
 
 ### Added
 
+- Results → Induction / Readiness: staff can inspect readiness diagnostic
+  sittings from Assignments & Results. The Results area is a hub/source shell
+  so later hubs can attach without a second results architecture. Score stays
+  — until the server stores an authoritative mark.
+
 - Contextual Analytics: hierarchical Hub → Course → Group → Activity filters,
   an active scope bar, learner and activity drill-down, and metric definitions
   for First Result, Latest Result, Best Result, Attempt Average, Completion and

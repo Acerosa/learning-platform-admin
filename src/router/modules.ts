@@ -97,7 +97,7 @@ export const PRIMARY_NAVIGATION: readonly AdminModuleDefinition[] = [
     shortLabel: "AR",
     group: "Assignments & Results",
     eyebrow: "Delivery and markbook",
-    description: "Review assignments, group results and learner attempt summaries.",
+    description: "Review assignments, induction diagnostic sittings and learner attempt summaries.",
     capability: "assignments.read",
     dataState: "available",
   },

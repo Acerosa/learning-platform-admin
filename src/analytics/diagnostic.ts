@@ -30,7 +30,11 @@ export const DIAGNOSTIC_UNIT_LABELS: Record<DiagnosticUnitKey, string> = {
 export const QUESTION_LABEL_GAP =
   "Question and option labels are not yet available from admin_api. Identifiers are shown until content labels are exposed.";
 
+export const UNAVAILABLE_RESULT = "—";
+export const EXPECTED_READINESS_QUESTION_COUNT = 25;
+
 export type DiagnosticStatusFilter = "all" | "completed" | "incomplete";
+export type DiagnosticDateFilter = "all" | "last-24-hours" | "last-7-days";
 
 export interface DiagnosticOverviewMetrics {
   diagnosticName: string;
@@ -133,16 +137,91 @@ export function recentDiagnosticSessions(
 
 export function filterDiagnosticSessions(
   sessions: readonly DiagnosticSessionRecord[],
-  filters: { status: DiagnosticStatusFilter; query: string },
+  filters: {
+    status: DiagnosticStatusFilter;
+    query: string;
+    version?: string;
+    date?: DiagnosticDateFilter;
+    now?: number;
+  },
 ): readonly DiagnosticSessionRecord[] {
   const query = filters.query.trim().toLowerCase();
+  const now = filters.now ?? Date.now();
   return sessions.filter((session) => {
     if (filters.status === "completed" && session.status !== "completed") return false;
     if (filters.status === "incomplete" && session.status === "completed") return false;
+    if (filters.version && diagnosticVersionLabel(session) !== filters.version) return false;
+    if (filters.date && filters.date !== "all") {
+      const activity = Date.parse(lastActivityAt(session));
+      if (!Number.isFinite(activity)) return false;
+      const windowMs = filters.date === "last-24-hours" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+      if (now - activity > windowMs) return false;
+    }
     if (!query) return true;
     return session.studentName.toLowerCase().includes(query)
       || session.studentId.toLowerCase().includes(query);
   });
+}
+
+export function sortDiagnosticSessionsByRecent(
+  sessions: readonly DiagnosticSessionRecord[],
+): readonly DiagnosticSessionRecord[] {
+  return [...sessions].sort((left, right) => lastActivityAt(right).localeCompare(lastActivityAt(left)));
+}
+
+export function diagnosticVersionLabel(session: DiagnosticSessionRecord): string {
+  return session.diagnosticVersion?.trim() || UNAVAILABLE_RESULT;
+}
+
+export function lastActivityAt(session: DiagnosticSessionRecord): string {
+  return session.completedAt || session.startedAt;
+}
+
+export function diagnosticScoreLabel(
+  responses: readonly DiagnosticResponseRecord[],
+): string {
+  if (!hasAuthoritativeCorrectness(responses)) return UNAVAILABLE_RESULT;
+  const marked = responses.filter((row) => row.isCorrect !== null);
+  if (!marked.length) return UNAVAILABLE_RESULT;
+  const correct = marked.filter((row) => row.isCorrect === true).length;
+  return `${correct} / ${marked.length} marked`;
+}
+
+export function diagnosticPercentageLabel(
+  responses: readonly DiagnosticResponseRecord[],
+  expectedQuestionCount?: number,
+): string {
+  if (!expectedQuestionCount || expectedQuestionCount <= 0) return UNAVAILABLE_RESULT;
+  const marked = responses.filter((row) => row.isCorrect !== null);
+  if (marked.length !== expectedQuestionCount) return UNAVAILABLE_RESULT;
+  if (marked.some((row) => row.isCorrect === null)) return UNAVAILABLE_RESULT;
+  const correct = marked.filter((row) => row.isCorrect === true).length;
+  return `${((correct / expectedQuestionCount) * 100).toFixed(0)}%`;
+}
+
+export function questionCatalogue(
+  responses: readonly DiagnosticResponseRecord[],
+): readonly { activityId: string; questionKey: string }[] {
+  const seen = new Map<string, { activityId: string; questionKey: string }>();
+  for (const row of responses) {
+    const key = `${row.activityId}::${row.questionKey}`;
+    if (!seen.has(key)) seen.set(key, { activityId: row.activityId, questionKey: row.questionKey });
+  }
+  return [...seen.values()];
+}
+
+export function unansweredQuestions(
+  sessionResponses: readonly DiagnosticResponseRecord[],
+  catalogue: readonly { activityId: string; questionKey: string }[],
+): readonly { activityId: string; questionKey: string }[] {
+  const answered = new Set(sessionResponses.map((row) => `${row.activityId}::${row.questionKey}`));
+  return catalogue.filter((item) => !answered.has(`${item.activityId}::${item.questionKey}`));
+}
+
+export function diagnosticVersions(
+  sessions: readonly DiagnosticSessionRecord[],
+): readonly string[] {
+  return [...new Set(sessions.map((session) => diagnosticVersionLabel(session)).filter((value) => value !== UNAVAILABLE_RESULT))].sort();
 }
 
 export function responsesForSession(

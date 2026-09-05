@@ -76,6 +76,9 @@ export interface AssignmentsResultsData {
   attempts: readonly AttemptRecord[];
   responses: readonly ResponseRecord[];
   activityPerformance: readonly ActivityPerformanceRecord[];
+  diagnosticSessions: readonly DiagnosticSessionRecord[];
+  diagnosticResponses: readonly DiagnosticResponseRecord[];
+  diagnosticSummary: readonly DiagnosticSummaryRecord[];
 }
 
 export interface AnalyticsData {
@@ -245,9 +248,9 @@ export function mergeModuleCacheToSnapshot(
     questionGroupPerformance: analytics?.questionGroupPerformance ?? [],
     topicPerformance: analytics?.topicPerformance ?? [],
     skillPerformance: analytics?.skillPerformance ?? [],
-    diagnosticSessions: analytics?.diagnosticSessions ?? [],
-    diagnosticResponses: analytics?.diagnosticResponses ?? [],
-    diagnosticSummary: analytics?.diagnosticSummary ?? [],
+    diagnosticSessions: assignments?.diagnosticSessions ?? analytics?.diagnosticSessions ?? [],
+    diagnosticResponses: assignments?.diagnosticResponses ?? analytics?.diagnosticResponses ?? [],
+    diagnosticSummary: assignments?.diagnosticSummary ?? analytics?.diagnosticSummary ?? [],
     auditEvents: system?.auditEvents ?? hubs?.auditEvents ?? [],
     curriculumPublications: hubs?.curriculumPublications ?? [],
     curriculumDrafts: hubs?.curriculumDrafts ?? [],
@@ -304,6 +307,9 @@ export function sliceDemoModuleData(
         attempts: snapshot.attempts,
         responses: snapshot.responses,
         activityPerformance: snapshot.activityPerformance,
+        diagnosticSessions: snapshot.diagnosticSessions,
+        diagnosticResponses: snapshot.diagnosticResponses,
+        diagnosticSummary: snapshot.diagnosticSummary,
       };
     case "analytics":
       return {

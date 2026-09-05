@@ -98,14 +98,36 @@ export async function loadAssignmentsResultsData(
     "attempts",
     "responses",
     "activityPerformance",
+    "diagnosticSessions",
+    "diagnosticResponses",
+    "diagnosticSummary",
   ]);
-  const [assignments, attempts, responses, activityPerformance] = await Promise.all([
+  const [
+    assignments,
+    attempts,
+    responses,
+    activityPerformance,
+    diagnosticSessions,
+    diagnosticResponses,
+    diagnosticSummary,
+  ] = await Promise.all([
     service.listAssignments(),
     service.listAttempts(),
     service.listResponses(),
     service.listActivityPerformance(),
+    service.listDiagnosticSessions(),
+    service.listDiagnosticResponses(),
+    service.listDiagnosticSummary(),
   ]);
-  return Object.freeze({ assignments, attempts, responses, activityPerformance });
+  return Object.freeze({
+    assignments,
+    attempts,
+    responses,
+    activityPerformance,
+    diagnosticSessions,
+    diagnosticResponses,
+    diagnosticSummary,
+  });
 }
 
 export async function loadAnalyticsData(service: AdminReadService): Promise<AnalyticsData> {

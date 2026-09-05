@@ -17,7 +17,7 @@ import { DEMO_ADMIN_DATA } from "../src/services/demo-admin-service.ts";
 
 const root = new URL("../", import.meta.url);
 
-test("Readiness Diagnostic is an Analytics pane, not a new top-level module", async () => {
+test("Readiness Diagnostic is not a new top-level module", async () => {
   assert.ok("readiness-diagnostic" in PANE_FILTERS);
   assert.equal(PANE_FILTERS["readiness-diagnostic"].size, 0);
   const [analytics, modules] = await Promise.all([
@@ -133,5 +133,6 @@ test("empty and error states are staff-facing", async () => {
   const source = await readFile(new URL("src/views/readiness-diagnostic.tsx", root), "utf8");
   assert.match(source, /No diagnostic sessions yet/);
   assert.match(source, /Readiness Diagnostic could not be loaded/);
+  assert.match(source, /Loading diagnostic sittings/);
   assert.match(source, /error/);
 });

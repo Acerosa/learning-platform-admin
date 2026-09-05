@@ -158,7 +158,7 @@ test("assignments module loads its own datasets", async () => {
   await loadAssignmentsResultsData(service);
   assert.deepEqual(
     service.calls.sort(),
-    ["listActivityPerformance", "listAssignments", "listAttempts", "listResponses"].sort(),
+    ["listActivityPerformance", "listAssignments", "listAttempts", "listDiagnosticResponses", "listDiagnosticSessions", "listDiagnosticSummary", "listResponses"].sort(),
   );
 });
 
