@@ -1163,7 +1163,7 @@ export function createSupabaseAdminReadService(
     async listDiagnosticSessions() {
       const data = await pagedRows(
         "diagnostic_sessions",
-        "session_id,student_name,student_id,hub_code,hub_name,course_key,course_title,diagnostic_key,diagnostic_version,status,started_at,completed_at,response_count,not_sure_count",
+        "session_id,student_name,student_id,hub_code,hub_name,course_key,course_title,diagnostic_key,diagnostic_version,status,started_at,completed_at,response_count,not_sure_count,awarded_score,max_score,score_percentage",
         { column: "started_at", ascending: false },
       );
       return data.map((row): DiagnosticSessionRecord => ({
@@ -1181,13 +1181,16 @@ export function createSupabaseAdminReadService(
         completedAt: nullableText(row.completed_at),
         responseCount: numberValue(row.response_count),
         notSureCount: numberValue(row.not_sure_count),
+        awardedScore: nullableNumber(row.awarded_score),
+        maxScore: nullableNumber(row.max_score),
+        scorePercentage: nullableNumber(row.score_percentage),
       }));
     },
 
     async listDiagnosticResponses() {
       const data = await pagedRows(
         "diagnostic_responses",
-        "response_id,session_id,student_name,student_id,hub_code,course_key,activity_id,unit_key,topic_key,question_key,evidence,is_not_sure,confidence,is_correct,created_at,updated_at",
+        "response_id,session_id,student_name,student_id,hub_code,course_key,activity_id,unit_key,topic_key,question_key,evidence,is_not_sure,confidence,is_correct,awarded_score,max_score,created_at,updated_at",
         { column: "created_at" },
       );
       return data.map((row): DiagnosticResponseRecord => ({
@@ -1205,6 +1208,8 @@ export function createSupabaseAdminReadService(
         isNotSure: booleanValue(row.is_not_sure),
         confidence: nullableText(row.confidence),
         isCorrect: nullableBoolean(row.is_correct),
+        awardedScore: nullableNumber(row.awarded_score),
+        maxScore: nullableNumber(row.max_score),
         createdAt: textValue(row.created_at),
         updatedAt: textValue(row.updated_at),
       }));

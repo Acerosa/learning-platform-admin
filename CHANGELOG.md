@@ -7,6 +7,11 @@ here.
 
 ### Added
 
+- Results → Induction / Readiness now shows the server-authoritative diagnostic
+  score as `awarded / maximum (percentage)` when those fields exist, plus a
+  unit-area breakdown from stored `unit_key` metadata. Unmarked or historical
+  sittings stay —. The browser does not calculate the official score.
+
 - Results → Induction / Readiness: staff can inspect readiness diagnostic
   sittings from Assignments & Results. The Results area is a hub/source shell
   so later hubs can attach without a second results architecture. Score stays

@@ -177,26 +177,106 @@ export function lastActivityAt(session: DiagnosticSessionRecord): string {
   return session.completedAt || session.startedAt;
 }
 
+export interface DiagnosticUnitScore {
+  unitKey: string;
+  unitLabel: string;
+  awardedScore: number;
+  maxScore: number;
+  percentage: number | null;
+}
+
+export function formatScoreNumber(value: number): string {
+  if (!Number.isFinite(value)) return UNAVAILABLE_RESULT;
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+}
+
+export function formatDiagnosticPercentage(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return UNAVAILABLE_RESULT;
+  const label = Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
+  return `${label}%`;
+}
+
+export function formatDiagnosticScore(input: {
+  awardedScore: number | null | undefined;
+  maxScore: number | null | undefined;
+  scorePercentage?: number | null;
+}): string {
+  if (input.awardedScore == null || input.maxScore == null || input.maxScore <= 0) {
+    return UNAVAILABLE_RESULT;
+  }
+  const raw = `${formatScoreNumber(input.awardedScore)} / ${formatScoreNumber(input.maxScore)}`;
+  if (input.scorePercentage == null || !Number.isFinite(input.scorePercentage)) return raw;
+  return `${raw} (${formatDiagnosticPercentage(input.scorePercentage).replace("%", "")}%)`;
+}
+
+export function diagnosticSessionScoreLabel(session: DiagnosticSessionRecord): string {
+  return formatDiagnosticScore({
+    awardedScore: session.awardedScore,
+    maxScore: session.maxScore,
+    scorePercentage: session.status === "completed" ? session.scorePercentage : null,
+  });
+}
+
 export function diagnosticScoreLabel(
   responses: readonly DiagnosticResponseRecord[],
+  session?: DiagnosticSessionRecord | null,
 ): string {
-  if (!hasAuthoritativeCorrectness(responses)) return UNAVAILABLE_RESULT;
-  const marked = responses.filter((row) => row.isCorrect !== null);
-  if (!marked.length) return UNAVAILABLE_RESULT;
-  const correct = marked.filter((row) => row.isCorrect === true).length;
-  return `${correct} / ${marked.length} marked`;
+  if (session) return diagnosticSessionScoreLabel(session);
+  const scored = responses.filter((row) => row.awardedScore != null && (row.maxScore ?? 0) > 0);
+  if (!scored.length) return UNAVAILABLE_RESULT;
+  const awarded = scored.reduce((sum, row) => sum + (row.awardedScore ?? 0), 0);
+  const max = scored.reduce((sum, row) => sum + (row.maxScore ?? 0), 0);
+  return formatDiagnosticScore({ awardedScore: awarded, maxScore: max });
 }
 
 export function diagnosticPercentageLabel(
   responses: readonly DiagnosticResponseRecord[],
   expectedQuestionCount?: number,
+  session?: DiagnosticSessionRecord | null,
 ): string {
-  if (!expectedQuestionCount || expectedQuestionCount <= 0) return UNAVAILABLE_RESULT;
-  const marked = responses.filter((row) => row.isCorrect !== null);
-  if (marked.length !== expectedQuestionCount) return UNAVAILABLE_RESULT;
-  if (marked.some((row) => row.isCorrect === null)) return UNAVAILABLE_RESULT;
-  const correct = marked.filter((row) => row.isCorrect === true).length;
-  return `${((correct / expectedQuestionCount) * 100).toFixed(0)}%`;
+  if (session) {
+    if (session.status !== "completed" || session.maxScore == null || session.maxScore <= 0) {
+      return UNAVAILABLE_RESULT;
+    }
+    return formatDiagnosticPercentage(session.scorePercentage);
+  }
+  void expectedQuestionCount;
+  const scored = responses.filter((row) => row.awardedScore != null && (row.maxScore ?? 0) > 0);
+  if (!scored.length) return UNAVAILABLE_RESULT;
+  const awarded = scored.reduce((sum, row) => sum + (row.awardedScore ?? 0), 0);
+  const max = scored.reduce((sum, row) => sum + (row.maxScore ?? 0), 0);
+  if (max <= 0) return UNAVAILABLE_RESULT;
+  return formatDiagnosticPercentage(Number(((awarded / max) * 100).toFixed(1)));
+}
+
+export function diagnosticUnitScores(
+  responses: readonly DiagnosticResponseRecord[],
+): readonly DiagnosticUnitScore[] {
+  return groupResponsesByUnit(responses).flatMap((group) => {
+    const scored = group.responses.filter((row) => (row.maxScore ?? 0) > 0);
+    if (!scored.length) return [];
+    const awarded = scored.reduce((sum, row) => sum + (row.awardedScore ?? 0), 0);
+    const max = scored.reduce((sum, row) => sum + (row.maxScore ?? 0), 0);
+    return [{
+      unitKey: group.unitKey,
+      unitLabel: group.unitLabel,
+      awardedScore: awarded,
+      maxScore: max,
+      percentage: max > 0 ? Number(((awarded / max) * 100).toFixed(1)) : null,
+    }];
+  });
+}
+
+export function responseMarkLabel(response: DiagnosticResponseRecord): string {
+  if (response.isCorrect === true) return "Correct";
+  if (response.isCorrect === false) return "Not correct";
+  return "Unmarked";
+}
+
+export function responseAwardedLabel(response: DiagnosticResponseRecord): string {
+  if (response.awardedScore == null || response.maxScore == null) return UNAVAILABLE_RESULT;
+  if (response.maxScore <= 0) return UNAVAILABLE_RESULT;
+  return `${formatScoreNumber(response.awardedScore)} / ${formatScoreNumber(response.maxScore)}`;
 }
 
 export function questionCatalogue(

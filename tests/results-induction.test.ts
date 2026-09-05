@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   diagnosticPercentageLabel,
   diagnosticScoreLabel,
+  diagnosticSessionScoreLabel,
   filterDiagnosticSessions,
   lastActivityAt,
   unansweredQuestions,
@@ -72,7 +73,7 @@ test("date and version filters keep recent completed sittings visible", () => {
   const completed = filterDiagnosticSessions(DEMO_ADMIN_DATA.diagnosticSessions, {
     status: "completed",
     query: "",
-    version: "1.0.0",
+    version: "1.1.0",
     date: "all",
   });
   assert.equal(completed.length, 1);
@@ -86,14 +87,28 @@ test("date and version filters keep recent completed sittings visible", () => {
 });
 
 test("unavailable score and percentage render as em dash", () => {
-  const responses = DEMO_ADMIN_DATA.diagnosticResponses.filter(
-    (row) => row.sessionId === "diag-session-completed",
+  const started = DEMO_ADMIN_DATA.diagnosticSessions.find((row) => row.status === "started");
+  assert.ok(started);
+  assert.equal(diagnosticSessionScoreLabel(started!), "—");
+  assert.equal(diagnosticPercentageLabel([], 25, started), "—");
+  const historical = {
+    ...started!,
+    sessionId: "diag-session-historical",
+    diagnosticVersion: "1.0.0",
+    status: "completed" as const,
+    awardedScore: null,
+    maxScore: null,
+    scorePercentage: null,
+  };
+  assert.equal(diagnosticSessionScoreLabel(historical), "—");
+  const completed = DEMO_ADMIN_DATA.diagnosticSessions.find((row) => row.status === "completed");
+  assert.equal(diagnosticSessionScoreLabel(completed!), "18 / 24 (75%)");
+  assert.equal(diagnosticPercentageLabel([], 25, completed), "75%");
+  const unmarked = DEMO_ADMIN_DATA.diagnosticResponses.filter(
+    (row) => row.sessionId === "diag-session-started",
   );
-  assert.equal(diagnosticScoreLabel(responses), "—");
-  assert.equal(diagnosticPercentageLabel(responses, 25), "—");
-  const marked = responses.map((row, index) => (index === 0 ? { ...row, isCorrect: true } : row));
-  assert.equal(diagnosticPercentageLabel(marked, 25), "—");
-  assert.match(diagnosticScoreLabel(marked), /marked/);
+  assert.equal(diagnosticScoreLabel(unmarked), "—");
+  assert.equal(diagnosticPercentageLabel(unmarked, 25), "—");
 });
 
 test("in-progress sittings keep started status and last activity", () => {
