@@ -571,6 +571,9 @@ export interface DiagnosticSessionRecord {
   completedAt: string | null;
   responseCount: number;
   notSureCount: number;
+  awardedScore: number | null;
+  maxScore: number | null;
+  scorePercentage: number | null;
 }
 
 export interface DiagnosticResponseRecord {
@@ -588,6 +591,8 @@ export interface DiagnosticResponseRecord {
   isNotSure: boolean;
   confidence: string | null;
   isCorrect: boolean | null;
+  awardedScore: number | null;
+  maxScore: number | null;
   createdAt: string;
   updatedAt: string;
 }

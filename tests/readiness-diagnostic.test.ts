@@ -6,6 +6,7 @@ import {
   QUESTION_LABEL_GAP,
   READINESS_COURSE_KEY,
   diagnosticOverview,
+  diagnosticUnitScores,
   filterDiagnosticSessions,
   formatCompletionRate,
   groupResponsesByUnit,
@@ -81,6 +82,21 @@ test("incomplete filter hides completed sittings", () => {
   assert.equal(named[0]?.studentName, "Alex Rivera");
 });
 
+test("unit scores use authored unit keys without inventing categories", () => {
+  const completed = DEMO_ADMIN_DATA.diagnosticResponses.filter(
+    (row) => row.sessionId === "diag-session-completed",
+  );
+  const scores = diagnosticUnitScores(completed);
+  assert.deepEqual(scores.map((row) => row.unitKey), [
+    "global-information",
+    "fundamentals-of-it",
+    "cyber-security",
+  ]);
+  assert.equal(scores[2]?.awardedScore, 1);
+  assert.equal(scores[2]?.maxScore, 1);
+  assert.doesNotMatch(scores.map((row) => row.unitLabel).join(" "), /Programming|Networks|Data/);
+});
+
 test("session responses group by stable unit_key", () => {
   const grouped = groupResponsesByUnit(DEMO_ADMIN_DATA.diagnosticResponses.filter(
     (row) => row.sessionId === "diag-session-completed",
@@ -103,15 +119,20 @@ test("session detail source shows grouped evidence, Not sure and confidence", as
   assert.match(source, /showCorrectness/);
 });
 
-test("null is_correct does not produce a fake score or marked column", async () => {
-  assert.equal(hasAuthoritativeCorrectness(DEMO_ADMIN_DATA.diagnosticResponses), false);
+test("null is_correct does not invent Ready/Developing labels", async () => {
   const source = await readFile(new URL("src/views/readiness-diagnostic.tsx", root), "utf8");
   assert.match(source, /showCorrectness \? <th scope="col">Marked<\/th>/);
-  assert.doesNotMatch(source, /average readiness|readiness %|pass\/fail/i);
+  assert.match(source, /Awarded/);
+  assert.match(source, /diagnosticUnitScores/);
+  assert.doesNotMatch(source, /average readiness|readiness %|pass\/fail|At risk/i);
 });
 
 test("authoritative correctness is shown only when a value is present", () => {
-  const withMark = DEMO_ADMIN_DATA.diagnosticResponses.map((row, index) => (
+  const started = DEMO_ADMIN_DATA.diagnosticResponses.filter(
+    (row) => row.sessionId === "diag-session-started",
+  );
+  assert.equal(hasAuthoritativeCorrectness(started), false);
+  const withMark = started.map((row, index) => (
     index === 0 ? { ...row, isCorrect: true } : row
   ));
   assert.equal(hasAuthoritativeCorrectness(withMark), true);

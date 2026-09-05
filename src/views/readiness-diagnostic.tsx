@@ -11,10 +11,10 @@ import {
   QUESTION_LABEL_GAP,
   READINESS_DIAGNOSTIC_NAME,
   UNAVAILABLE_RESULT,
-  correctnessLabel,
   diagnosticOverview,
   diagnosticPercentageLabel,
-  diagnosticScoreLabel,
+  diagnosticSessionScoreLabel,
+  diagnosticUnitScores,
   diagnosticVersionLabel,
   diagnosticVersions,
   filterDiagnosticSessions,
@@ -27,6 +27,8 @@ import {
   questionCatalogue,
   questionDistributions,
   recentDiagnosticSessions,
+  responseAwardedLabel,
+  responseMarkLabel,
   responsesForSession,
   sortDiagnosticSessionsByRecent,
   unansweredQuestions,
@@ -113,12 +115,16 @@ export function ReadinessDiagnosticPage({
   const selected = sessions.find((row) => row.sessionId === selectedSessionId) ?? null;
   const selectedResponses = selected ? responsesForSession(responses, selected.sessionId) : [];
   const grouped = groupResponsesByUnit(selectedResponses);
-  const showCorrectness = hasAuthoritativeCorrectness(selectedResponses);
+  const unitScores = diagnosticUnitScores(selectedResponses);
+  const showCorrectness = hasAuthoritativeCorrectness(selectedResponses)
+    || selectedResponses.some((row) => row.awardedScore != null);
   const distributions = useMemo(() => questionDistributions(responses), [responses]);
   const catalogue = useMemo(() => questionCatalogue(responses), [responses]);
   const missing = selected ? unansweredQuestions(selectedResponses, catalogue) : [];
-  const score = diagnosticScoreLabel(selectedResponses);
-  const percentage = diagnosticPercentageLabel(selectedResponses, expectedQuestionCount);
+  const score = selected ? diagnosticSessionScoreLabel(selected) : UNAVAILABLE_RESULT;
+  const percentage = selected
+    ? diagnosticPercentageLabel(selectedResponses, expectedQuestionCount, selected)
+    : UNAVAILABLE_RESULT;
   const eyebrow = variant === "results" ? "Results → Induction / Readiness" : "Readiness Diagnostic";
 
   if (error) {
@@ -290,7 +296,6 @@ export function ReadinessDiagnosticPage({
               </thead>
               <tbody>
                 {filteredSessions.map((session) => {
-                  const sessionResponses = responsesForSession(responses, session.sessionId);
                   return (
                     <tr key={session.sessionId} data-session-id={session.sessionId}>
                       <th scope="row"><code>{session.studentId}</code></th>
@@ -310,7 +315,7 @@ export function ReadinessDiagnosticPage({
                       <td>{formatDateTime(session.completedAt)}</td>
                       <td>{session.responseCount}</td>
                       <td>{expectedQuestionCount}</td>
-                      <td>{diagnosticScoreLabel(sessionResponses)}</td>
+                      <td>{diagnosticSessionScoreLabel(session)}</td>
                       <td>{formatDateTime(lastActivityAt(session))}</td>
                       <td>
                         <button
@@ -344,17 +349,18 @@ export function ReadinessDiagnosticPage({
               <p className="eyebrow">Session detail</p>
               <h2>{selected.studentName}</h2>
               <p>
-                Student ID <code>{selected.studentId}</code> · learner-entered identifier ·{" "}
-                {formatDiagnosticStatus(selected.status)} · version {diagnosticVersionLabel(selected)}
-              </p>
-              <p>
-                Started {formatDateTime(selected.startedAt)}. Completed {formatDateTime(selected.completedAt)}.
-                Last activity {formatDateTime(lastActivityAt(selected))}.
-              </p>
-              <p>
-                Result {score}. Percentage {percentage}. Group {UNAVAILABLE_RESULT}.
-                Answered {selected.responseCount} of {expectedQuestionCount}.
-              </p>
+              Student ID <code>{selected.studentId}</code> · learner-entered identifier ·{" "}
+              {formatDiagnosticStatus(selected.status)} · version {diagnosticVersionLabel(selected)}
+            </p>
+            <p>
+              Started {formatDateTime(selected.startedAt)}. Completed {formatDateTime(selected.completedAt)}.
+              Last activity {formatDateTime(lastActivityAt(selected))}.
+            </p>
+            <p>
+              Result {score}. Percentage {percentage}. Group {UNAVAILABLE_RESULT}.
+              Answered {selected.responseCount} of {expectedQuestionCount}.
+              Maximum marks {selected.maxScore ?? UNAVAILABLE_RESULT}.
+            </p>
             </div>
             <button
               type="button"
@@ -372,6 +378,30 @@ export function ReadinessDiagnosticPage({
           ) : (
             <p>Unanswered questions: none against the responses stored for this diagnostic.</p>
           )}
+          {unitScores.length ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Area</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">Maximum</th>
+                    <th scope="col">Percentage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unitScores.map((row) => (
+                    <tr key={row.unitKey}>
+                      <th scope="row">{row.unitLabel}</th>
+                      <td>{row.awardedScore}</td>
+                      <td>{row.maxScore}</td>
+                      <td>{row.percentage == null ? UNAVAILABLE_RESULT : `${row.percentage}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
           {grouped.length ? grouped.map((group) => (
             <section key={group.unitKey} aria-label={group.unitLabel}>
               <h3>{group.unitLabel}</h3>
@@ -384,6 +414,7 @@ export function ReadinessDiagnosticPage({
                       <th scope="col">Not sure</th>
                       <th scope="col">Confidence</th>
                       {showCorrectness ? <th scope="col">Marked</th> : null}
+                      {showCorrectness ? <th scope="col">Awarded</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -397,7 +428,10 @@ export function ReadinessDiagnosticPage({
                         <td>{response.isNotSure ? "Not sure" : UNAVAILABLE_RESULT}</td>
                         <td>{response.confidence ?? UNAVAILABLE_RESULT}</td>
                         {showCorrectness ? (
-                          <td>{correctnessLabel(response.isCorrect) ?? "Not marked"}</td>
+                          <td>{responseMarkLabel(response)}</td>
+                        ) : null}
+                        {showCorrectness ? (
+                          <td>{responseAwardedLabel(response)}</td>
                         ) : null}
                       </tr>
                     ))}
