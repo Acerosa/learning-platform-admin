@@ -883,7 +883,8 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
           <h1>{currentModule.label}</h1>
           <p>
             Staff assessment analytics from authoritative attempts, responses and curriculum
-            metadata. Detailed evidence remains in Results.
+            metadata. Detailed evidence remains in Results. Induction diagnostic sittings
+            are also under Assignments & Results → Results → Induction / Readiness.
           </p>
         </div>
       </header>
@@ -1338,6 +1339,7 @@ export function AnalyticsPage({ data }: { data: AdminDataSnapshot }) {
           sessions={data.diagnosticSessions}
           responses={data.diagnosticResponses}
           summaries={data.diagnosticSummary}
+          variant="analytics"
         />
       ) : null}
 

@@ -564,6 +564,8 @@ export interface DiagnosticSessionRecord {
   hubName: string;
   courseKey: string;
   courseTitle: string;
+  diagnosticKey: string | null;
+  diagnosticVersion: string | null;
   status: DiagnosticSessionStatus;
   startedAt: string;
   completedAt: string | null;

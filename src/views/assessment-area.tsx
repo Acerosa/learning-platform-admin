@@ -5,7 +5,8 @@ import type { AdminDataSnapshot } from "../api/admin-api";
 import type { PendingAction } from "../components/pending-action-dialog";
 import { getAdminModule } from "../router/modules";
 import type { AssessmentTab } from "../router/legacy-routes";
-import { AssignmentsPanel, ResultsPanel } from "./admin-assessment-panels";
+import { AssignmentsPanel } from "./admin-assessment-panels";
+import { ResultsArea } from "./results-area";
 
 function AreaTabs<T extends string>({
   label,
@@ -53,7 +54,7 @@ export function AssessmentArea({
   initialTab?: AssessmentTab;
   openPending: (action: PendingAction) => void;
   legacyHeading?: string;
-  onReviewResponse: Parameters<typeof ResultsPanel>[0]["onReviewResponse"];
+  onReviewResponse: Parameters<typeof ResultsArea>[0]["onReviewResponse"];
   includeAttempts?: boolean;
 }) {
   const [tab, setTab] = useState<AssessmentTab>(initialTab);
@@ -72,7 +73,7 @@ export function AssessmentArea({
       <div role="tabpanel">
         {tab === "assignments" ? <AssignmentsPanel data={data} openPending={openPending} /> : null}
         {tab === "results" ? (
-          <ResultsPanel
+          <ResultsArea
             data={data}
             onReviewResponse={onReviewResponse}
             includeAttempts={includeAttempts}

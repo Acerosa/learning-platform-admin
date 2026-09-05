@@ -1163,7 +1163,7 @@ export function createSupabaseAdminReadService(
     async listDiagnosticSessions() {
       const data = await pagedRows(
         "diagnostic_sessions",
-        "session_id,student_name,student_id,hub_code,hub_name,course_key,course_title,status,started_at,completed_at,response_count,not_sure_count",
+        "session_id,student_name,student_id,hub_code,hub_name,course_key,course_title,diagnostic_key,diagnostic_version,status,started_at,completed_at,response_count,not_sure_count",
         { column: "started_at", ascending: false },
       );
       return data.map((row): DiagnosticSessionRecord => ({
@@ -1174,6 +1174,8 @@ export function createSupabaseAdminReadService(
         hubName: textValue(row.hub_name),
         courseKey: textValue(row.course_key),
         courseTitle: textValue(row.course_title),
+        diagnosticKey: nullableText(row.diagnostic_key),
+        diagnosticVersion: nullableText(row.diagnostic_version),
         status: textValue(row.status) as DiagnosticSessionRecord["status"],
         startedAt: textValue(row.started_at),
         completedAt: nullableText(row.completed_at),
