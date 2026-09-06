@@ -12,6 +12,7 @@ import {
   isModuleReady,
   shouldAutoLoadModule,
   shouldBeginModuleLoad,
+  shouldRenderModuleChildren,
 } from "../src/stores/admin-module-loader.ts";
 import {
   shouldBootstrapAdminData,
@@ -231,6 +232,22 @@ test("shouldBeginModuleLoad encodes the module state machine", () => {
     shouldBeginModuleLoad({ ...idle, status: "error", error: "failed" }, true),
     true,
   );
+});
+
+test("idle and loading hub modules do not render empty registry children", () => {
+  assert.equal(shouldRenderModuleChildren("idle"), false);
+  assert.equal(shouldRenderModuleChildren("loading"), false);
+  assert.equal(shouldRenderModuleChildren("error"), false);
+  assert.equal(shouldRenderModuleChildren("ready"), true);
+  assert.equal(shouldRenderModuleChildren("refreshing"), true);
+});
+
+test("sign-in ready portal auto-loads idle hub modules", () => {
+  assert.equal(shouldAutoLoadModule("ready", "idle"), true);
+  assert.equal(shouldAutoLoadModule("ready", "loading"), false);
+  assert.equal(shouldAutoLoadModule("ready", "ready"), false);
+  assert.equal(shouldAutoLoadModule("loading", "idle"), false);
+  assert.equal(shouldAutoLoadModule("signed-out", "idle"), false);
 });
 
 test("formatModuleLoadError preserves safe AdminReadError diagnostics", () => {

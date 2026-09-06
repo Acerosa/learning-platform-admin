@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { AdminModuleDataKey } from "../api/admin-module-data";
 import { moduleLoadingLabel } from "../api/admin-module-data";
+import { shouldRenderModuleChildren } from "../stores/admin-module-loader";
 import { useAdminModuleData } from "../stores/use-admin-module-data";
 
 function ModuleLoadingState({ label }: { label: string }) {
@@ -43,10 +44,6 @@ export function ModuleDataShell({
 }) {
   const moduleState = useAdminModuleData(moduleKey);
 
-  if (moduleState.status === "loading") {
-    return <ModuleLoadingState label={moduleLoadingLabel(moduleKey)} />;
-  }
-
   if (moduleState.status === "error") {
     return (
       <ModuleErrorState
@@ -55,6 +52,10 @@ export function ModuleDataShell({
         onRetry={() => void moduleState.refresh()}
       />
     );
+  }
+
+  if (!shouldRenderModuleChildren(moduleState.status)) {
+    return <ModuleLoadingState label={moduleLoadingLabel(moduleKey)} />;
   }
 
   return <>{children}</>;
