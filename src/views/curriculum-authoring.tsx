@@ -13,6 +13,7 @@ import { PreviewPane } from "../components/authoring/preview-pane";
 import { PublicationPanel } from "../components/authoring/publication-panel";
 import { ReviewPanel } from "../components/authoring/review-panel";
 import { SessionForm } from "../components/authoring/session-form";
+import { WeekSessionVisibilityPanel } from "../components/authoring/week-session-visibility";
 import { VersionsPanel } from "../components/authoring/versions-panel";
 import { WeekForm } from "../components/authoring/week-form";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
@@ -69,11 +70,19 @@ import {
   weekVisibilityOptionLabel,
 } from "../content/week-availability";
 import {
+  postSessionAndPublishConfirm,
+  removeSessionAndPublishConfirm,
+  sessionContentStatus,
+  sessionsForWeek,
+} from "../content/session-availability";
+import {
   canRunWeekVisibilityPublish,
+  prepareSessionVisibilityPublish,
   prepareWeekVisibilityPublish,
   recoverFromFailedWeekVisibilityPublish,
   weekVisibilityPlatformPublishFailureMessage,
   weekVisibilityPublishSuccessMessage,
+  type VisibilityEntityType,
   type WeekVisibilityAction,
 } from "../content/week-visibility-publish";
 import {
@@ -352,6 +361,10 @@ export function CurriculumAuthoringPage({
     [pkg.weeks],
   );
   const selectedVisibilityWeek = orderedWeeks.find((week) => week.id === visibilityWeekId) || orderedWeeks[0] || null;
+  const selectedWeekSessions = useMemo(
+    () => sessionsForWeek(pkg, selectedVisibilityWeek),
+    [pkg, selectedVisibilityWeek],
+  );
   const previewRecord = drafts.find((item) => item.id === previewId) || draft;
   const selectedActivity = previewRecord.package.activities.find((item) => item.id === selectedActivityId)
     || previewRecord.package.activities[0]
@@ -508,16 +521,17 @@ export function CurriculumAuthoringPage({
     }
   }
 
-  async function publishWeekVisibility(action: WeekVisibilityAction) {
-    if (!selectedVisibilityWeek || !onPublishToPlatform) {
-      setMessage("Post week & publish requires a live administrator session.");
+  async function publishVisibilityChange(
+    entityType: VisibilityEntityType,
+    entityId: string,
+    action: WeekVisibilityAction,
+  ) {
+    if (!onPublishToPlatform) {
+      setMessage(entityType === "session"
+        ? "Post session & publish requires a live administrator session."
+        : "Post week & publish requires a live administrator session.");
       return;
     }
-    const weekTitle = String(selectedVisibilityWeek.metadata.title || selectedVisibilityWeek.id);
-    const confirmed = action === "post"
-      ? window.confirm(postWeekAndPublishConfirm(weekTitle))
-      : window.confirm(removeWeekAndPublishConfirm(weekTitle));
-    if (!confirmed) return;
 
     setVisibilityPublishBusy(true);
     try {
@@ -531,21 +545,30 @@ export function CurriculumAuthoringPage({
         hostedPublicationVersion = hosted.packageVersion;
       }
 
-      const prepared = prepareWeekVisibilityPublish(
-        compareRecords,
-        draft,
-        selectedVisibilityWeek.id,
-        action,
-        actor,
-        { hostedPublicationVersion },
-      );
+      const prepared = entityType === "session"
+        ? prepareSessionVisibilityPublish(
+          compareRecords,
+          draft,
+          entityId,
+          action,
+          actor,
+          { hostedPublicationVersion },
+        )
+        : prepareWeekVisibilityPublish(
+          compareRecords,
+          draft,
+          entityId,
+          action,
+          actor,
+          { hostedPublicationVersion },
+        );
       let nextRecords = prepared.records;
       noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
       setDraft(prepared.published);
       setPreviewId(prepared.published.id);
       setPublishVersionValue(suggestNextVersionForDraft(nextRecords, prepared.published));
-      setVisibilityWeekId(prepared.weekId);
+      if (prepared.weekId) setVisibilityWeekId(prepared.weekId);
       setMessage("Publishing to the platform…");
 
       const publishing = withPlatformPublication(prepared.published, { platformPublicationState: "publishing" });
@@ -567,9 +590,9 @@ export function CurriculumAuthoringPage({
         setDrafts(nextRecords);
         setDraft(done);
         setMessage(
-          result.idempotent
-            ? `This snapshot is already the active platform publication. ${weekVisibilityPublishSuccessMessage(prepared)}`
-            : weekVisibilityPublishSuccessMessage(prepared),
+          prepared.entityType === "session" || !result.idempotent
+            ? weekVisibilityPublishSuccessMessage(prepared)
+            : `This snapshot is already the active platform publication. ${weekVisibilityPublishSuccessMessage(prepared)}`,
         );
       } catch (error) {
         const failed = withPlatformPublication(publishing, {
@@ -585,13 +608,44 @@ export function CurriculumAuthoringPage({
         setDraft(recovered.draft);
         setPreviewId(recovered.draft.id);
         showError(error);
-        setMessage(weekVisibilityPlatformPublishFailureMessage(action));
+        setMessage(weekVisibilityPlatformPublishFailureMessage(action, entityType));
       }
     } catch (error) {
       showError(error);
     } finally {
       setVisibilityPublishBusy(false);
     }
+  }
+
+  async function publishWeekVisibility(action: WeekVisibilityAction) {
+    if (!selectedVisibilityWeek || !onPublishToPlatform) {
+      setMessage("Post week & publish requires a live administrator session.");
+      return;
+    }
+    const weekTitle = String(selectedVisibilityWeek.metadata.title || selectedVisibilityWeek.id);
+    const confirmed = action === "post"
+      ? window.confirm(postWeekAndPublishConfirm(weekTitle))
+      : window.confirm(removeWeekAndPublishConfirm(weekTitle));
+    if (!confirmed) return;
+    await publishVisibilityChange("week", selectedVisibilityWeek.id, action);
+  }
+
+  async function publishSessionVisibility(sessionId: string, action: WeekVisibilityAction) {
+    if (!onPublishToPlatform) {
+      setMessage("Post session & publish requires a live administrator session.");
+      return;
+    }
+    const session = pkg.sessions.find((item) => item.id === sessionId);
+    if (!session) {
+      setMessage("Session not found.");
+      return;
+    }
+    const sessionTitle = String(session.metadata.title || session.id);
+    const confirmed = action === "post"
+      ? window.confirm(postSessionAndPublishConfirm(sessionTitle))
+      : window.confirm(removeSessionAndPublishConfirm(sessionTitle));
+    if (!confirmed) return;
+    await publishVisibilityChange("session", sessionId, action);
   }
 
   async function publishCurriculum() {
@@ -828,6 +882,7 @@ export function CurriculumAuthoringPage({
               <p className="field-hint">
                 Post week &amp; publish sets status to available and pushes a new platform version.
                 Remove week &amp; publish sets status to planned (keeps the week, sessions, and activities) and publishes.
+                Inside an available week, post or remove individual sessions the same way.
                 Requires a live administrator session.
               </p>
               <div className="toolbar week-visibility-toolbar">
@@ -917,6 +972,14 @@ export function CurriculumAuthoringPage({
                   </button>
                 </div>
               ) : <p>No weeks in this draft.</p>}
+              <WeekSessionVisibilityPanel
+                week={selectedVisibilityWeek}
+                sessions={selectedWeekSessions}
+                publishReady={visibilityPublishReady}
+                busy={visibilityPublishBusy}
+                onPost={(sessionId) => void publishSessionVisibility(sessionId, "post")}
+                onRemove={(sessionId) => void publishSessionVisibility(sessionId, "remove")}
+              />
               {orderedWeeks.length ? (
                 <ul className="authoring-list">
                   {orderedWeeks.map((week) => {
@@ -984,6 +1047,7 @@ export function CurriculumAuthoringPage({
                       <strong>{String(session.metadata.title)}</strong>
                       <code>{session.id}</code>
                       <span>{String(session.metadata.kind)}</span>
+                      <StatusBadge label={sessionContentStatus(session)} tone={weekStatusTone(sessionContentStatus(session))} />
                       <button className="button button--small button--secondary" type="button" onClick={() => setEditingSessionId(session.id)}>Edit</button>
                       <button className="button button--small button--secondary" type="button" onClick={() => downloadText(`${session.id}.json`, exportDocument(session))}>Export</button>
                     </li>

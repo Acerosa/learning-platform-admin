@@ -10,6 +10,15 @@ import { containsUnsafeMarkup, sanitizeImportedText, sanitizeObject } from "../s
 import { previewActivityHtml, previewWeekHtml, validateDocument, validatePackage } from "../src/content/validate.ts";
 import { getContentEngine } from "../src/content/engine.ts";
 import { canPostWeek, canRemoveWeek, postWeek, removeWeek, weekVisibilityOptionLabel, WEEK_VISIBILITY_PUBLISH_REMINDER } from "../src/content/week-availability.ts";
+import {
+  canPostSession,
+  canRemoveSession,
+  postSession,
+  POST_WEEK_BEFORE_SESSIONS,
+  removeSession,
+  sessionContentStatus,
+  sessionsForWeek,
+} from "../src/content/session-availability.ts";
 
 test("week session and activity factories emit canonical envelopes", () => {
   const week = createWeek({ id: "week-20", teachingWeek: 20, title: "Synthetic week", learningOutcomes: [] });
@@ -331,6 +340,105 @@ test("post week and remove week update package week status without deleting cont
   assert.equal(removed.activities.some((item) => item.id === "week-7-activity"), true);
   assert.equal(canPostWeek(removed.weeks[0]), true);
   assert.equal(canRemoveWeek(removed.weeks[0]), false);
-  assert.equal(WEEK_VISIBILITY_PUBLISH_REMINDER, "Use Post week & publish (or Remove week & publish) so learners see this.");
+  assert.equal(WEEK_VISIBILITY_PUBLISH_REMINDER, "Use Post week & publish, Remove week & publish, or the session buttons so learners see this.");
   assert.deepEqual([...getContentEngine().STATUSES], ["planned", "available", "archived"]);
+});
+
+test("post session and remove session update only the selected session status", () => {
+  const pkg = emptyPackage("authoring-hub", "Authoring hub", "ocr-level-3-it");
+  const week = createWeek({
+    id: "week-1",
+    teachingWeek: 1,
+    title: "Client Brief",
+    status: "available",
+    learningOutcomes: ["LO1"],
+    sessions: ["lesson-1", "lesson-2", "homework"],
+  });
+  const lesson1 = createSession({
+    id: "lesson-1",
+    title: "Annotating the client brief",
+    kind: "session",
+    weekId: "week-1",
+    activities: ["act-1"],
+    status: "available",
+  });
+  const lesson2 = createSession({
+    id: "lesson-2",
+    title: "Market, problems and risks",
+    kind: "session",
+    weekId: "week-1",
+    activities: ["act-2"],
+    status: "planned",
+  });
+  const homework = createSession({
+    id: "homework",
+    title: "Homework: one real digital product",
+    kind: "homework",
+    weekId: "week-1",
+    activities: ["act-3"],
+    status: "planned",
+  });
+  pkg.weeks.push(week);
+  pkg.sessions.push(lesson1, lesson2, homework);
+  pkg.activities.push(
+    createActivity({ id: "act-1", title: "A1" }),
+    createActivity({ id: "act-2", title: "A2" }),
+    createActivity({ id: "act-3", title: "A3" }),
+  );
+
+  const posted = postSession(pkg, "lesson-2");
+  assert.equal(sessionContentStatus(posted.sessions.find((item) => item.id === "lesson-1")!), "available");
+  assert.equal(sessionContentStatus(posted.sessions.find((item) => item.id === "lesson-2")!), "available");
+  assert.equal(sessionContentStatus(posted.sessions.find((item) => item.id === "homework")!), "planned");
+  assert.equal(posted.sessions.length, 3);
+  assert.equal(posted.activities.length, 3);
+  assert.deepEqual(posted.sessions.find((item) => item.id === "lesson-2")?.relationships.activities, ["act-2"]);
+
+  const removed = removeSession(posted, "lesson-2");
+  assert.equal(sessionContentStatus(removed.sessions.find((item) => item.id === "lesson-2")!), "planned");
+  assert.equal(removed.sessions.some((item) => item.id === "lesson-2"), true);
+  assert.equal(removed.activities.some((item) => item.id === "act-2"), true);
+  assert.equal(canPostSession(removed.sessions.find((item) => item.id === "lesson-2")!, week), true);
+  assert.equal(canRemoveSession(removed.sessions.find((item) => item.id === "lesson-2")!), false);
+});
+
+test("session posting is blocked while the parent week is planned", () => {
+  const week = createWeek({
+    id: "week-1",
+    teachingWeek: 1,
+    title: "Planned week",
+    status: "planned",
+    sessions: ["lesson-1"],
+  });
+  const session = createSession({
+    id: "lesson-1",
+    title: "Lesson 1",
+    kind: "session",
+    weekId: "week-1",
+    status: "planned",
+  });
+  assert.equal(canPostSession(session, week), false);
+  assert.equal(POST_WEEK_BEFORE_SESSIONS, "Post the week before releasing individual sessions.");
+});
+
+test("sessionsForWeek keeps curriculum order and generic session kinds", () => {
+  const pkg = emptyPackage("authoring-hub", "Authoring hub", "ocr-level-3-it");
+  const week = createWeek({
+    id: "week-3",
+    teachingWeek: 3,
+    title: "Mixed sessions",
+    status: "available",
+    sessions: ["retrieval", "lesson", "homework", "study"],
+  });
+  pkg.weeks.push(week);
+  pkg.sessions.push(
+    createSession({ id: "homework", title: "Homework", kind: "homework", weekId: "week-3", sortOrder: 3 }),
+    createSession({ id: "lesson", title: "Lesson", kind: "session", weekId: "week-3", sortOrder: 2 }),
+    createSession({ id: "retrieval", title: "Retrieval", kind: "retrieval", weekId: "week-3", sortOrder: 1 }),
+    createSession({ id: "study", title: "Directed study", kind: "independent-study", weekId: "week-3", sortOrder: 4 }),
+  );
+  assert.deepEqual(
+    sessionsForWeek(pkg, week).map((session) => session.id),
+    ["retrieval", "lesson", "homework", "study"],
+  );
 });

@@ -101,6 +101,7 @@ export function createSession(input: {
   summary?: string;
   sortOrder?: number;
   defaultOpen?: boolean;
+  status?: string;
 }): ContentDocument {
   const engine = getContentEngine();
   return envelope(
@@ -109,6 +110,7 @@ export function createSession(input: {
     {
       title: input.title,
       kind: input.kind,
+      status: input.status || "planned",
       summary: input.summary || "",
       sortOrder: input.sortOrder ?? 0,
       defaultOpen: input.defaultOpen === true,

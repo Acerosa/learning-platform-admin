@@ -1,6 +1,6 @@
 import { canTransition, isImmutableStatus, LifecycleError } from "./lifecycle.ts";
 import { publicationGate } from "./publication-gate.ts";
-import type { AuthoringDraft, ValidationIssue } from "./types.ts";
+import type { AuthoringDraft, ContentDocument, ContentPackage, ValidationIssue } from "./types.ts";
 import {
   approveRecord,
   createWorkingCopy,
@@ -21,8 +21,21 @@ import {
   removeWeek,
   weekContentStatus,
 } from "./week-availability.ts";
+import {
+  canPostSession,
+  canRemoveSession,
+  parentWeekForSession,
+  POST_WEEK_BEFORE_SESSIONS,
+  postSession,
+  removeSession,
+  sessionContentStatus,
+  sessionPostSuccessMessage,
+  sessionRemoveSuccessMessage,
+} from "./session-availability.ts";
 
+export type VisibilityEntityType = "week" | "session";
 export type WeekVisibilityAction = "post" | "remove";
+export type VisibilityAction = WeekVisibilityAction;
 
 export class WeekVisibilityPublishError extends Error {
   readonly issues: readonly ValidationIssue[];
@@ -44,6 +57,15 @@ export type WeekVisibilityPublishResult = {
   status: "available" | "planned";
   hubCode: string;
   courseKey: string;
+  entityType?: VisibilityEntityType;
+  sessionId?: string;
+  sessionTitle?: string;
+};
+
+export type VisibilityPublishRequest = {
+  entityType: VisibilityEntityType;
+  entityId: string;
+  action: VisibilityAction;
 };
 
 /** Soft, non-blocking hint when T Level week ids may not overlay hub weeks week-1…week-22. */
@@ -55,14 +77,30 @@ export function weekVisibilityHubIdHint(hubCode: string, weekId: string, teachin
   return `Learner hub overlays match week-1…week-22 (e.g. week-${n}); this id is “${weekId}”.`;
 }
 
-/** Fast-forward Draft → Approved for the week-visibility shortcut (skips Review UI). */
+function visibilityNotes(entityType: VisibilityEntityType, action: VisibilityAction, entityId: string): string {
+  return entityType === "session"
+    ? `Session visibility: ${action} ${entityId}`
+    : `Week visibility: ${action} ${entityId}`;
+}
+
+/** Fast-forward Draft → Approved for the visibility shortcut (skips Review UI). */
 export function approveForWeekVisibilityPublish(
   record: AuthoringDraft,
   action: WeekVisibilityAction,
   weekId: string,
   actor: string,
 ): AuthoringDraft {
-  const notes = `Week visibility: ${action} ${weekId}`;
+  return approveForVisibilityPublish(record, "week", action, weekId, actor);
+}
+
+export function approveForVisibilityPublish(
+  record: AuthoringDraft,
+  entityType: VisibilityEntityType,
+  action: VisibilityAction,
+  entityId: string,
+  actor: string,
+): AuthoringDraft {
+  const notes = visibilityNotes(entityType, action, entityId);
   let next = record;
   if (next.status === "draft") {
     next = submitForReview(next);
@@ -81,7 +119,7 @@ export function approveForWeekVisibilityPublish(
   if (next.status === "approved") {
     return { ...next, approvalNotes: notes || next.approvalNotes };
   }
-  throw new LifecycleError("Week visibility publish requires a Draft (or review) record.");
+  throw new LifecycleError("Visibility publish requires a Draft (or review) record.");
 }
 
 function ensureEditableDraft(
@@ -103,27 +141,62 @@ function ensureEditableDraft(
     const returned = returnToDraft(draft);
     return { records: replaceRecord(records, returned), draft: returned };
   }
-  throw new LifecycleError("This record cannot be prepared for week visibility publish.");
+  throw new LifecycleError("This record cannot be prepared for visibility publish.");
 }
 
 export type WeekVisibilityPublishOptions = {
   hostedPublicationVersion?: string | null;
 };
 
+function applyWeekVisibility(
+  pkg: ContentPackage,
+  week: ContentDocument,
+  action: VisibilityAction,
+  alreadyAtTarget: boolean,
+): ContentPackage {
+  if (alreadyAtTarget) return pkg;
+  if (action === "post" && !canPostWeek(week)) {
+    throw new WeekVisibilityPublishError("This week is already available.");
+  }
+  if (action === "remove" && !canRemoveWeek(week)) {
+    throw new WeekVisibilityPublishError("This week is not available to remove.");
+  }
+  return action === "post" ? postWeek(pkg, week.id) : removeWeek(pkg, week.id);
+}
+
+function applySessionVisibility(
+  pkg: ContentPackage,
+  session: ContentDocument,
+  action: VisibilityAction,
+  alreadyAtTarget: boolean,
+): ContentPackage {
+  const parentWeek = parentWeekForSession(pkg, session);
+  if (action === "post" && (!parentWeek || weekContentStatus(parentWeek) !== "available")) {
+    throw new WeekVisibilityPublishError(POST_WEEK_BEFORE_SESSIONS);
+  }
+  if (alreadyAtTarget) return pkg;
+  if (action === "post" && !canPostSession(session, parentWeek)) {
+    throw new WeekVisibilityPublishError(POST_WEEK_BEFORE_SESSIONS);
+  }
+  if (action === "remove" && !canRemoveSession(session)) {
+    throw new WeekVisibilityPublishError("This session is not available to remove.");
+  }
+  return action === "post" ? postSession(pkg, session.id) : removeSession(pkg, session.id);
+}
+
 /**
- * Atomic local prepare: working copy (if needed) → Post/Remove → validate →
- * auto-approve → immutable publish. Does not call the platform RPC.
- * Persists nothing; caller should replace local records then Publish to Platform.
- * Review UI is not required — approveForWeekVisibilityPublish fast-forwards lifecycle.
+ * Atomic local prepare for week or session visibility: working copy (if needed)
+ * → Post/Remove → validate → auto-approve → immutable publish. Does not call
+ * the platform RPC. Review UI is not required.
  */
-export function prepareWeekVisibilityPublish(
+export function prepareVisibilityPublish(
   records: AuthoringDraft[],
   draft: AuthoringDraft,
-  weekId: string,
-  action: WeekVisibilityAction,
+  request: VisibilityPublishRequest,
   actor: string,
   options?: WeekVisibilityPublishOptions,
 ): WeekVisibilityPublishResult {
+  const { entityType, entityId, action } = request;
   if (draft.platformPublicationState === "publishing") {
     throw new WeekVisibilityPublishError("Platform publication is already in progress.");
   }
@@ -144,43 +217,44 @@ export function prepareWeekVisibilityPublish(
     }
   }
 
-  const week = working.package.weeks.find((item) => item.id === weekId);
-  if (!week) {
-    throw new WeekVisibilityPublishError(`Week not found: ${weekId}`);
-  }
-  const targetStatus = action === "post" ? "available" : "planned";
-  const alreadyAtTarget = weekContentStatus(week) === targetStatus;
+  const expected = action === "post" ? "available" : "planned";
+  let week: ContentDocument | undefined;
+  let session: ContentDocument | undefined;
+  let nextPackage: ContentPackage;
 
-  if (!alreadyAtTarget) {
-    if (action === "post" && !canPostWeek(week)) {
-      throw new WeekVisibilityPublishError("This week is already available.");
+  if (entityType === "week") {
+    week = working.package.weeks.find((item) => item.id === entityId);
+    if (!week) {
+      throw new WeekVisibilityPublishError(`Week not found: ${entityId}`);
     }
-    if (action === "remove" && !canRemoveWeek(week)) {
-      throw new WeekVisibilityPublishError("This week is not available to remove.");
+    const alreadyAtTarget = weekContentStatus(week) === expected;
+    nextPackage = applyWeekVisibility(working.package, week, action, alreadyAtTarget);
+  } else {
+    session = working.package.sessions.find((item) => item.id === entityId);
+    if (!session) {
+      throw new WeekVisibilityPublishError(`Session not found: ${entityId}`);
     }
+    const alreadyAtTarget = sessionContentStatus(session) === expected;
+    nextPackage = applySessionVisibility(working.package, session, action, alreadyAtTarget);
+    week = parentWeekForSession(nextPackage, session) || undefined;
   }
 
-  const nextPackage = alreadyAtTarget
-    ? working.package
-    : action === "post"
-      ? postWeek(working.package, weekId)
-      : removeWeek(working.package, weekId);
   working = touchDraft(working, nextPackage);
   workingRecords = replaceRecord(workingRecords, working);
 
   const gate = publicationGate(working.package, working.sourcePackageVersion);
   if (!gate.ok) {
     throw new WeekVisibilityPublishError(
-      "Week visibility publish requires validation success and supported schema and package versions.",
+      "Visibility publish requires validation success and supported schema and package versions.",
       gate.issues,
     );
   }
 
-  const approved = approveForWeekVisibilityPublish(working, action, weekId, actor);
+  const approved = approveForVisibilityPublish(working, entityType, action, entityId, actor);
   workingRecords = replaceRecord(workingRecords, approved);
 
   const version = suggestNextVersion(workingRecords, approved.hubId, approved.courseKey, versionContext);
-  const notes = `Week visibility: ${action} ${weekId}`;
+  const notes = visibilityNotes(entityType, action, entityId);
   const nextRecords = publishVersion(workingRecords, approved, {
     version,
     publishedBy: actor,
@@ -191,29 +265,99 @@ export function prepareWeekVisibilityPublish(
     throw new WeekVisibilityPublishError("Local immutable publish did not produce a published snapshot.");
   }
 
-  const publishedWeek = published.package.weeks.find((item) => item.id === weekId);
-  if (!publishedWeek) {
-    throw new WeekVisibilityPublishError(`Week missing after publish: ${weekId}`);
-  }
-  const expected = action === "post" ? "available" : "planned";
-  if (weekContentStatus(publishedWeek) !== expected) {
-    throw new WeekVisibilityPublishError(`Week status after publish is ${weekContentStatus(publishedWeek)}, expected ${expected}.`);
+  if (entityType === "week") {
+    const publishedWeek = published.package.weeks.find((item) => item.id === entityId);
+    if (!publishedWeek) {
+      throw new WeekVisibilityPublishError(`Week missing after publish: ${entityId}`);
+    }
+    if (weekContentStatus(publishedWeek) !== expected) {
+      throw new WeekVisibilityPublishError(`Week status after publish is ${weekContentStatus(publishedWeek)}, expected ${expected}.`);
+    }
+    return {
+      records: nextRecords,
+      published,
+      weekId: entityId,
+      action,
+      teachingWeek: String(publishedWeek.metadata.teachingWeek ?? "?"),
+      weekTitle: String(publishedWeek.metadata.title || entityId),
+      status: expected,
+      hubCode: published.hubId,
+      courseKey: published.courseKey,
+      entityType: "week",
+    };
   }
 
+  const publishedSession = published.package.sessions.find((item) => item.id === entityId);
+  if (!publishedSession) {
+    throw new WeekVisibilityPublishError(`Session missing after publish: ${entityId}`);
+  }
+  if (sessionContentStatus(publishedSession) !== expected) {
+    throw new WeekVisibilityPublishError(`Session status after publish is ${sessionContentStatus(publishedSession)}, expected ${expected}.`);
+  }
+  const publishedWeek = parentWeekForSession(published.package, publishedSession);
   return {
     records: nextRecords,
     published,
-    weekId,
+    weekId: publishedWeek?.id || String(publishedSession.relationships.week || ""),
     action,
-    teachingWeek: String(publishedWeek.metadata.teachingWeek ?? "?"),
-    weekTitle: String(publishedWeek.metadata.title || weekId),
+    teachingWeek: String(publishedWeek?.metadata.teachingWeek ?? "?"),
+    weekTitle: String(publishedWeek?.metadata.title || publishedWeek?.id || ""),
     status: expected,
     hubCode: published.hubId,
     courseKey: published.courseKey,
+    entityType: "session",
+    sessionId: entityId,
+    sessionTitle: String(publishedSession.metadata.title || entityId),
   };
 }
 
+/**
+ * Atomic local prepare: working copy (if needed) → Post/Remove → validate →
+ * auto-approve → immutable publish. Does not call the platform RPC.
+ * Persists nothing; caller should replace local records then Publish to Platform.
+ * Review UI is not required — approveForWeekVisibilityPublish fast-forwards lifecycle.
+ */
+export function prepareWeekVisibilityPublish(
+  records: AuthoringDraft[],
+  draft: AuthoringDraft,
+  weekId: string,
+  action: WeekVisibilityAction,
+  actor: string,
+  options?: WeekVisibilityPublishOptions,
+): WeekVisibilityPublishResult {
+  return prepareVisibilityPublish(
+    records,
+    draft,
+    { entityType: "week", entityId: weekId, action },
+    actor,
+    options,
+  );
+}
+
+export function prepareSessionVisibilityPublish(
+  records: AuthoringDraft[],
+  draft: AuthoringDraft,
+  sessionId: string,
+  action: VisibilityAction,
+  actor: string,
+  options?: WeekVisibilityPublishOptions,
+): WeekVisibilityPublishResult {
+  return prepareVisibilityPublish(
+    records,
+    draft,
+    { entityType: "session", entityId: sessionId, action },
+    actor,
+    options,
+  );
+}
+
 export function weekVisibilityPublishSuccessMessage(result: WeekVisibilityPublishResult): string {
+  if (result.entityType === "session") {
+    const title = result.sessionTitle || result.sessionId || "Session";
+    return result.status === "available"
+      ? sessionPostSuccessMessage(title)
+      : sessionRemoveSuccessMessage(title);
+  }
   const base = [
     `${result.hubCode} / ${result.courseKey}`,
     `week ${result.teachingWeek} (${result.weekId})`,
@@ -273,7 +417,11 @@ export function recoverFromFailedWeekVisibilityPublish(
   return { records: nextRecords, draft: retryDraft };
 }
 
-export function weekVisibilityPlatformPublishFailureMessage(action: WeekVisibilityAction): string {
+export function weekVisibilityPlatformPublishFailureMessage(action: WeekVisibilityAction, entityType: VisibilityEntityType = "week"): string {
+  if (entityType === "session") {
+    const verb = action === "post" ? "Post session & publish" : "Remove session & publish";
+    return `Platform publication failed. Your session change is kept in this draft. Use ${verb} again to retry.`;
+  }
   const verb = action === "post" ? "Make available" : "Hide from learners";
   return `Platform publication failed. Your week change is kept in this draft — use ${verb} again to retry.`;
 }

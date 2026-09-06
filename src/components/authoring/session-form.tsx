@@ -41,6 +41,7 @@ export function SessionForm({
       summary: String(data.get("summary") || ""),
       sortOrder: Number(data.get("sortOrder") || 0),
       defaultOpen: data.get("defaultOpen") === "on",
+      status: String(data.get("status") || existing?.metadata.status || "planned"),
     }));
     if (!editing) event.currentTarget.reset();
   }
@@ -64,6 +65,13 @@ export function SessionForm({
           <select id="session-kind" name="kind" defaultValue={String(existing?.metadata.kind || "session")}>
             {engine.SESSION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
           </select>
+        </div>
+        <div>
+          <label htmlFor="session-status">status (advanced)</label>
+          <select id="session-status" name="status" defaultValue={String(existing?.metadata.status || "planned")}>
+            {engine.STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+          <p className="field-hint">Prefer Post session &amp; publish / Remove session &amp; publish on Weeks for planned ↔ available.</p>
         </div>
         <div className="authoring-form__span">
           <label htmlFor="session-title">title</label>
