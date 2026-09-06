@@ -129,6 +129,18 @@ test("week visibility controls stay outside the disabled week-editor fieldset", 
   assert.ok(weekEditorFieldset > visibilityHeading, "WeekForm must sit in a fieldset after Week visibility");
   assert.ok(postWeekButton > visibilityHeading && postWeekButton < weekEditorFieldset, "Make available must not sit inside the disabled week-editor fieldset");
   assert.ok(createDraft > visibilityHeading && createDraft < weekEditorFieldset, "Create new draft must not sit inside the disabled week-editor fieldset");
+  const sessionPanel = source.indexOf("WeekSessionVisibilityPanel", visibilityHeading);
+  assert.ok(sessionPanel > visibilityHeading && sessionPanel < weekEditorFieldset, "Session visibility must sit in Week visibility, not the week editor fieldset");
+  assert.match(source, /onPost=\{\(sessionId\) => void publishSessionVisibility\(sessionId, "post"\)\}/);
+  assert.match(source, /onRemove=\{\(sessionId\) => void publishSessionVisibility\(sessionId, "remove"\)\}/);
+  assert.match(source, /prepareSessionVisibilityPublish/);
+  assert.match(source, /entityType === "session"/);
+  const panel = await readFile(new URL("src/components/authoring/week-session-visibility.tsx", root), "utf8");
+  assert.match(panel, /Sessions in this week/);
+  assert.match(panel, /Post session & publish/);
+  assert.match(panel, /Remove session & publish/);
+  assert.match(source, /<SessionForm/);
+  assert.match(source, /tab === "sessions"/);
 });
 
 test("curriculum authoring keeps updateCurriculum pending and isolates the publication RPC", async () => {

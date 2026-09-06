@@ -29,6 +29,8 @@ import {
   postSession,
   removeSession,
   sessionContentStatus,
+  sessionPostSuccessMessage,
+  sessionRemoveSuccessMessage,
 } from "./session-availability.ts";
 
 export type VisibilityEntityType = "week" | "session";
@@ -351,12 +353,10 @@ export function prepareSessionVisibilityPublish(
 
 export function weekVisibilityPublishSuccessMessage(result: WeekVisibilityPublishResult): string {
   if (result.entityType === "session") {
-    return [
-      `${result.hubCode} / ${result.courseKey}`,
-      `session ${result.sessionTitle || result.sessionId} (${result.sessionId})`,
-      `status ${result.status}`,
-      "Reload the learner hub.",
-    ].join(" · ");
+    const title = result.sessionTitle || result.sessionId || "Session";
+    return result.status === "available"
+      ? sessionPostSuccessMessage(title)
+      : sessionRemoveSuccessMessage(title);
   }
   const base = [
     `${result.hubCode} / ${result.courseKey}`,
@@ -420,7 +420,7 @@ export function recoverFromFailedWeekVisibilityPublish(
 export function weekVisibilityPlatformPublishFailureMessage(action: WeekVisibilityAction, entityType: VisibilityEntityType = "week"): string {
   if (entityType === "session") {
     const verb = action === "post" ? "Post session & publish" : "Remove session & publish";
-    return `Platform publication failed. Your session change is kept in this draft — use ${verb} again to retry.`;
+    return `Platform publication failed. Your session change is kept in this draft. Use ${verb} again to retry.`;
   }
   const verb = action === "post" ? "Make available" : "Hide from learners";
   return `Platform publication failed. Your week change is kept in this draft — use ${verb} again to retry.`;

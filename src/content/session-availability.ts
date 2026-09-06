@@ -13,11 +13,70 @@ export const POST_WEEK_BEFORE_SESSIONS =
   "Post the week before releasing individual sessions.";
 
 export function postSessionAndPublishConfirm(sessionTitle: string): string {
-  return `Post ${sessionTitle} to the platform? Learners will be able to access it after the new curriculum version is published.`;
+  return `Post "${sessionTitle}" to the platform?\n\nLearners will be able to access it once the new curriculum version is published.`;
 }
 
 export function removeSessionAndPublishConfirm(sessionTitle: string): string {
-  return `Remove ${sessionTitle} from learners? The session stays in the package. This publishes a new version.`;
+  return `Remove "${sessionTitle}" from learners?\n\nThe session stays in the package. This publishes a new version.`;
+}
+
+export function sessionPostSuccessMessage(sessionTitle: string): string {
+  return `${sessionTitle} is available on the platform.`;
+}
+
+export function sessionRemoveSuccessMessage(sessionTitle: string): string {
+  return `${sessionTitle} is hidden from learners.`;
+}
+
+export function sessionKindLabel(kind: string | null | undefined): string {
+  const raw = String(kind || "session").trim() || "session";
+  return raw.replace(/-/g, " ");
+}
+
+/** Which release action to show. Archived uses the same post helper as weeks. */
+export function sessionVisibilityAction(session: ContentDocument): "post" | "remove" {
+  return canRemoveSession(session) ? "remove" : "post";
+}
+
+export function isSessionPostDisabled(
+  session: ContentDocument,
+  parentWeek: ContentDocument | null | undefined,
+  publishReady: boolean,
+): boolean {
+  return !publishReady || !canPostSession(session, parentWeek);
+}
+
+export type SessionVisibilityRow = {
+  id: string;
+  title: string;
+  kind: string;
+  status: string;
+  action: "post" | "remove";
+  disabled: boolean;
+  blockedReason: string | null;
+};
+
+export function sessionVisibilityRows(
+  week: ContentDocument,
+  sessions: readonly ContentDocument[],
+  publishReady: boolean,
+  busy: boolean,
+): SessionVisibilityRow[] {
+  return sessions.map((session) => {
+    const action = sessionVisibilityAction(session);
+    const disabled = busy || (action === "remove"
+      ? !publishReady || !canRemoveSession(session)
+      : isSessionPostDisabled(session, week, publishReady));
+    return {
+      id: session.id,
+      title: String(session.metadata.title || session.id),
+      kind: sessionKindLabel(String(session.metadata.kind || "session")),
+      status: sessionContentStatus(session),
+      action,
+      disabled,
+      blockedReason: action === "post" ? sessionPostBlockedReason(session, week) : null,
+    };
+  });
 }
 
 export function sessionContentStatus(session: ContentDocument): string {

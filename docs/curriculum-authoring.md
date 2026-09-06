@@ -50,9 +50,10 @@ Week `metadata.status` uses Content `STATUSES`: `planned`, `available`,
 without deleting the week, sessions, or activities.
 
 Session `metadata.status` uses the same values. Inside the selected week,
-staff can **Post session & publish** or **Remove session & publish**. Learners
-only see a session when the week and the session are both available. Posting a
-session is disabled while the parent week is still planned.
+**Sessions in this week** lists each related session. Staff can **Post session
+& publish** or **Remove session & publish**. Learners only see a session when
+the week and the session are both available. Posting a session is disabled
+while the parent week is still planned.
 
 With a live administrator session, those buttons validate, auto-approve,
 create a new immutable version, and **Publish to Platform** in one step. If the

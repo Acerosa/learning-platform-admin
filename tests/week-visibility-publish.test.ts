@@ -286,6 +286,9 @@ test("post session changes only the selected session and publishes a new version
   assert.equal(sessionContentStatus(result.published.package.sessions.find((item) => item.id === "homework")!), "planned");
   assert.equal(result.published.package.sessions.length, 3);
   assert.equal(result.published.package.activities.length, 3);
+  assert.equal(result.entityType, "session");
+  assert.equal(result.sessionId, "lesson-2");
+  assert.equal(result.action, "post");
   assert.match(result.published.approvalNotes, /Session visibility: post lesson-2/);
 });
 

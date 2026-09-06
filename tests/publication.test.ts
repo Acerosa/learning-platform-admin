@@ -431,8 +431,7 @@ test("session visibility publish posts one session, bumps version, and leaves pl
   assert.equal(result.published.platformPublicationState, "pending");
   assert.equal(result.published.package.sessions.find((item) => item.id === "lesson-2")?.metadata.status, "available");
   assert.equal(result.published.package.sessions.find((item) => item.id === "lesson-1")?.metadata.status, "available");
-  assert.match(weekVisibilityPublishSuccessMessage(result), /session Lesson 2/);
-  assert.match(weekVisibilityPublishSuccessMessage(result), /status available/);
+  assert.match(weekVisibilityPublishSuccessMessage(result), /Lesson 2 is available on the platform/);
   assert.equal(canPublishToPlatform(result.published, true), true);
 });
 

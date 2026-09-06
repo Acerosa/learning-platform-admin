@@ -13,6 +13,7 @@ import { PreviewPane } from "../components/authoring/preview-pane";
 import { PublicationPanel } from "../components/authoring/publication-panel";
 import { ReviewPanel } from "../components/authoring/review-panel";
 import { SessionForm } from "../components/authoring/session-form";
+import { WeekSessionVisibilityPanel } from "../components/authoring/week-session-visibility";
 import { VersionsPanel } from "../components/authoring/versions-panel";
 import { WeekForm } from "../components/authoring/week-form";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
@@ -69,9 +70,6 @@ import {
   weekVisibilityOptionLabel,
 } from "../content/week-availability";
 import {
-  canPostSession,
-  canRemoveSession,
-  POST_WEEK_BEFORE_SESSIONS,
   postSessionAndPublishConfirm,
   removeSessionAndPublishConfirm,
   sessionContentStatus,
@@ -592,9 +590,9 @@ export function CurriculumAuthoringPage({
         setDrafts(nextRecords);
         setDraft(done);
         setMessage(
-          result.idempotent
-            ? `This snapshot is already the active platform publication. ${weekVisibilityPublishSuccessMessage(prepared)}`
-            : weekVisibilityPublishSuccessMessage(prepared),
+          prepared.entityType === "session" || !result.idempotent
+            ? weekVisibilityPublishSuccessMessage(prepared)
+            : `This snapshot is already the active platform publication. ${weekVisibilityPublishSuccessMessage(prepared)}`,
         );
       } catch (error) {
         const failed = withPlatformPublication(publishing, {
@@ -974,53 +972,14 @@ export function CurriculumAuthoringPage({
                   </button>
                 </div>
               ) : <p>No weeks in this draft.</p>}
-              {selectedVisibilityWeek ? (
-                <section className="session-visibility" aria-labelledby="session-visibility-heading">
-                  <h3 id="session-visibility-heading">Sessions</h3>
-                  {weekContentStatus(selectedVisibilityWeek) !== "available" ? (
-                    <p className="field-hint" role="status">{POST_WEEK_BEFORE_SESSIONS}</p>
-                  ) : null}
-                  {selectedWeekSessions.length ? (
-                    <ul className="authoring-list">
-                      {selectedWeekSessions.map((session) => {
-                        const status = sessionContentStatus(session);
-                        const parentAvailable = weekContentStatus(selectedVisibilityWeek) === "available";
-                        return (
-                          <li key={session.id}>
-                            <strong>{String(session.metadata.title || session.id)}</strong>
-                            <code>{session.id}</code>
-                            <span>{String(session.metadata.kind || "session")}</span>
-                            <StatusBadge label={status} tone={weekStatusTone(status)} />
-                            <button
-                              className="button button--small button--primary"
-                              type="button"
-                              disabled={
-                                !visibilityPublishReady
-                                || !parentAvailable
-                                || !canPostSession(session, selectedVisibilityWeek)
-                              }
-                              onClick={() => void publishSessionVisibility(session.id, "post")}
-                            >
-                              {visibilityPublishBusy ? "Publishing…" : "Post session & publish"}
-                            </button>
-                            <button
-                              className="button button--small button--secondary"
-                              type="button"
-                              disabled={
-                                !visibilityPublishReady
-                                || !canRemoveSession(session)
-                              }
-                              onClick={() => void publishSessionVisibility(session.id, "remove")}
-                            >
-                              {visibilityPublishBusy ? "Publishing…" : "Remove session & publish"}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : <p>No sessions in this week.</p>}
-                </section>
-              ) : null}
+              <WeekSessionVisibilityPanel
+                week={selectedVisibilityWeek}
+                sessions={selectedWeekSessions}
+                publishReady={visibilityPublishReady}
+                busy={visibilityPublishBusy}
+                onPost={(sessionId) => void publishSessionVisibility(sessionId, "post")}
+                onRemove={(sessionId) => void publishSessionVisibility(sessionId, "remove")}
+              />
               {orderedWeeks.length ? (
                 <ul className="authoring-list">
                   {orderedWeeks.map((week) => {
