@@ -26,6 +26,7 @@ import {
 } from "../src/content/versioning.ts";
 import { postWeek } from "../src/content/week-availability.ts";
 import {
+  prepareSessionVisibilityPublish,
   prepareWeekVisibilityPublish,
   weekVisibilityHubIdHint,
   weekVisibilityPublishSuccessMessage,
@@ -384,6 +385,55 @@ test("week visibility success message includes hub sync details and soft T Level
   assert.match(message, /status available/);
   assert.match(message, /Reload the learner hub/);
   assert.match(message, /week-1/);
+});
+
+test("session visibility publish posts one session, bumps version, and leaves platform pending", () => {
+  const draft = withContent();
+  const week = createWeek({
+    id: "week-1",
+    teachingWeek: 1,
+    title: "Client Brief",
+    status: "available",
+    learningOutcomes: [],
+    sessions: ["lesson-1", "lesson-2"],
+  });
+  const lesson1 = createSession({
+    id: "lesson-1",
+    title: "Lesson 1",
+    kind: "session",
+    weekId: "week-1",
+    activities: ["act-1"],
+    status: "available",
+  });
+  const lesson2 = createSession({
+    id: "lesson-2",
+    title: "Lesson 2",
+    kind: "session",
+    weekId: "week-1",
+    activities: ["act-2"],
+    status: "planned",
+  });
+  const act1 = createActivity({ id: "act-1", title: "A1" });
+  act1.blocks = [createBlock(act1.id, "paragraph", [])];
+  const act2 = createActivity({ id: "act-2", title: "A2" });
+  act2.blocks = [createBlock(act2.id, "paragraph", [])];
+  const ready = {
+    ...draft,
+    package: syncCurriculumLists({
+      ...draft.package,
+      weeks: [week],
+      sessions: [lesson1, lesson2],
+      activities: [act1, act2],
+    }),
+  };
+  const result = prepareSessionVisibilityPublish([ready], ready, "lesson-2", "post", "Ada Author");
+  assert.equal(result.published.status, "published");
+  assert.equal(result.published.platformPublicationState, "pending");
+  assert.equal(result.published.package.sessions.find((item) => item.id === "lesson-2")?.metadata.status, "available");
+  assert.equal(result.published.package.sessions.find((item) => item.id === "lesson-1")?.metadata.status, "available");
+  assert.match(weekVisibilityPublishSuccessMessage(result), /session Lesson 2/);
+  assert.match(weekVisibilityPublishSuccessMessage(result), /status available/);
+  assert.equal(canPublishToPlatform(result.published, true), true);
 });
 
 test("an imported week graph can pass the publication gate and local publish", () => {

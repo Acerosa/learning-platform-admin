@@ -6,7 +6,7 @@ export type ContentWeekStatus = (typeof CONTENT_WEEK_STATUSES)[number];
 
 /** Reminder for staff: visibility changes go live via Post/Remove & publish. */
 export const WEEK_VISIBILITY_PUBLISH_REMINDER =
-  "Use Post week & publish (or Remove week & publish) so learners see this.";
+  "Use Post week & publish, Remove week & publish, or the session buttons so learners see this.";
 
 export const REMOVE_WEEK_CONFIRM =
   "Learners will lose access until this week is posted again";

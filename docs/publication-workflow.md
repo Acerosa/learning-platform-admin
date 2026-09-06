@@ -20,8 +20,9 @@ Review states (`Ready for Review`, `In Review`, `Approved`) remain in the
 data model for history and advanced panels, but are not required on the primary
 path. Semver is chosen automatically via `suggestNextVersion`.
 
-Week visibility uses the same atomic pattern: **Make available** /
-**Hide from learners** (formerly Post/Remove week & publish).
+Week and session visibility uses the same atomic pattern: **Make available** /
+**Hide from learners** for weeks, and **Post session & publish** /
+**Remove session & publish** for sessions inside the selected week.
 
 This workflow does **not** commit to GitHub or deploy into learner hubs directly.
 Backend catalogue publication is authoritative.
@@ -130,18 +131,24 @@ There is no GitHub commit or learner-hub deployment.
 Composition output is a normal draft/package. Validate → approve → Publish to
 Platform remains the only learner-visible path.
 
-## Week visibility (post / remove)
+## Week and session visibility (post / remove)
 
 On the Weeks tab, staff select a week and use **Post week & publish**
 (`metadata.status` → `available`) or **Remove week & publish**
 (`metadata.status` → `planned`). Remove does not delete curriculum objects.
+
+Inside the selected week, staff can post or remove individual sessions the
+same way. Session `metadata.status` uses `planned`, `available` and `archived`.
+Learners can access a session only when the parent week and the session are
+both available. If the week is still planned, session posting is disabled:
+**Post the week before releasing individual sessions.**
 
 Each action (with a live administrator session) automatically:
 
 1. Opens a working copy when the current snapshot is Published/Superseded (or returns review states to Draft)
 2. Applies the visibility change
 3. Validates the package
-4. Auto-approves with notes such as `Week visibility: post <weekId>`
+4. Auto-approves with notes such as `Week visibility: post <weekId>` or `Session visibility: post <sessionId>`
 5. Creates a new immutable Admin version (semver bump)
 6. Calls **Publish to Platform** (`admin_api.publish_curriculum`)
 

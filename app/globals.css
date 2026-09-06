@@ -1923,6 +1923,13 @@ tbody tr:hover {
 .week-visibility-toolbar select {
   min-width: min(100%, 28rem);
 }
+.session-visibility {
+  margin: 1.1rem 0 0.4rem;
+}
+.session-visibility h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+}
 .authoring-banner,
 .authoring-alert {
   display: flex;

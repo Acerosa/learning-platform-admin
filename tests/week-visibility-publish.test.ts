@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createActivity, createBlock, createWeek, syncCurriculumLists } from "../src/content/factories.ts";
+import { createActivity, createBlock, createSession, createWeek, syncCurriculumLists } from "../src/content/factories.ts";
 import { canPublishToPlatform } from "../src/content/publication-guidance.ts";
 import { userLifecycleLabel, USER_LIFECYCLE_LABELS } from "../src/content/user-lifecycle.ts";
 import {
@@ -13,10 +13,13 @@ import {
   withPlatformPublication,
 } from "../src/content/versioning.ts";
 import { weekContentStatus } from "../src/content/week-availability.ts";
+import { POST_WEEK_BEFORE_SESSIONS, sessionContentStatus } from "../src/content/session-availability.ts";
 import {
+  prepareSessionVisibilityPublish,
   prepareWeekVisibilityPublish,
   recoverFromFailedWeekVisibilityPublish,
   weekVisibilityPlatformPublishFailureMessage,
+  WeekVisibilityPublishError,
 } from "../src/content/week-visibility-publish.ts";
 
 const HUB = "tlevel-software-development";
@@ -211,4 +214,141 @@ test("resolveHostedPublicationVersion reads the active platform publication", ()
     },
   ], HUB, COURSE);
   assert.equal(version, "0.3.0");
+});
+
+function activityWithBlock(id: string, title: string) {
+  const activity = createActivity({ id, title });
+  activity.blocks = [createBlock(activity.id, "paragraph", [])];
+  return activity;
+}
+
+function weekWithSessions(weekStatus = "available") {
+  const draft = createDraft(HUB, "T Level Digital Software Development Hub", COURSE, "Ada Author");
+  const week = createWeek({
+    id: "week-1",
+    teachingWeek: 1,
+    title: "Client Brief",
+    status: weekStatus,
+    learningOutcomes: [],
+    sessions: ["lesson-1", "lesson-2", "homework"],
+  });
+  const lesson1 = createSession({
+    id: "lesson-1",
+    title: "Annotating the client brief",
+    kind: "session",
+    weekId: "week-1",
+    activities: ["act-1"],
+    status: "available",
+  });
+  const lesson2 = createSession({
+    id: "lesson-2",
+    title: "Market, problems and risks",
+    kind: "session",
+    weekId: "week-1",
+    activities: ["act-2"],
+    status: "planned",
+  });
+  const homework = createSession({
+    id: "homework",
+    title: "Homework: one real digital product",
+    kind: "homework",
+    weekId: "week-1",
+    activities: ["act-3"],
+    status: "planned",
+  });
+  return {
+    ...draft,
+    basedOnVersion: "0.3.0",
+    package: syncCurriculumLists({
+      ...draft.package,
+      hub: { ...draft.package.hub, id: HUB },
+      curriculum: {
+        ...draft.package.curriculum,
+        metadata: { ...draft.package.curriculum.metadata, course: COURSE },
+      },
+      weeks: [week],
+      sessions: [lesson1, lesson2, homework],
+      activities: [
+        activityWithBlock("act-1", "Starter"),
+        activityWithBlock("act-2", "Market"),
+        activityWithBlock("act-3", "Homework"),
+      ],
+    }),
+  };
+}
+
+test("post session changes only the selected session and publishes a new version", () => {
+  const working = weekWithSessions();
+  const result = prepareSessionVisibilityPublish([working], working, "lesson-2", "post", "Ada Author");
+  assert.equal(result.published.version, "0.3.1");
+  assert.equal(sessionContentStatus(result.published.package.sessions.find((item) => item.id === "lesson-1")!), "available");
+  assert.equal(sessionContentStatus(result.published.package.sessions.find((item) => item.id === "lesson-2")!), "available");
+  assert.equal(sessionContentStatus(result.published.package.sessions.find((item) => item.id === "homework")!), "planned");
+  assert.equal(result.published.package.sessions.length, 3);
+  assert.equal(result.published.package.activities.length, 3);
+  assert.match(result.published.approvalNotes, /Session visibility: post lesson-2/);
+});
+
+test("remove session marks it planned without deleting content", () => {
+  const working = weekWithSessions();
+  const posted = prepareSessionVisibilityPublish([working], working, "lesson-2", "post", "Ada Author");
+  const onPlatform = withPlatformPublication(posted.published, {
+    platformPublicationState: "published",
+    platformPublishedAt: "2026-08-27T13:52:46.000Z",
+    platformPublicationId: "pub-session",
+  });
+  const records = replaceRecord(posted.records, onPlatform);
+  const removed = prepareSessionVisibilityPublish(records, onPlatform, "lesson-2", "remove", "Ada Author");
+  assert.equal(removed.published.version, "0.3.2");
+  assert.equal(sessionContentStatus(removed.published.package.sessions.find((item) => item.id === "lesson-2")!), "planned");
+  assert.equal(removed.published.package.sessions.some((item) => item.id === "lesson-2"), true);
+  assert.equal(removed.published.package.activities.some((item) => item.id === "act-2"), true);
+});
+
+test("session visibility publish from a published snapshot creates a working copy first", () => {
+  const working = weekWithSessions();
+  const first = prepareSessionVisibilityPublish([working], working, "lesson-2", "post", "Ada Author");
+  const onPlatform = withPlatformPublication(first.published, {
+    platformPublicationState: "published",
+    platformPublishedAt: "2026-08-27T13:52:46.000Z",
+    platformPublicationId: "pub-session-1",
+  });
+  const records = replaceRecord(first.records, onPlatform);
+  const second = prepareSessionVisibilityPublish(records, onPlatform, "homework", "post", "Ada Author");
+  assert.notEqual(second.published.id, onPlatform.id);
+  assert.equal(second.published.version, "0.3.2");
+  assert.equal(sessionContentStatus(second.published.package.sessions.find((item) => item.id === "homework")!), "available");
+});
+
+test("parent planned week prevents session visibility publish", () => {
+  const working = weekWithSessions("planned");
+  assert.throws(
+    () => prepareSessionVisibilityPublish([working], working, "lesson-2", "post", "Ada Author"),
+    (error: unknown) => error instanceof WeekVisibilityPublishError && error.message === POST_WEEK_BEFORE_SESSIONS,
+  );
+  assert.equal(sessionContentStatus(working.package.sessions.find((item) => item.id === "lesson-2")!), "planned");
+});
+
+test("session visibility publish blocks when validation fails", () => {
+  const invalid = weekWithSessions();
+  invalid.package.weeks.push(invalid.package.weeks[0]);
+  assert.throws(
+    () => prepareSessionVisibilityPublish([invalid], invalid, "lesson-2", "post", "Ada Author"),
+    WeekVisibilityPublishError,
+  );
+});
+
+test("week posting still works alongside session posting", () => {
+  const working = weekWithSessions("planned");
+  const postedWeek = prepareWeekVisibilityPublish([working], working, "week-1", "post", "Ada Author");
+  assert.equal(weekContentStatus(postedWeek.published.package.weeks[0]), "available");
+  const onPlatform = withPlatformPublication(postedWeek.published, {
+    platformPublicationState: "published",
+    platformPublishedAt: "2026-08-27T13:52:46.000Z",
+    platformPublicationId: "pub-week",
+  });
+  const records = replaceRecord(postedWeek.records, onPlatform);
+  const postedSession = prepareSessionVisibilityPublish(records, onPlatform, "lesson-2", "post", "Ada Author");
+  assert.equal(sessionContentStatus(postedSession.published.package.sessions.find((item) => item.id === "lesson-2")!), "available");
+  assert.equal(weekContentStatus(postedSession.published.package.weeks[0]), "available");
 });

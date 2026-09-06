@@ -150,5 +150,5 @@ export function curriculumPublishSuccessMessage(version: string, idempotent: boo
   const base = idempotent
     ? "This snapshot is already the active platform publication."
     : `Published ${version} to the platform.`;
-  return `${base} Learners consume published content only. Reload learner hubs after week visibility changes.`;
+  return `${base} Learners consume published content only. Reload learner hubs after week or session visibility changes.`;
 }

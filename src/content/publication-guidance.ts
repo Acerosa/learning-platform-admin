@@ -22,7 +22,7 @@ export function platformPublishBlockedReason(
     return "Platform publication is already in progress.";
   }
   if (record.status === "published" && record.platformPublicationState === "published") {
-    return "This snapshot is already on the platform. For week visibility, use Post week & publish / Remove week & publish (creates a new draft and version). For other edits, create a new draft from published, then use Review and Publication.";
+    return "This snapshot is already on the platform. For week or session visibility, use Post week & publish / Remove week & publish or the session buttons on Weeks (creates a new draft and version). For other edits, create a new draft from published, then use Review and Publication.";
   }
   if (record.status !== "published") {
     return "Publish an immutable version first (Approve → Publish immutable version), then Publish to Platform.";
@@ -44,14 +44,14 @@ export function weekVisibilityRecoveryAction(record: AuthoringDraft): WeekVisibi
 export function weekVisibilityNextSteps(record: AuthoringDraft): string {
   const recovery = weekVisibilityRecoveryAction(record);
   if (recovery === "working-copy") {
-    return "This snapshot is read-only. Use Post week & publish / Remove week & publish to open a working copy and push visibility to learners in one step. For other curriculum edits, create a new draft from published first.";
+    return "This snapshot is read-only. Use Post week & publish / Remove week & publish, or the session buttons, to open a working copy and push visibility to learners in one step. For other curriculum edits, create a new draft from published first.";
   }
   if (recovery === "return-to-draft") {
-    return "This record is in review. Post week & publish / Remove week & publish will return it to Draft, then publish. Or use Return to Draft for content edits.";
+    return "This record is in review. Post week & publish / Remove week & publish, or the session buttons, will return it to Draft, then publish. Or use Return to Draft for content edits.";
   }
   return WEEK_VISIBILITY_PUBLISH_REMINDER;
 }
 
 export function afterPlatformPublishGuidance(): string {
-  return "Published to the platform. Learner hubs load this version from Supabase without a GitHub deployment. To change week visibility again, use Post week & publish or Remove week & publish on Weeks.";
+  return "Published to the platform. Learner hubs load this version from Supabase without a GitHub deployment. To change week or session visibility again, use Post week & publish, Remove week & publish, or the session buttons on Weeks.";
 }
