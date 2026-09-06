@@ -9,7 +9,7 @@ backend, or publish GitHub curriculum files.
 ```text
 Admin UI
   → factories / importers / draft store
-      → @learning-platform/content 0.1.0
+      → @learning-platform/content 0.1.3
           schemas
           validator
           block registry
@@ -22,7 +22,7 @@ Admin depends on those semantics. It does not own them.
 Package:
 
 - dependency: `@learning-platform/content` `file:../learning-platform-content`
-- version: `0.1.0` (tag `v0.1.0`)
+- version: `0.1.3` (tag `v0.1.3`)
 - canonical repository: [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content)
 - model: exact reviewed schema set (`lp.content.*`)
 

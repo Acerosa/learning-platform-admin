@@ -113,6 +113,6 @@ separately allow the deployed portal callback URL before live deployment.
 
 ## Canonical curriculum authoring
 
-Admin authors canonical `lp.content.*` objects locally. Validation, block registry, Excel sheet names and preview rendering come from `@learning-platform/content` 0.1.0. Drafts remain browser storage. After local Publish, **Publish to Platform** calls `admin_api.publish_curriculum`.
+Admin authors canonical `lp.content.*` objects locally. Validation, block registry, Excel sheet names and preview rendering come from `@learning-platform/content` 0.1.3. Drafts remain browser storage. After local Publish, **Publish to Platform** calls `admin_api.publish_curriculum`.
 
 See [Curriculum authoring](curriculum-authoring.md), [Publication workflow](publication-workflow.md) and [Backend publication](backend-publication.md).
