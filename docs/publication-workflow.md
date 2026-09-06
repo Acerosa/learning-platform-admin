@@ -31,7 +31,7 @@ Backend catalogue publication is authoritative.
 
 Storage key: `lp.admin.authoring.records.v2`.
 
-The canonical package remains `@learning-platform/content` 0.1.0. Publication
+The canonical package remains `@learning-platform/content` 0.1.3. Publication
 records wrap a cloned content package; they do not invent a second schema.
 
 ## Lifecycle

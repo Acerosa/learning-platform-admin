@@ -9,7 +9,7 @@ This repository is the administration interface for the entire Learning Platform
 ## Current state
 
 - The portal consumes the shared theme service and semantic tokens from `@learning-platform/core`.
-- Curriculum authoring consumes `@learning-platform/content` 0.1.0 from [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content) for schemas, validation, import and preview.
+- Curriculum authoring consumes `@learning-platform/content` 0.1.3 from [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content) for schemas, validation, import and preview.
 - Results / Markbook consumes `@learning-platform/results` for interpretation and `admin_api.attempts` / `admin_api.responses` for data.
 - The backend `admin_api` contract is version `0.2.0`, draft, with read models and curriculum publication.
 - Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.

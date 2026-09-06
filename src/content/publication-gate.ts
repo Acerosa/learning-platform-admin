@@ -6,17 +6,19 @@ export const CONTENT_PACKAGE_VERSION = "0.1.0";
 export const SUPPORTED_CONTENT_PACKAGE_VERSIONS = ["0.1.0"] as const;
 
 function collectDocuments(pkg: ContentPackage): ContentDocument[] {
+  const questions = pkg.questions || [];
+  const assets = pkg.assets || [];
   return [
     pkg.hub,
     pkg.curriculum,
-    ...pkg.learningOutcomes,
-    ...pkg.assignments,
-    ...pkg.weeks,
-    ...pkg.sessions,
-    ...pkg.activities,
-    ...pkg.activities.flatMap((activity) => activity.blocks || []),
-    ...pkg.questions,
-    ...pkg.assets,
+    ...(pkg.learningOutcomes || []),
+    ...(pkg.assignments || []),
+    ...(pkg.weeks || []),
+    ...(pkg.sessions || []),
+    ...(pkg.activities || []),
+    ...(pkg.activities || []).flatMap((activity) => activity.blocks || []),
+    ...questions,
+    ...assets,
   ];
 }
 

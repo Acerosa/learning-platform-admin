@@ -5,6 +5,14 @@ here.
 
 ## [Unreleased]
 
+### Changed
+
+- Curriculum publication consumes `@learning-platform/content` 0.1.3, which
+  treats `drag-drop` as a canonical interactive block type. The Admin
+  `publicationGate` still delegates to `validatePackage`; there is no
+  hub-specific or type-specific bypass. Empty `questions` / `assets`
+  collections are treated as absent rather than crashing the gate.
+
 ### Added
 
 - Results → Induction / Readiness now shows the server-authoritative diagnostic

@@ -156,6 +156,22 @@ function defaultBlockContent(type: string): Record<string, unknown> {
       items: [{ id: "item-1", label: "Item 1", correctCategoryId: "cat-a" }],
     };
   }
+  if (type === "drag-drop") {
+    return {
+      formative: true,
+      prompt: "Place each item on a target.",
+      items: [
+        { id: "item-1", label: "Item 1" },
+        { id: "item-2", label: "Item 2" },
+      ],
+      targets: [
+        { id: "target-a", label: "Target A" },
+        { id: "target-b", label: "Target B" },
+      ],
+      correct: { "item-1": "target-a", "item-2": "target-b" },
+      feedback: { correct: "", incorrect: "" },
+    };
+  }
   if (type === "short-response" || type === "reflection") {
     return { prompt: "", placeholder: "" };
   }

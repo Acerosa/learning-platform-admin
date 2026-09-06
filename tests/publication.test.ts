@@ -525,3 +525,44 @@ test("userLifecycleLabel does not report Published when backend publication fail
   });
   assert.equal(userLifecycleLabel(succeeded), USER_LIFECYCLE_LABELS.published);
 });
+
+test("publicationGate accepts a package containing a valid drag-drop block", () => {
+  const draft = withContent();
+  const activity = draft.package.activities[0];
+  activity.blocks = [createBlock(activity.id, "drag-drop", [])];
+  const gate = publicationGate(draft.package);
+  assert.equal(gate.ok, true, gate.issues.map((issue) => `${issue.code} ${issue.path}: ${issue.message}`).join("\n"));
+  assert.equal(gate.issues.filter((issue) => issue.code === "UNSUPPORTED_BLOCK_TYPE").length, 0);
+});
+
+test("publicationGate still rejects malformed drag-drop", () => {
+  const draft = withContent();
+  const activity = draft.package.activities[0];
+  const block = createBlock(activity.id, "drag-drop", []);
+  activity.blocks = [{
+    ...block,
+    content: {
+      ...block.content,
+      correct: { "item-1": "missing-target", "item-2": "target-b" },
+    },
+  }];
+  const gate = publicationGate(draft.package);
+  assert.equal(gate.ok, false);
+  assert.equal(gate.issues.some((issue) => issue.code === "UNSUPPORTED_BLOCK_TYPE"), false);
+  assert.ok(gate.issues.some((issue) => issue.code === "INVALID_RELATIONSHIP" || issue.code === "MISSING_FIELD"));
+});
+
+test("publicationGate accepts T Level package 0.4.2 with nine drag-drop blocks", async () => {
+  const { existsSync, readFileSync } = await import("node:fs");
+  const { resolve } = await import("node:path");
+  const tlevelPath = resolve(process.cwd(), "../tlevel-software-development-hub/content/tlevel-software-development/package.json");
+  if (!existsSync(tlevelPath)) {
+    return;
+  }
+  const pkg = JSON.parse(readFileSync(tlevelPath, "utf8"));
+  assert.equal(pkg.version, "0.4.2");
+  const gate = publicationGate(pkg);
+  const unsupported = gate.issues.filter((issue) => issue.code === "UNSUPPORTED_BLOCK_TYPE");
+  assert.equal(unsupported.length, 0, unsupported.map((issue) => `${issue.path}: ${issue.message}`).join("\n"));
+  assert.equal(gate.ok, true, gate.issues.map((issue) => `${issue.code} ${issue.path}: ${issue.message}`).join("\n"));
+});
