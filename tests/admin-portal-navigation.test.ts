@@ -83,3 +83,18 @@ test("GitHub Pages internal links stay hash-based without full reload", async ()
   assert.match(source, /navigateHash/);
   assert.match(source, /event\.preventDefault\(\)/);
 });
+
+test("hubs module does not render children until the hub list is ready", async () => {
+  const [shell, portal, authoring] = await Promise.all([
+    readFile(new URL("src/components/module-data-shell.tsx", root), "utf8"),
+    readFile(new URL("src/stores/admin-portal.tsx", root), "utf8"),
+    readFile(new URL("src/views/curriculum-authoring.tsx", root), "utf8"),
+  ]);
+  assert.match(shell, /shouldRenderModuleChildren/);
+  assert.match(portal, /client\.auth\.getSession\(\)/);
+  assert.match(portal, /stateRef\.current = state;/);
+  assert.doesNotMatch(
+    authoring,
+    /hubs\.length \? hubs : \[\{ hubCode: selectedHubCode/,
+  );
+});

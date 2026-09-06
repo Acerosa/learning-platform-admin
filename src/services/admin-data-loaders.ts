@@ -1,4 +1,5 @@
-import type { AdminReadService } from "../api/admin-api.ts";
+import type { AdminReadService, HubRecord } from "../api/admin-api.ts";
+import { AdminReadError } from "./supabase-admin-service.ts";
 import type {
   AdminBootstrapData,
   AnalyticsData,
@@ -12,6 +13,16 @@ import {
   recordBootstrapReads,
   recordModuleReads,
 } from "./admin-module-performance.ts";
+
+/** Anon/RLS empty reads return [] with HTTP 200. That must not look like an empty registry. */
+export function assertHubListMatchesSummary(
+  hubs: readonly HubRecord[],
+  activeHubs: number | null | undefined,
+): void {
+  if (typeof activeHubs === "number" && activeHubs > 0 && hubs.length === 0) {
+    throw new AdminReadError("unavailable", "hubs");
+  }
+}
 
 export async function loadAdminBootstrapData(
   service: AdminReadService,
@@ -37,6 +48,7 @@ export async function loadDashboardData(
     service.listHubs(),
     service.listContracts(),
   ]);
+  assertHubListMatchesSummary(hubs, dashboardSummary.activeHubs);
 
   return Object.freeze({
     dashboardSummary,
@@ -49,6 +61,7 @@ export async function loadDashboardData(
 
 export async function loadHubsCurriculumData(
   service: AdminReadService,
+  bootstrap?: AdminBootstrapData | null,
 ): Promise<HubsCurriculumData> {
   recordModuleReads("hubs-curriculum", [
     "hubs",
@@ -68,6 +81,7 @@ export async function loadHubsCurriculumData(
       service.listCurriculumDrafts(),
       service.listAuditEvents(),
     ]);
+  assertHubListMatchesSummary(hubs, bootstrap?.dashboardSummary?.activeHubs);
 
   return Object.freeze({
     hubs,

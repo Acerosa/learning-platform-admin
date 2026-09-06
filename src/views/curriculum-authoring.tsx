@@ -815,7 +815,7 @@ export function CurriculumAuthoringPage({
           <div>
             <label htmlFor="authoring-hub">Hub context</label>
             <select id="authoring-hub" value={selectedHubCode} onChange={(event) => setHubContext(event.target.value)}>
-              {(hubs.length ? hubs : [{ hubCode: selectedHubCode, hubName: hubNameFor(selectedHubCode) } as HubRecord]).map((hub) => (
+              {hubs.map((hub) => (
                 <option key={hub.hubCode} value={hub.hubCode}>{hub.hubName}</option>
               ))}
             </select>

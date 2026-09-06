@@ -30,6 +30,11 @@ export function shouldAutoLoadModule(
   return portalStatus === "ready" && entryStatus === "idle";
 }
 
+/** Idle must not render empty hub/curriculum children as if the registry loaded. */
+export function shouldRenderModuleChildren(status: ModuleLoadStatus): boolean {
+  return status === "ready" || status === "refreshing";
+}
+
 export function shouldBeginModuleLoad(
   entry: AdminModuleCacheEntry,
   refresh: boolean,
@@ -142,7 +147,7 @@ export async function fetchModuleData<K extends AdminModuleDataKey>(
     case "dashboard":
       return loadDashboardData(service, options?.bootstrap) as Promise<AdminModulePayload[K]>;
     case "hubs-curriculum":
-      return loadHubsCurriculumData(service) as Promise<AdminModulePayload[K]>;
+      return loadHubsCurriculumData(service, options?.bootstrap) as Promise<AdminModulePayload[K]>;
     case "people":
       return loadPeopleData(service) as Promise<AdminModulePayload[K]>;
     case "assignments-results":

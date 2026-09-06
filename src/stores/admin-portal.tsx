@@ -291,9 +291,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   });
 
   const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  stateRef.current = state;
 
   const moduleLoadPromises = useRef(new Map<AdminModuleDataKey, Promise<void>>());
 
@@ -337,6 +335,12 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
             : null;
         if (!service) {
           throw new AdminReadError("unavailable", key);
+        }
+        if (client) {
+          const { error: sessionError } = await client.auth.getSession();
+          if (sessionError) {
+            throw new AdminReadError("unavailable", key);
+          }
         }
 
         const data = await fetchModuleData(key, service, {

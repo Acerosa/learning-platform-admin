@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AdminReadService } from "../src/api/admin-api.ts";
-import { DEMO_ADMIN_DATA } from "../src/services/demo-admin-service.ts";
-import type { PeopleData, DashboardData } from "../src/api/admin-module-data.ts";
 import {
-  createEmptyModuleCache,
-  mergeModuleCacheToSnapshot,
-  sliceDemoModuleData,
-} from "../src/api/admin-module-data.ts";
-import {
+  assertHubListMatchesSummary,
   loadAdminBootstrapData,
   loadAnalyticsData,
   loadAssignmentsResultsData,
@@ -17,6 +11,14 @@ import {
   loadPeopleData,
   loadSystemData,
 } from "../src/services/admin-data-loaders.ts";
+import { AdminReadError } from "../src/services/supabase-admin-service.ts";
+import { DEMO_ADMIN_DATA } from "../src/services/demo-admin-service.ts";
+import type { PeopleData, DashboardData, HubsCurriculumData } from "../src/api/admin-module-data.ts";
+import {
+  createEmptyModuleCache,
+  mergeModuleCacheToSnapshot,
+  sliceDemoModuleData,
+} from "../src/api/admin-module-data.ts";
 import {
   resetAdminModulePerformance,
   getAdminModulePerformanceSnapshot,
@@ -44,7 +46,10 @@ function createTrackingService(): AdminReadService & { calls: string[] } {
       active: true,
       activeRoles: ["platform_admin"],
     }),
-    listHubs: async () => track("listHubs"),
+    listHubs: async () => {
+      calls.push("listHubs");
+      return DEMO_ADMIN_DATA.hubs;
+    },
     listHubCourseLinks: async () => track("listHubCourseLinks"),
     listCourses: async () => track("listCourses"),
     listContracts: async () => track("listContracts"),
@@ -266,3 +271,61 @@ test("performance snapshot records bootstrap read count", async () => {
   const perf = getAdminModulePerformanceSnapshot();
   assert.equal(perf.bootstrapReads.length, 1);
 });
+
+test("authenticated platform_admin hub loader returns registered hubs", async () => {
+  const service = createTrackingService();
+  const hubsData = await loadHubsCurriculumData(service);
+  assert.ok(hubsData.hubs.length > 0);
+  assert.ok(hubsData.hubs.some((hub) => hub.hubCode === "tlevel-software-development"));
+  const fetched = await fetchModuleData("hubs-curriculum", service);
+  assert.deepEqual(
+    fetched.hubs.map((hub) => hub.hubCode),
+    hubsData.hubs.map((hub) => hub.hubCode),
+  );
+});
+
+test("hubs UI and curriculum selector consume the same loaded hub list", async () => {
+  const service = createTrackingService();
+  const hubsData = await loadHubsCurriculumData(service);
+  const cache = createEmptyModuleCache();
+  cache["hubs-curriculum"] = {
+    status: "ready",
+    data: hubsData as HubsCurriculumData,
+    error: null,
+  };
+  const snapshot = mergeModuleCacheToSnapshot(cache);
+  assert.deepEqual(
+    snapshot.hubs.map((hub) => hub.hubCode),
+    hubsData.hubs.map((hub) => hub.hubCode),
+  );
+});
+
+test("empty hub list matching a zero summary is allowed", () => {
+  assert.doesNotThrow(() => assertHubListMatchesSummary([], 0));
+  assert.doesNotThrow(() => assertHubListMatchesSummary([], undefined));
+  assert.doesNotThrow(() => assertHubListMatchesSummary(DEMO_ADMIN_DATA.hubs, 5));
+});
+
+test("empty hub list is not treated as an empty registry when summary reports active hubs", async () => {
+  assert.throws(
+    () => assertHubListMatchesSummary([], 5),
+    (error: unknown) => error instanceof AdminReadError && error.code === "unavailable",
+  );
+
+  const service = createTrackingService();
+  service.listHubs = async () => {
+    service.calls.push("listHubs");
+    return [];
+  };
+  await assert.rejects(
+    () => loadDashboardData(service),
+    (error: unknown) => error instanceof AdminReadError && error.code === "unavailable",
+  );
+  await assert.rejects(
+    () => loadHubsCurriculumData(service, {
+      dashboardSummary: { ...DEMO_ADMIN_DATA.dashboardSummary, activeHubs: 5 },
+    }),
+    (error: unknown) => error instanceof AdminReadError && error.code === "unavailable",
+  );
+});
+
