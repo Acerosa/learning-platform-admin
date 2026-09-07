@@ -92,12 +92,18 @@ export function displayedCatalogueVersion(
 
 export function shouldAutoHydrateVisibilityWorkspace(input: {
   tab: string;
-  stale: boolean;
+  stale?: boolean;
+  workspaceCurrent?: boolean;
+  remoteDraftsSettled?: boolean;
   platformAvailable: boolean;
   hasPublishedLoader: boolean;
 }): boolean {
+  const needsPublishedWorkspace = typeof input.workspaceCurrent === "boolean"
+    ? !input.workspaceCurrent
+    : Boolean(input.stale);
   return input.tab === "weeks"
-    && input.stale
+    && needsPublishedWorkspace
+    && input.remoteDraftsSettled !== false
     && input.platformAvailable
     && input.hasPublishedLoader;
 }
