@@ -95,6 +95,16 @@ import {
   type HostedCurriculumSnapshot,
 } from "../content/visibility-publish-base";
 import {
+  createPublishedWeeksWorkspace,
+  isCurrentPublishedWeeksWorkspace,
+  resolveWorkspaceForTab,
+  shouldActivateRemoteDraft,
+  shouldStartVisibilityHydration,
+  visibilityHydrateKeyAfterAttempt,
+  visibilityWorkspaceKey,
+  type PublishedWeeksWorkspace,
+} from "../content/visibility-workspace";
+import {
   approveRecord,
   archiveVersion,
   createWorkingCopy,
@@ -240,11 +250,16 @@ export function CurriculumAuthoringPage({
   const [visibilityPublishBusy, setVisibilityPublishBusy] = useState(false);
   const [curriculumPublishBusy, setCurriculumPublishBusy] = useState(false);
   const [remoteDraftStatus, setRemoteDraftStatus] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [weeksWorkspace, setWeeksWorkspace] = useState<PublishedWeeksWorkspace | null>(null);
   const saveGate = useRef(createSequenceGate());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftRef = useRef(draft);
+  const tabRef = useRef<AuthoringTab>(tab);
+  const selectedContextRef = useRef({ hubCode: selectedHubCode, courseKey: selectedCourseKey });
   const remoteLoaded = useRef(false);
+  const weeksWorkspaceRef = useRef<PublishedWeeksWorkspace | null>(null);
   const visibilityHydrateKey = useRef("");
+  const visibilityHydrateInFlightKey = useRef("");
 
   function hubNameFor(hubCode: string) {
     return hubs.find((item) => item.hubCode === hubCode)?.hubName || hubCode;
@@ -252,6 +267,11 @@ export function CurriculumAuthoringPage({
 
   function courseKeyForHub(hubCode: string, fallback = selectedCourseKey) {
     return links.find((item) => item.hubCode === hubCode)?.courseKey || fallback;
+  }
+
+  function updateWeeksWorkspace(next: PublishedWeeksWorkspace | null) {
+    weeksWorkspaceRef.current = next;
+    setWeeksWorkspace(next);
   }
 
   function noteStoragePersist(nextRecords: AuthoringDraft[]) {
@@ -337,15 +357,46 @@ export function CurriculumAuthoringPage({
         const merged = mergeRemoteAuthoringDrafts(stored, remotes);
         noteStoragePersist(merged);
         setDrafts(merged);
-        const next = activateDraftForContext(merged, selectedHubCode, selectedCourseKey, undefined, true);
-        setDraft(next);
+        const context = selectedContextRef.current;
+        const next = resolveActiveDraftForContext(
+          merged,
+          context.hubCode,
+          context.courseKey,
+          hubs.find((item) => item.hubCode === context.hubCode)?.hubName || context.hubCode,
+          actor,
+        );
+        const ownedWorkspaceVersion = weeksWorkspaceRef.current?.draft.hubId === context.hubCode
+          && weeksWorkspaceRef.current.draft.courseKey === context.courseKey
+          ? weeksWorkspaceRef.current.packageVersion
+          : null;
+        const hostedVersion = resolveHostedPublicationVersion(
+          publications,
+          context.hubCode,
+          context.courseKey,
+        ) || ownedWorkspaceVersion;
+        if (shouldActivateRemoteDraft({
+          tab: tabRef.current,
+          workspace: weeksWorkspaceRef.current,
+          candidate: next,
+          hubCode: context.hubCode,
+          courseKey: context.courseKey,
+          hostedPackageVersion: hostedVersion,
+        })) {
+          if (tabRef.current === "weeks" && hostedVersion) {
+            weeksWorkspaceRef.current = null;
+            setWeeksWorkspace(null);
+            visibilityHydrateKey.current = "";
+          }
+          applySelectionForDraft(next, merged, true);
+          setDraft(next);
+        }
         setRemoteDraftStatus("loaded");
       })
       .catch((error) => {
         setRemoteDraftStatus("error");
         setMessage(error instanceof Error ? error.message : "Remote curriculum drafts could not be loaded.");
       });
-  }, [hydrated, onLoadRemoteDrafts, platformAvailable, selectedCourseKey, selectedHubCode]);
+  }, [actor, hydrated, hubs, onLoadRemoteDrafts, platformAvailable, publications]);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -392,7 +443,7 @@ export function CurriculumAuthoringPage({
         : "<p>Create a week or activity to preview the learner renderer.</p>";
 
   const compareRecords = useMemo(() => {
-    const pool = drafts.length ? drafts : [draft];
+    const pool = [draft, ...drafts.filter((item) => item.id !== draft.id)];
     return recordsForContext(pool, selectedHubCode, selectedCourseKey);
   }, [draft, drafts, selectedCourseKey, selectedHubCode]);
   const contextMatches = draft.hubId === selectedHubCode && draft.courseKey === selectedCourseKey;
@@ -413,12 +464,33 @@ export function CurriculumAuthoringPage({
     selectedCourseKey,
   );
   const catalogueVersionLabel = displayedCatalogueVersion(hostedCatalogueVersion, draft);
+  const currentPublishedWeeksWorkspace = isCurrentPublishedWeeksWorkspace(
+    weeksWorkspace,
+    selectedHubCode,
+    selectedCourseKey,
+    hostedCatalogueVersion,
+  );
+  const activePublishedWeeksWorkspace = currentPublishedWeeksWorkspace
+    && weeksWorkspace?.draft.id === draft.id;
+  const remoteDraftsSettled = !platformAvailable
+    || !onLoadRemoteDrafts
+    || remoteDraftStatus === "loaded"
+    || remoteDraftStatus === "error";
+  const requiresPublishedWeeksWorkspace = tab === "weeks"
+    && Boolean(hostedCatalogueVersion)
+    && platformAvailable
+    && Boolean(onLoadPublishedPackage);
   const visibilityDraftStale = Boolean(
     hostedCatalogueVersion && isVisibilityDraftStale(draft, hostedCatalogueVersion, null),
   );
 
   function showError(error: unknown) {
     setMessage(error instanceof Error ? error.message : "The requested publication action could not be completed.");
+  }
+
+  function updateCurrentTab(nextTab: AuthoringTab) {
+    tabRef.current = nextTab;
+    setTab(nextTab);
   }
 
   function openWorkingCopyFromPublished(source?: AuthoringDraft | null) {
@@ -434,45 +506,91 @@ export function CurriculumAuthoringPage({
       commit(copy);
       setPublishVersionValue(suggestNextVersionForDraft(compareRecords, copy));
       setPublishNotes("");
-      setTab("weeks");
+      updateCurrentTab("weeks");
       setMessage("New editable draft created from the published snapshot. Use Post week & publish / Remove week & publish for visibility, or edit content then use Review and Publication.");
     } catch (error) {
       showError(error);
     }
   }
 
-  async function openPublished() {
+  async function openPublished(force = false) {
     if (!onLoadPublishedPackage) {
       setLoadStatus("error");
       setMessage("Opening published content requires a live administrator session.");
-      return;
+      return null;
     }
+    const context = selectedContextRef.current;
+    const listedVersion = resolveHostedPublicationVersion(
+      publications,
+      context.hubCode,
+      context.courseKey,
+    );
+    const requestKey = visibilityWorkspaceKey(
+      context.hubCode,
+      context.courseKey,
+      listedVersion || "latest",
+    );
+    if (visibilityHydrateInFlightKey.current === requestKey) return null;
+    if (!force && !shouldStartVisibilityHydration(
+      visibilityHydrateKey.current,
+      visibilityHydrateInFlightKey.current,
+      requestKey,
+    )) {
+      return null;
+    }
+    visibilityHydrateInFlightKey.current = requestKey;
     setLoadStatus("loading");
     setStorageWarning("");
     try {
-      const published = await onLoadPublishedPackage(selectedHubCode, selectedCourseKey);
+      const published = await onLoadPublishedPackage(context.hubCode, context.courseKey);
+      if (
+        selectedContextRef.current.hubCode !== context.hubCode
+        || selectedContextRef.current.courseKey !== context.courseKey
+      ) {
+        return null;
+      }
       const working = createWorkingCopyFromPackage(published.package, actor, published.packageVersion);
       const weekCount = working.package.weeks.length;
-      const nextRecords = saveDraftRecords(drafts, working);
-      noteStoragePersist(nextRecords);
+      updateWeeksWorkspace(createPublishedWeeksWorkspace(working, published.packageVersion));
+      const successfulKey = visibilityWorkspaceKey(
+        context.hubCode,
+        context.courseKey,
+        published.packageVersion,
+      );
       setDraft(working);
-      setDrafts(nextRecords);
       setPreviewId(working.id);
       setSaveStatus("saved");
       setLoadStatus("loaded");
       setSelectedActivityId(working.package.activities[0]?.id || "");
       setVisibilityWeekId(working.package.weeks[0]?.id || "");
-      setPublishVersionValue(suggestNextVersionForDraft(recordsForContext(nextRecords, selectedHubCode, selectedCourseKey), working));
-      setTab("weeks");
+      setPublishVersionValue(suggestNextVersionForDraft(recordsForContext(drafts, context.hubCode, context.courseKey), working));
+      updateCurrentTab("weeks");
       setMessage(
         weekCount
           ? `Opened published ${published.packageVersion}: ${weekCount} week${weekCount === 1 ? "" : "s"} ready on Weeks (Post week & publish).`
           : `Opened published ${published.packageVersion}, but this package has no weeks.`,
       );
+      return successfulKey;
     } catch (error) {
       setLoadStatus("error");
       showError(error);
+      return null;
+    } finally {
+      if (visibilityHydrateInFlightKey.current === requestKey) {
+        visibilityHydrateInFlightKey.current = "";
+      }
     }
+  }
+
+  async function hydratePublishedWorkspace(force = false) {
+    const successfulKey = await openPublished(force);
+    if (!successfulKey) return false;
+    visibilityHydrateKey.current = visibilityHydrateKeyAfterAttempt(
+      visibilityHydrateKey.current,
+      successfulKey,
+      true,
+    );
+    return true;
   }
 
   useEffect(() => {
@@ -481,33 +599,51 @@ export function CurriculumAuthoringPage({
       selectedHubCode,
       selectedCourseKey,
     );
-    const stale = Boolean(hostedVersion && isVisibilityDraftStale(draft, hostedVersion, null));
+    if (!hostedVersion) return;
+    const workspaceCurrent = isCurrentPublishedWeeksWorkspace(
+      weeksWorkspace,
+      selectedHubCode,
+      selectedCourseKey,
+      hostedVersion,
+    ) && weeksWorkspace?.draft.id === draft.id;
     if (!shouldAutoHydrateVisibilityWorkspace({
       tab,
-      stale,
+      workspaceCurrent,
+      remoteDraftsSettled,
       platformAvailable,
       hasPublishedLoader: Boolean(onLoadPublishedPackage),
     })) {
       return;
     }
     const key = `${selectedHubCode}::${selectedCourseKey}::${hostedVersion}`;
-    if (visibilityHydrateKey.current === key) return;
-    visibilityHydrateKey.current = key;
-    void openPublished();
-    // openPublished is a render-time helper; hydrating from the Weeks tab must reuse that path.
+    if (!shouldStartVisibilityHydration(
+      visibilityHydrateKey.current,
+      visibilityHydrateInFlightKey.current,
+      key,
+    )) return;
+    void hydratePublishedWorkspace();
+    // Published hydration is a render-time helper; the Weeks effect reuses that path.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid retriggering on helper identity
   }, [
     draft,
     onLoadPublishedPackage,
     platformAvailable,
     publications,
+    remoteDraftsSettled,
     selectedCourseKey,
     selectedHubCode,
     tab,
+    weeksWorkspace,
   ]);
 
   function commit(nextDraft: AuthoringDraft, nextRecords = saveDraftRecords(drafts, nextDraft), markUnsaved = true) {
     noteStoragePersist(nextRecords);
+    if (tabRef.current === "weeks" && weeksWorkspaceRef.current?.draft.id === nextDraft.id) {
+      updateWeeksWorkspace({
+        ...weeksWorkspaceRef.current,
+        draft: nextDraft,
+      });
+    }
     setDraft(nextDraft);
     setDrafts(nextRecords);
     setPreviewId(nextDraft.id);
@@ -539,10 +675,35 @@ export function CurriculumAuthoringPage({
       const latest = draftRef.current.id === nextDraft.id
         ? { ...draftRef.current, remoteRevision: result.revision }
         : { ...nextDraft, remoteRevision: result.revision };
-      setDraft(latest);
       const nextRecords = saveDraftRecords(drafts, latest);
       noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
+      const context = selectedContextRef.current;
+      const ownedWorkspaceVersion = weeksWorkspaceRef.current?.draft.hubId === context.hubCode
+        && weeksWorkspaceRef.current.draft.courseKey === context.courseKey
+        ? weeksWorkspaceRef.current.packageVersion
+        : null;
+      const hostedVersion = resolveHostedPublicationVersion(
+        publications,
+        context.hubCode,
+        context.courseKey,
+      ) || ownedWorkspaceVersion;
+      if (weeksWorkspaceRef.current?.draft.id === latest.id) {
+        updateWeeksWorkspace(createPublishedWeeksWorkspace(
+          latest,
+          weeksWorkspaceRef.current.packageVersion,
+        ));
+        setDraft(latest);
+      } else if (shouldActivateRemoteDraft({
+        tab: tabRef.current,
+        workspace: weeksWorkspaceRef.current,
+        candidate: latest,
+        hubCode: context.hubCode,
+        courseKey: context.courseKey,
+        hostedPackageVersion: hostedVersion,
+      })) {
+        setDraft(latest);
+      }
       setSaveStatus("saved");
     } catch (error) {
       if (!saveGate.current.isCurrent(requestId) && !explicit) return;
@@ -640,6 +801,14 @@ export function CurriculumAuthoringPage({
           },
         );
       let nextRecords = prepared.records;
+      const workspaceBaseVersion = hostedPublicationVersion
+        || hosted?.packageVersion
+        || prepared.published.basedOnVersion
+        || prepared.published.version;
+      updateWeeksWorkspace(createPublishedWeeksWorkspace(
+        prepared.published,
+        workspaceBaseVersion,
+      ));
       noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
       setDraft(prepared.published);
@@ -649,6 +818,10 @@ export function CurriculumAuthoringPage({
       setMessage("Publishing to the platform…");
 
       const publishing = withPlatformPublication(prepared.published, { platformPublicationState: "publishing" });
+      updateWeeksWorkspace(createPublishedWeeksWorkspace(
+        publishing,
+        workspaceBaseVersion,
+      ));
       nextRecords = nextRecords.map((item) => (item.id === publishing.id ? publishing : item));
       noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
@@ -657,6 +830,10 @@ export function CurriculumAuthoringPage({
       try {
         const result = await onPublishToPlatform(publishing);
         const succeeded = applySuccessfulVisibilityPublish(nextRecords, publishing, result);
+        updateWeeksWorkspace(createPublishedWeeksWorkspace(
+          succeeded.draft,
+          succeeded.draft.version,
+        ));
         noteStoragePersist(succeeded.records);
         setDrafts(succeeded.records);
         setDraft(succeeded.draft);
@@ -677,6 +854,10 @@ export function CurriculumAuthoringPage({
         });
         const withFailed = nextRecords.map((item) => (item.id === failed.id ? failed : item));
         const recovered = recoverFromFailedWeekVisibilityPublish(withFailed, failed, actor);
+        updateWeeksWorkspace(createPublishedWeeksWorkspace(
+          recovered.draft,
+          workspaceBaseVersion,
+        ));
         noteStoragePersist(recovered.records);
         setDrafts(recovered.records);
         setDraft(recovered.draft);
@@ -790,6 +971,7 @@ export function CurriculumAuthoringPage({
     const courseKey = courseKeyForHub(hubCode);
     setSelectedHubCode(hubCode);
     setSelectedCourseKey(courseKey);
+    selectedContextRef.current = { hubCode, courseKey };
     setStorageWarning("");
     const next = resolveActiveDraftForContext(drafts, hubCode, courseKey, hub?.hubName || hubCode, actor);
     const nextRecords = commit(next, undefined, false);
@@ -799,11 +981,31 @@ export function CurriculumAuthoringPage({
 
   function setCourseContext(courseKey: string) {
     setSelectedCourseKey(courseKey);
+    selectedContextRef.current = { hubCode: selectedHubCode, courseKey };
     setStorageWarning("");
     const next = resolveActiveDraftForContext(drafts, selectedHubCode, courseKey, hubNameFor(selectedHubCode), actor);
     const nextRecords = commit(next, undefined, false);
     applySelectionForDraft(next, nextRecords);
     setMessage(`Switched to ${courseKey}. Use Open published content to load the live package when needed.`);
+  }
+
+  function selectAuthoringTab(nextTab: AuthoringTab) {
+    if (nextTab === tabRef.current) return;
+    const next = resolveWorkspaceForTab({
+      tab: nextTab,
+      records: drafts,
+      workspace: weeksWorkspaceRef.current,
+      hubCode: selectedHubCode,
+      courseKey: selectedCourseKey,
+      hubName: hubNameFor(selectedHubCode),
+      actor,
+      hostedPackageVersion: hostedCatalogueVersion,
+    });
+    if (next.id !== draft.id) {
+      setDraft(next);
+      applySelectionForDraft(next, drafts, true);
+    }
+    updateCurrentTab(nextTab);
   }
 
   const primaryTabs: { id: AuthoringTab; label: string }[] = [
@@ -853,12 +1055,12 @@ export function CurriculumAuthoringPage({
           <summary className="button button--secondary">More</summary>
           <div className="authoring-more-menu__panel" role="menu">
             {secondaryTabs.map((item) => (
-              <button key={item.id} type="button" role="menuitem" className="button button--small button--secondary" onClick={() => setTab(item.id)}>
+              <button key={item.id} type="button" role="menuitem" className="button button--small button--secondary" onClick={() => selectAuthoringTab(item.id)}>
                 {item.label}
               </button>
             ))}
             <button type="button" role="menuitem" className="button button--small button--secondary" disabled={!editable} onClick={() => downloadText(`${pkg.hub.id}-package.json`, exportPackage(pkg))}>Export</button>
-            <button type="button" role="menuitem" className="button button--small button--secondary" disabled={!platformAvailable} onClick={() => void openPublished()}>Open published content</button>
+            <button type="button" role="menuitem" className="button button--small button--secondary" disabled={!platformAvailable} onClick={() => void hydratePublishedWorkspace(true)}>Open published content</button>
             <button type="button" role="menuitem" className="button button--small button--secondary" onClick={() => openWorkingCopyFromPublished()}>Create draft from published</button>
           </div>
         </details>
@@ -869,7 +1071,7 @@ export function CurriculumAuthoringPage({
         onReturnToDraft={() => {
           try {
             applyRecord(returnToDraft(draft));
-            setTab("weeks");
+            updateCurrentTab("weeks");
             setMessage("Returned to Draft. Use Post week & publish / Remove week & publish for visibility, or edit content then use Review and Publication.");
           } catch (error) {
             showError(error);
@@ -879,7 +1081,7 @@ export function CurriculumAuthoringPage({
       <p role="status">Draft save: {saveStatus === "idle" ? "Saved" : saveStatus === "unsaved" ? "Unsaved changes" : saveStatus === "saving" ? "Saving..." : saveStatus === "failed" ? "Save failed" : saveStatus === "offline" ? "Offline — changes not yet saved" : "Saved"}</p>
       {remoteDraftStatus === "loading" ? <p role="status">Loading remote curriculum draft...</p> : null}
       {loadStatus === "loading" ? <p role="status">Loading published curriculum...</p> : null}
-      {loadStatus === "error" ? <p className="authoring-alert" role="alert">Published curriculum could not be loaded. <button type="button" className="button button--small button--secondary" onClick={() => void openPublished()}>Retry</button></p> : null}
+      {loadStatus === "error" ? <p className="authoring-alert" role="alert">Published curriculum could not be loaded. <button type="button" className="button button--small button--secondary" onClick={() => void hydratePublishedWorkspace(true)}>Retry</button></p> : null}
       {storageWarning ? <p className="authoring-alert authoring-alert--warning" role="status">{storageWarning}</p> : null}
       {remoteDraftStatus === "error" ? <p className="authoring-alert" role="alert">Remote drafts could not be reopened. LocalStorage remains available as a fallback, but the hosted draft is authoritative.</p> : null}
       {message ? <p className="authoring-alert" role="alert">{message}</p> : null}
@@ -907,7 +1109,11 @@ export function CurriculumAuthoringPage({
               {!links.some((link) => link.hubCode === selectedHubCode) ? <option value={selectedCourseKey}>{selectedCourseKey}</option> : null}
             </select>
           </div>
-          <span className="toolbar__count" role="status">{pkg.weeks.length} weeks · {pkg.sessions.length} sessions · {pkg.activities.length} activities</span>
+          <span className="toolbar__count" role="status">
+            {requiresPublishedWeeksWorkspace && !activePublishedWeeksWorkspace
+              ? "Loading published curriculum…"
+              : `${pkg.weeks.length} weeks · ${pkg.sessions.length} sessions · ${pkg.activities.length} activities`}
+          </span>
         </div>
       </section>
 
@@ -921,7 +1127,7 @@ export function CurriculumAuthoringPage({
             id={`authoring-tab-${item.id}`}
             aria-controls={`authoring-panel-${item.id}`}
             className={tab === item.id ? "is-active" : undefined}
-            onClick={() => setTab(item.id)}
+            onClick={() => selectAuthoringTab(item.id)}
           >
             {item.label}
           </button>
@@ -945,7 +1151,7 @@ export function CurriculumAuthoringPage({
 
         {tab === "weeks" ? (
           <>
-            {!contextReady || !contextMatches ? (
+            {!contextReady || !contextMatches || (requiresPublishedWeeksWorkspace && !activePublishedWeeksWorkspace) ? (
               <section className="panel">
                 <p role="status">Loading curriculum context...</p>
               </section>
@@ -964,7 +1170,7 @@ export function CurriculumAuthoringPage({
                   className="button button--secondary"
                   type="button"
                   disabled={!platformAvailable || visibilityPublishBusy}
-                  onClick={() => void openPublished()}
+                  onClick={() => void hydratePublishedWorkspace(true)}
                 >
                   Open published content
                 </button>
@@ -1247,7 +1453,7 @@ export function CurriculumAuthoringPage({
             onSelect={(item) => {
               setDraft(item);
               setPreviewId(item.id);
-              setTab("curriculum");
+              updateCurrentTab("curriculum");
             }}
             onWorkingCopy={(published) => {
               openWorkingCopyFromPublished(published);
@@ -1364,12 +1570,12 @@ export function CurriculumAuthoringPage({
             onCompare={(item) => {
               setCompareLeft(draft.id);
               setCompareRight(item.id);
-              setTab("compare");
+              updateCurrentTab("compare");
             }}
             onRestore={(item) => {
               const restored = restoreAsDraft(item, actor);
               commit(restored);
-              setTab("curriculum");
+              updateCurrentTab("curriculum");
             }}
           />
         ) : null}
