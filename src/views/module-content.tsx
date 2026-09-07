@@ -273,7 +273,7 @@ function legacyHeading(moduleId: AdminModuleId): string | undefined {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, moduleCache, publishCurriculum, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, bootstrapReady } = useAdminPortal();
+  const { data, session, dataSource, moduleCache, publishCurriculum, setSessionVisibility, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, bootstrapReady } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
@@ -294,6 +294,7 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
       publications={data.curriculumPublications}
       platformAvailable={dataSource.mode === "live" && dataSource.state === "ready"}
       onPublishToPlatform={publishCurriculum}
+      onSetSessionVisibility={setSessionVisibility}
       onSaveDraft={saveCurriculumDraft}
       onLoadPublishedPackage={async (hubCode, courseKey) => {
         const published = await loadCurrentCurriculumPackage(hubCode, courseKey);

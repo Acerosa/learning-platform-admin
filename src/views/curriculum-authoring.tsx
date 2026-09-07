@@ -87,6 +87,10 @@ import {
   type WeekVisibilityAction,
 } from "../content/week-visibility-publish";
 import {
+  sessionVisibilityStatusForAction,
+  supportsServerSessionVisibility,
+} from "../content/server-session-visibility";
+import {
   displayedCatalogueVersion,
   isVisibilityDraftStale,
   resolveVisibilityPublishDraft,
@@ -185,6 +189,7 @@ export function CurriculumAuthoringPage({
   publications = [],
   platformAvailable = false,
   onPublishToPlatform,
+  onSetSessionVisibility,
   onSaveDraft,
   onLoadPublishedPackage,
   onLoadRemoteDrafts,
@@ -195,6 +200,20 @@ export function CurriculumAuthoringPage({
   publications?: readonly CurriculumPublicationRecord[];
   platformAvailable?: boolean;
   onPublishToPlatform?: (record: AuthoringDraft) => Promise<{ id: string; publishedAt: string; idempotent: boolean }>;
+  onSetSessionVisibility?: (input: {
+    hubCode: string;
+    courseKey: string;
+    sessionId: string;
+    status: "available" | "planned";
+  }) => Promise<{
+    publicationId: string;
+    previousPackageVersion: string;
+    packageVersion: string;
+    sessionId: string;
+    previousStatus: string;
+    status: string;
+    idempotent: boolean;
+  }>;
   onSaveDraft?: (record: AuthoringDraft) => Promise<{ revision: number }>;
   onLoadPublishedPackage?: (hubCode: string, courseKey: string) => Promise<{ package: ContentPackage; packageVersion: string }>;
   onLoadRemoteDrafts?: () => Promise<AuthoringDraft[]>;
@@ -886,10 +905,6 @@ export function CurriculumAuthoringPage({
   }
 
   async function publishSessionVisibility(sessionId: string, action: WeekVisibilityAction) {
-    if (!onPublishToPlatform) {
-      setMessage("Post session & publish requires a live administrator session.");
-      return;
-    }
     const session = pkg.sessions.find((item) => item.id === sessionId);
     if (!session) {
       setMessage("Session not found.");
@@ -900,6 +915,46 @@ export function CurriculumAuthoringPage({
       ? window.confirm(postSessionAndPublishConfirm(sessionTitle))
       : window.confirm(removeSessionAndPublishConfirm(sessionTitle));
     if (!confirmed) return;
+
+    if (supportsServerSessionVisibility(selectedHubCode) && onSetSessionVisibility && onLoadPublishedPackage) {
+      setVisibilityPublishBusy(true);
+      try {
+        const result = await onSetSessionVisibility({
+          hubCode: selectedHubCode,
+          courseKey: selectedCourseKey,
+          sessionId,
+          status: sessionVisibilityStatusForAction(action),
+        });
+        const published = await onLoadPublishedPackage(selectedHubCode, selectedCourseKey);
+        const working = createWorkingCopyFromPackage(published.package, actor, published.packageVersion);
+        const nextRecords = saveDraftRecords(drafts, working);
+        updateWeeksWorkspace(createPublishedWeeksWorkspace(working, published.packageVersion));
+        noteStoragePersist(nextRecords);
+        setDraft(working);
+        setDrafts(nextRecords);
+        setPreviewId(working.id);
+        setVisibilityWeekId(working.package.weeks.find((week) => {
+          const sessions = Array.isArray(week.relationships.sessions) ? week.relationships.sessions : [];
+          return sessions.includes(sessionId);
+        })?.id || working.package.weeks[0]?.id || "");
+        setPublishVersionValue(published.packageVersion);
+        setMessage(
+          result.idempotent
+            ? `Session already ${result.status}. Catalogue remains ${result.packageVersion}.`
+            : `Session visibility: ${action} ${sessionId} → catalogue ${result.packageVersion}.`,
+        );
+      } catch (error) {
+        showError(error);
+      } finally {
+        setVisibilityPublishBusy(false);
+      }
+      return;
+    }
+
+    if (!onPublishToPlatform) {
+      setMessage("Post session & publish requires a live administrator session.");
+      return;
+    }
     await publishVisibilityChange("session", sessionId, action);
   }
 
