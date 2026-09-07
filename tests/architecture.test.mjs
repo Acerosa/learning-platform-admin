@@ -61,6 +61,7 @@ test("live integration uses Supabase Auth and the admin_api schema only", async 
   assert.match(service, /auth\.signUp/);
   assert.match(service, /claim_initial_platform_admin/);
   assert.match(service, /publish_curriculum/);
+  assert.match(service, /set_session_visibility/);
   assert.match(service, /review_response/);
   assert.match(service, /register_hub/);
   assert.match(service, /update_hub/);
@@ -135,6 +136,29 @@ test("week visibility controls stay outside the disabled week-editor fieldset", 
   assert.match(source, /onRemove=\{\(sessionId\) => void publishSessionVisibility\(sessionId, "remove"\)\}/);
   assert.match(source, /prepareSessionVisibilityPublish/);
   assert.match(source, /entityType === "session"/);
+  assert.match(source, /usesServerSessionVisibility\(/);
+  assert.doesNotMatch(source, /supportsServerSessionVisibility/);
+  const sessionFn = source.slice(
+    source.indexOf("async function publishSessionVisibility"),
+    source.indexOf("async function publishCurriculum"),
+  );
+  const serverBranch = sessionFn.slice(0, sessionFn.indexOf("if (!onPublishToPlatform)"));
+  assert.match(serverBranch, /onSetSessionVisibility/);
+  assert.match(serverBranch, /sessionVisibilityRequest/);
+  assert.match(serverBranch, /applyServerSessionVisibilitySuccess/);
+  assert.doesNotMatch(serverBranch, /saveDraftRecords/);
+  assert.doesNotMatch(serverBranch, /onPublishToPlatform/);
+  assert.doesNotMatch(serverBranch, /prepareSessionVisibilityPublish/);
+  assert.match(sessionFn, /await publishVisibilityChange\("session"/);
+  const weekFn = source.slice(
+    source.indexOf("async function publishWeekVisibility"),
+    source.indexOf("async function publishSessionVisibility"),
+  );
+  assert.match(weekFn, /await publishVisibilityChange\("week"/);
+  assert.doesNotMatch(weekFn, /onSetSessionVisibility/);
+  const curriculumFn = source.slice(source.indexOf("async function publishCurriculum"));
+  assert.match(curriculumFn, /prepareCurriculumPublish/);
+  assert.match(curriculumFn, /onPublishToPlatform\(publishing\)/);
   const panel = await readFile(new URL("src/components/authoring/week-session-visibility.tsx", root), "utf8");
   assert.match(panel, /Sessions in this week/);
   assert.match(panel, /Post session & publish/);

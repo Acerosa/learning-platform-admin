@@ -87,8 +87,10 @@ import {
   type WeekVisibilityAction,
 } from "../content/week-visibility-publish";
 import {
-  sessionVisibilityStatusForAction,
-  supportsServerSessionVisibility,
+  applyServerSessionVisibilitySuccess,
+  operationalCatalogueVersion,
+  sessionVisibilityRequest,
+  usesServerSessionVisibility,
 } from "../content/server-session-visibility";
 import {
   displayedCatalogueVersion,
@@ -482,7 +484,10 @@ export function CurriculumAuthoringPage({
     selectedHubCode,
     selectedCourseKey,
   );
-  const catalogueVersionLabel = displayedCatalogueVersion(hostedCatalogueVersion, draft);
+  const catalogueVersionLabel = displayedCatalogueVersion(
+    operationalCatalogueVersion(hostedCatalogueVersion, weeksWorkspace?.packageVersion),
+    draft,
+  );
   const currentPublishedWeeksWorkspace = isCurrentPublishedWeeksWorkspace(
     weeksWorkspace,
     selectedHubCode,
@@ -916,33 +921,36 @@ export function CurriculumAuthoringPage({
       : window.confirm(removeSessionAndPublishConfirm(sessionTitle));
     if (!confirmed) return;
 
-    if (supportsServerSessionVisibility(selectedHubCode) && onSetSessionVisibility && onLoadPublishedPackage) {
+    if (usesServerSessionVisibility({
+      platformAvailable,
+      hasSessionVisibilityRpc: Boolean(onSetSessionVisibility),
+      hasPublishedPackageLoader: Boolean(onLoadPublishedPackage),
+    }) && onSetSessionVisibility && onLoadPublishedPackage) {
+      const priorDraft = draftRef.current;
+      const priorPreviewId = previewId;
       setVisibilityPublishBusy(true);
       try {
-        const result = await onSetSessionVisibility({
+        const result = await onSetSessionVisibility(sessionVisibilityRequest({
           hubCode: selectedHubCode,
           courseKey: selectedCourseKey,
           sessionId,
-          status: sessionVisibilityStatusForAction(action),
-        });
+          action,
+        }));
         const published = await onLoadPublishedPackage(selectedHubCode, selectedCourseKey);
-        const working = createWorkingCopyFromPackage(published.package, actor, published.packageVersion);
-        const nextRecords = saveDraftRecords(drafts, working);
-        updateWeeksWorkspace(createPublishedWeeksWorkspace(working, published.packageVersion));
-        noteStoragePersist(nextRecords);
-        setDraft(working);
-        setDrafts(nextRecords);
-        setPreviewId(working.id);
-        setVisibilityWeekId(working.package.weeks.find((week) => {
-          const sessions = Array.isArray(week.relationships.sessions) ? week.relationships.sessions : [];
-          return sessions.includes(sessionId);
-        })?.id || working.package.weeks[0]?.id || "");
-        setPublishVersionValue(published.packageVersion);
-        setMessage(
-          result.idempotent
-            ? `Session already ${result.status}. Catalogue remains ${result.packageVersion}.`
-            : `Session visibility: ${action} ${sessionId} → catalogue ${result.packageVersion}.`,
-        );
+        const next = applyServerSessionVisibilitySuccess({
+          authoringDraft: priorDraft,
+          authoringRecords: drafts,
+          publishedPackage: published.package,
+          result,
+          actor,
+          action,
+          tab: tabRef.current,
+          previewId: priorPreviewId,
+        });
+        updateWeeksWorkspace(next.weeksWorkspace);
+        setDraft(next.activeDraft);
+        if (next.weekId) setVisibilityWeekId(next.weekId);
+        setMessage(next.message);
       } catch (error) {
         showError(error);
       } finally {
