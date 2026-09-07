@@ -185,13 +185,26 @@ test("stale local history uses hosted publication baseline for week visibility p
   const withoutHosted = prepareWeekVisibilityPublish([stalePublished], emptyDraft, "week-2", "post", "Ada Author");
   assert.equal(withoutHosted.published.version, "0.1.1");
 
+  assert.throws(
+    () => prepareWeekVisibilityPublish(
+      [stalePublished],
+      emptyDraft,
+      "week-2",
+      "post",
+      "Ada Author",
+      { hostedPublicationVersion: "0.3.0" },
+    ),
+    (error: unknown) => error instanceof WeekVisibilityPublishError
+      && /older than the current published curriculum/i.test(error.message),
+  );
+
   const withHosted = prepareWeekVisibilityPublish(
     [stalePublished],
     emptyDraft,
     "week-2",
     "post",
     "Ada Author",
-    { hostedPublicationVersion: "0.3.0" },
+    { hostedPublicationVersion: "0.3.0", hostedPackage: pkg },
   );
   assert.equal(withHosted.published.version, "0.3.1");
   assert.equal(withHosted.published.basedOnVersion, "0.3.0");

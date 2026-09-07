@@ -76,6 +76,7 @@ import {
   sessionsForWeek,
 } from "../content/session-availability";
 import {
+  applySuccessfulVisibilityPublish,
   canRunWeekVisibilityPublish,
   prepareSessionVisibilityPublish,
   prepareWeekVisibilityPublish,
@@ -85,6 +86,14 @@ import {
   type VisibilityEntityType,
   type WeekVisibilityAction,
 } from "../content/week-visibility-publish";
+import {
+  displayedCatalogueVersion,
+  isVisibilityDraftStale,
+  resolveVisibilityPublishDraft,
+  shouldAutoHydrateVisibilityWorkspace,
+  visibilityDraftStaleMessage,
+  type HostedCurriculumSnapshot,
+} from "../content/visibility-publish-base";
 import {
   approveRecord,
   archiveVersion,
@@ -235,6 +244,7 @@ export function CurriculumAuthoringPage({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftRef = useRef(draft);
   const remoteLoaded = useRef(false);
+  const visibilityHydrateKey = useRef("");
 
   function hubNameFor(hubCode: string) {
     return hubs.find((item) => item.hubCode === hubCode)?.hubName || hubCode;
@@ -397,6 +407,15 @@ export function CurriculumAuthoringPage({
     curriculumPublishBusy || visibilityPublishBusy,
     gate.ok,
   );
+  const hostedCatalogueVersion = resolveHostedPublicationVersion(
+    publications,
+    selectedHubCode,
+    selectedCourseKey,
+  );
+  const catalogueVersionLabel = displayedCatalogueVersion(hostedCatalogueVersion, draft);
+  const visibilityDraftStale = Boolean(
+    hostedCatalogueVersion && isVisibilityDraftStale(draft, hostedCatalogueVersion, null),
+  );
 
   function showError(error: unknown) {
     setMessage(error instanceof Error ? error.message : "The requested publication action could not be completed.");
@@ -455,6 +474,37 @@ export function CurriculumAuthoringPage({
       showError(error);
     }
   }
+
+  useEffect(() => {
+    const hostedVersion = resolveHostedPublicationVersion(
+      publications,
+      selectedHubCode,
+      selectedCourseKey,
+    );
+    const stale = Boolean(hostedVersion && isVisibilityDraftStale(draft, hostedVersion, null));
+    if (!shouldAutoHydrateVisibilityWorkspace({
+      tab,
+      stale,
+      platformAvailable,
+      hasPublishedLoader: Boolean(onLoadPublishedPackage),
+    })) {
+      return;
+    }
+    const key = `${selectedHubCode}::${selectedCourseKey}::${hostedVersion}`;
+    if (visibilityHydrateKey.current === key) return;
+    visibilityHydrateKey.current = key;
+    void openPublished();
+    // openPublished is a render-time helper; hydrating from the Weeks tab must reuse that path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid retriggering on helper identity
+  }, [
+    draft,
+    onLoadPublishedPackage,
+    platformAvailable,
+    publications,
+    selectedCourseKey,
+    selectedHubCode,
+    tab,
+  ]);
 
   function commit(nextDraft: AuthoringDraft, nextRecords = saveDraftRecords(drafts, nextDraft), markUnsaved = true) {
     noteStoragePersist(nextRecords);
@@ -521,6 +571,15 @@ export function CurriculumAuthoringPage({
     }
   }
 
+  async function loadHostedCurriculum(): Promise<HostedCurriculumSnapshot | null> {
+    if (!onLoadPublishedPackage) return null;
+    const hosted = await onLoadPublishedPackage(draft.hubId, draft.courseKey);
+    return {
+      packageVersion: hosted.packageVersion,
+      package: hosted.package,
+    };
+  }
+
   async function publishVisibilityChange(
     entityType: VisibilityEntityType,
     entityId: string,
@@ -535,39 +594,57 @@ export function CurriculumAuthoringPage({
 
     setVisibilityPublishBusy(true);
     try {
-      let hostedPublicationVersion = resolveHostedPublicationVersion(
+      const listedVersion = resolveHostedPublicationVersion(
         publications,
         draft.hubId,
         draft.courseKey,
       );
-      if (!hostedPublicationVersion && onLoadPublishedPackage) {
-        const hosted = await onLoadPublishedPackage(draft.hubId, draft.courseKey);
-        hostedPublicationVersion = hosted.packageVersion;
+      let hosted = await loadHostedCurriculum();
+      if (hosted) {
+        const latest = await loadHostedCurriculum();
+        if (latest) hosted = latest;
       }
 
+      const resolved = resolveVisibilityPublishDraft(
+        compareRecords,
+        draft,
+        actor,
+        hosted ?? (listedVersion ? { packageVersion: listedVersion, package: null } : null),
+      );
+      if (resolved.blockedMessage) {
+        throw new Error(resolved.blockedMessage);
+      }
+
+      const hostedPublicationVersion = resolved.hostedVersion ?? listedVersion;
       const prepared = entityType === "session"
         ? prepareSessionVisibilityPublish(
-          compareRecords,
-          draft,
+          resolved.records,
+          resolved.draft,
           entityId,
           action,
           actor,
-          { hostedPublicationVersion },
+          {
+            hostedPublicationVersion,
+            hostedPackage: hosted?.package ?? null,
+          },
         )
         : prepareWeekVisibilityPublish(
-          compareRecords,
-          draft,
+          resolved.records,
+          resolved.draft,
           entityId,
           action,
           actor,
-          { hostedPublicationVersion },
+          {
+            hostedPublicationVersion,
+            hostedPackage: hosted?.package ?? null,
+          },
         );
       let nextRecords = prepared.records;
       noteStoragePersist(nextRecords);
       setDrafts(nextRecords);
       setDraft(prepared.published);
       setPreviewId(prepared.published.id);
-      setPublishVersionValue(suggestNextVersionForDraft(nextRecords, prepared.published));
+      setPublishVersionValue(prepared.published.version);
       if (prepared.weekId) setVisibilityWeekId(prepared.weekId);
       setMessage("Publishing to the platform…");
 
@@ -579,16 +656,13 @@ export function CurriculumAuthoringPage({
 
       try {
         const result = await onPublishToPlatform(publishing);
-        const done = withPlatformPublication(publishing, {
-          platformPublicationState: "published",
-          platformPublicationError: null,
-          platformPublishedAt: result.publishedAt,
-          platformPublicationId: result.id,
-        });
-        nextRecords = nextRecords.map((item) => (item.id === done.id ? done : item));
-        noteStoragePersist(nextRecords);
-        setDrafts(nextRecords);
-        setDraft(done);
+        const succeeded = applySuccessfulVisibilityPublish(nextRecords, publishing, result);
+        noteStoragePersist(succeeded.records);
+        setDrafts(succeeded.records);
+        setDraft(succeeded.draft);
+        setPreviewId(succeeded.draft.id);
+        setPublishVersionValue(succeeded.draft.version);
+        if (prepared.weekId) setVisibilityWeekId(prepared.weekId);
         setMessage(
           prepared.entityType === "session" || !result.idempotent
             ? weekVisibilityPublishSuccessMessage(prepared)
@@ -895,9 +969,16 @@ export function CurriculumAuthoringPage({
                   Open published content
                 </button>
                 <span className="field-hint" role="status">
-                  Choose the hub above, then open the live published package to fill this week list.
+                  {catalogueVersionLabel
+                    ? `Current published catalogue: ${catalogueVersionLabel}.`
+                    : "Choose the hub above, then open the live published package to fill this week list."}
                 </span>
               </div>
+              {visibilityDraftStale && hostedCatalogueVersion ? (
+                <p className="authoring-alert" role="status">
+                  {visibilityDraftStaleMessage(draft, hostedCatalogueVersion)}
+                </p>
+              ) : null}
               {weekVisibilityRecoveryAction(draft) === "working-copy" ? (
                 <div className="toolbar week-visibility-toolbar">
                   <p className="field-hint" role="status">{weekVisibilityNextSteps(draft)}</p>

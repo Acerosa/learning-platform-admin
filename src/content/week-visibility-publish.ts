@@ -12,8 +12,9 @@ import {
   submitForReview,
   suggestNextVersion,
   touchDraft,
+  withPlatformPublication,
 } from "./versioning.ts";
-import { compareSemver, isSemver } from "./semver.ts";
+import { resolveVisibilityPublishDraft, type HostedCurriculumSnapshot } from "./visibility-publish-base.ts";
 import {
   canPostWeek,
   canRemoveWeek,
@@ -146,7 +147,14 @@ function ensureEditableDraft(
 
 export type WeekVisibilityPublishOptions = {
   hostedPublicationVersion?: string | null;
+  hostedPackage?: ContentPackage | null;
 };
+
+function visibilityHostedSnapshot(options?: WeekVisibilityPublishOptions): HostedCurriculumSnapshot | null {
+  const version = options?.hostedPublicationVersion;
+  if (!version) return null;
+  return { packageVersion: version, package: options?.hostedPackage ?? null };
+}
 
 function applyWeekVisibility(
   pkg: ContentPackage,
@@ -201,21 +209,20 @@ export function prepareVisibilityPublish(
     throw new WeekVisibilityPublishError("Platform publication is already in progress.");
   }
 
-  const ensured = ensureEditableDraft(records, draft, actor);
+  const hosted = visibilityHostedSnapshot(options);
+  const resolved = resolveVisibilityPublishDraft(records, draft, actor, hosted);
+  if (resolved.blockedMessage) {
+    throw new WeekVisibilityPublishError(resolved.blockedMessage);
+  }
+
+  const ensured = ensureEditableDraft(resolved.records, resolved.draft, actor);
   let workingRecords = ensured.records;
   let working = ensured.draft;
 
   const versionContext = {
     basedOnVersion: working.basedOnVersion,
-    hostedPublicationVersion: options?.hostedPublicationVersion ?? null,
+    hostedPublicationVersion: resolved.hostedVersion ?? options?.hostedPublicationVersion ?? null,
   };
-  if (versionContext.hostedPublicationVersion && isSemver(versionContext.hostedPublicationVersion)) {
-    const hosted = versionContext.hostedPublicationVersion;
-    if (!working.basedOnVersion || compareSemver(working.basedOnVersion, hosted) < 0) {
-      working = { ...working, basedOnVersion: hosted };
-      workingRecords = replaceRecord(workingRecords, working);
-    }
-  }
 
   const expected = action === "post" ? "available" : "planned";
   let week: ContentDocument | undefined;
@@ -415,6 +422,23 @@ export function recoverFromFailedWeekVisibilityPublish(
   nextRecords = replaceRecord(nextRecords, retryDraft);
 
   return { records: nextRecords, draft: retryDraft };
+}
+
+export function applySuccessfulVisibilityPublish(
+  records: AuthoringDraft[],
+  publishing: AuthoringDraft,
+  result: { id: string; publishedAt: string; idempotent: boolean },
+): { records: AuthoringDraft[]; draft: AuthoringDraft } {
+  const done = withPlatformPublication(publishing, {
+    platformPublicationState: "published",
+    platformPublicationError: null,
+    platformPublishedAt: result.publishedAt,
+    platformPublicationId: result.id,
+  });
+  return {
+    records: records.map((item) => (item.id === done.id ? done : item)),
+    draft: done,
+  };
 }
 
 export function weekVisibilityPlatformPublishFailureMessage(action: WeekVisibilityAction, entityType: VisibilityEntityType = "week"): string {
