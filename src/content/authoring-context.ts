@@ -18,6 +18,11 @@ export function recordsForContext(
   return records.filter((record) => matchesAuthoringContext(record, hubId, courseKey));
 }
 
+/**
+ * Authoring keeps the latest editable draft for a hub/course, including stale
+ * remote working copies. Week/session visibility publish must not use that
+ * draft when it lags the current catalogue — see visibility-publish-base.ts.
+ */
 export function findAuthoringRecordForContext(
   records: readonly AuthoringDraft[],
   hubId: string,

@@ -50,6 +50,19 @@ test("pruneRecordsForLocalStorage keeps one recoverable record per hub/course an
   assert.ok(pruned.every((item) => item.status !== "published"));
 });
 
+test("findAuthoringRecordForContext still prefers a stale editable draft for content authoring", () => {
+  const stale = createDraft("unit-3-cyber-security", "Unit 3", "ocr-level-3-it", "Ada");
+  stale.basedOnVersion = "0.1.0";
+  stale.updatedAt = "2026-09-06T18:00:00.000Z";
+  const published = createDraft("unit-3-cyber-security", "Unit 3", "ocr-level-3-it", "Ada");
+  published.status = "published";
+  published.version = "0.3.22";
+
+  const match = findAuthoringRecordForContext([published, stale], "unit-3-cyber-security", "ocr-level-3-it");
+  assert.equal(match?.id, stale.id);
+  assert.equal(match?.basedOnVersion, "0.1.0");
+});
+
 test("recordsForContext isolates hub/course pairs", () => {
   const unit3 = createDraft("unit-3-cyber-security", "Unit 3", "ocr-level-3-it", "Ada");
   const l2e = createDraft("l2-emerging-tech", "L2 Emerging Tech", "l2-emerging-tech", "Ada");
