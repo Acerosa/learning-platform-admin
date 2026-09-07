@@ -52,6 +52,7 @@ export const ADMIN_API_RPCS = Object.freeze({
   registerHub: "admin_api.register_hub",
   updateHub: "admin_api.update_hub",
   publishCurriculum: "admin_api.publish_curriculum",
+  setSessionVisibility: "admin_api.set_session_visibility",
   saveCurriculumDraft: "admin_api.save_curriculum_draft",
   getCurriculumDraft: "admin_api.get_curriculum_draft",
   discardCurriculumDraft: "admin_api.discard_curriculum_draft",

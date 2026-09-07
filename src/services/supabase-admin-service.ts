@@ -128,6 +128,10 @@ const PUBLICATION_ERROR_MESSAGES: Record<string, string> = {
   DUPLICATE_VERSION: "That version is already published with different content.",
   PUBLICATION_VERSION_REGRESSION: "The new version must be greater than the latest published version.",
   PUBLICATION_NOT_FOUND: "No published curriculum exists for that hub and course.",
+  SESSION_NOT_FOUND: "That session was not found in the current published curriculum.",
+  SESSION_STATUS_INVALID: "Session visibility status must be available or planned.",
+  WEEK_NOT_FOUND: "The parent week for that session could not be found.",
+  WEEK_NOT_AVAILABLE: "Post the parent week before posting sessions inside it.",
   DRAFT_REVISION_CONFLICT: "This draft was saved elsewhere. Reload before overwriting.",
   DRAFT_NOT_FOUND: "That curriculum draft could not be found.",
   CURRICULUM_AUTHORING_NOT_AUTHORISED: "This account is not authorised to author curriculum.",
@@ -441,6 +445,51 @@ export async function publishCurriculum(
     packageVersion: textValue(row.package_version),
     status: textValue(row.status),
     publishedAt: textValue(row.published_at),
+    idempotent: booleanValue(row.idempotent),
+  };
+}
+
+export type SessionVisibilityResult = {
+  publicationId: string;
+  previousPackageVersion: string;
+  packageVersion: string;
+  sessionId: string;
+  previousStatus: string;
+  status: string;
+  idempotent: boolean;
+};
+
+/** Server-authoritative session visibility. Does not send package JSON. */
+export async function setSessionVisibility(
+  client: AdminSupabaseClient,
+  input: {
+    hubCode: string;
+    courseKey: string;
+    sessionId: string;
+    status: "available" | "planned";
+  },
+): Promise<SessionVisibilityResult> {
+  const { data, error } = await client
+    .schema("admin_api")
+    .rpc("set_session_visibility", {
+      p_hub_code: input.hubCode,
+      p_course_key: input.courseKey,
+      p_session_id: input.sessionId,
+      p_status: input.status,
+    });
+
+  if (error || !Array.isArray(data) || !data[0]) {
+    throw new AdminPublicationError(publicationErrorCode(error));
+  }
+
+  const row = data[0] as AdminRow;
+  return {
+    publicationId: textValue(row.publication_id),
+    previousPackageVersion: textValue(row.previous_package_version),
+    packageVersion: textValue(row.package_version),
+    sessionId: textValue(row.session_id),
+    previousStatus: textValue(row.previous_status),
+    status: textValue(row.status),
     idempotent: booleanValue(row.idempotent),
   };
 }

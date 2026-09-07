@@ -52,6 +52,7 @@ import {
   createSupabaseAdminClient,
   createSupabaseAdminReadService,
   publishCurriculum as publishCurriculumRpc,
+  setSessionVisibility as setSessionVisibilityRpc,
   saveCurriculumDraft as saveCurriculumDraftRpc,
   loadCurrentCurriculumPackage as loadCurrentCurriculumPackageRpc,
   getCurriculumDraft as getCurriculumDraftRpc,
@@ -61,6 +62,7 @@ import {
   reviewResponse as reviewResponseRpc,
   updateHub as updateHubRpc,
   type AdminSupabaseClient,
+  type SessionVisibilityResult,
 } from "../services/supabase-admin-service";
 import {
   markBootstrapCompleted,
@@ -130,6 +132,12 @@ interface AdminPortalContextValue {
   registerHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   updateHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   publishCurriculum(record: AuthoringDraft): Promise<PlatformPublicationResult>;
+  setSessionVisibility(input: {
+    hubCode: string;
+    courseKey: string;
+    sessionId: string;
+    status: "available" | "planned";
+  }): Promise<SessionVisibilityResult>;
   saveCurriculumDraft(record: AuthoringDraft): Promise<CurriculumDraftSaveResult>;
   loadCurrentCurriculumPackage(hubCode: string, courseKey: string): Promise<CurrentCurriculumPackageRecord>;
   getCurriculumDraft(draftId: string): Promise<AuthoringDraft>;
@@ -665,6 +673,18 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     return result;
   }, [client, invalidateAndRefreshModules]);
 
+  const setSessionVisibility = useCallback(async (input: {
+    hubCode: string;
+    courseKey: string;
+    sessionId: string;
+    status: "available" | "planned";
+  }) => {
+    if (!client) throw new AdminPublicationError("unavailable");
+    const result = await setSessionVisibilityRpc(client, input);
+    await invalidateAndRefreshModules(CURRICULUM_MUTATION_INVALIDATES);
+    return result;
+  }, [client, invalidateAndRefreshModules]);
+
   const saveCurriculumDraft = useCallback(async (record: AuthoringDraft) => {
     if (!client) throw new AdminPublicationError("unavailable");
     return saveCurriculumDraftRpc(client, record);
@@ -846,6 +866,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     registerHub,
     updateHub,
     publishCurriculum,
+    setSessionVisibility,
     saveCurriculumDraft,
     loadCurrentCurriculumPackage,
     getCurriculumDraft,
@@ -854,7 +875,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     callRpc,
     signOut,
     retry,
-  }), [callRpc, claimInitialAdmin, config, data, dataSource, discardRemoteCurriculumDraft, ensureModuleData, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refreshModuleData, registerHub, requestMagicLink, retry, reviewResponse, saveCurriculumDraft, signIn, signOut, signUp, state, updateHub]);
+  }), [callRpc, claimInitialAdmin, config, data, dataSource, discardRemoteCurriculumDraft, ensureModuleData, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refreshModuleData, registerHub, requestMagicLink, retry, reviewResponse, saveCurriculumDraft, setSessionVisibility, signIn, signOut, signUp, state, updateHub]);
 
   return (
     <AdminPortalContext.Provider value={value}>
