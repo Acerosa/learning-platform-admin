@@ -100,7 +100,10 @@ import {
   adminAuthPhase,
   applyAdminAuthCallbackLocation,
   consumeAdminRecoveryTokenHashFromUrl,
+  decideRecoveryContinueAction,
+  locationHasUnverifiedRecoveryTokenHash,
   mapPasswordUpdateError,
+  mapRecoveryVerifyError,
   mapSignInError,
   readAdminAuthCallbackParams,
   recoveryErrorFromLocation,
@@ -140,6 +143,7 @@ interface AdminPortalContextValue {
   signIn(email: string, password: string): Promise<void>;
   requestMagicLink(email: string): Promise<void>;
   requestPasswordReset(email: string): Promise<void>;
+  continueRecovery(): Promise<void>;
   updatePassword(password: string): Promise<void>;
   registerHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   updateHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
@@ -309,6 +313,19 @@ let recoveryTokenHashVerifyStarted = false;
 let recoveryTokenHashVerifyCancelled = false;
 let recoveryTokenHashVerifyInFlight = false;
 
+function recoveryContinueState(message: string | null): PortalState {
+  return {
+    status: "recovery-continue",
+    session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
+    bootstrap: null,
+    bootstrapReady: false,
+    moduleCache: createEmptyModuleCache(),
+    demoSnapshot: null,
+    message,
+    refreshing: false,
+  };
+}
+
 function consumeRecoveryTokenHashFromWindow() {
   if (typeof window === "undefined") return;
   const next = consumeAdminRecoveryTokenHashFromUrl(window.location.href);
@@ -350,6 +367,10 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         refreshing: false,
       };
     }
+    const location = currentAuthLocation();
+    if (locationHasUnverifiedRecoveryTokenHash(location)) {
+      return recoveryContinueState(recoveryErrorFromLocation(location?.search, location?.hash));
+    }
     return {
       status: "loading",
       session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
@@ -367,6 +388,13 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   const bootstrapGeneration = useRef(0);
 
   const moduleLoadPromises = useRef(new Map<AdminModuleDataKey, Promise<void>>());
+
+  const enterRecoveryContinue = useCallback((message: string | null) => {
+    bootstrapGeneration.current += 1;
+    resetAdminModulePerformance();
+    moduleLoadPromises.current.clear();
+    setState(recoveryContinueState(message));
+  }, []);
 
   const enterPasswordRecovery = useCallback((message: string | null) => {
     writeRecoveryPending(true);
@@ -597,19 +625,24 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       });
       return;
     }
+    const location = currentAuthLocation();
+    if (locationHasUnverifiedRecoveryTokenHash(location) || stateRef.current.status === "recovery-continue") {
+      enterRecoveryContinue(recoveryErrorFromLocation(location?.search, location?.hash));
+      return;
+    }
     if (shouldEnterPasswordRecovery(
       "INITIAL_SESSION",
-      currentAuthLocation(),
+      location,
       readRecoveryPending(),
     )) {
       enterPasswordRecovery(recoveryErrorFromLocation(
-        currentAuthLocation()?.search,
-        currentAuthLocation()?.hash,
+        location?.search,
+        location?.hash,
       ));
       return;
     }
     await bootstrapSession(authData.session, options);
-  }, [bootstrapSession, client, enterPasswordRecovery]);
+  }, [bootstrapSession, client, enterPasswordRecovery, enterRecoveryContinue]);
 
   useEffect(() => {
     if (!client) return;
@@ -630,6 +663,12 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         setState(clearedPortalState());
         return;
       }
+      if (locationHasUnverifiedRecoveryTokenHash(location) || stateRef.current.status === "recovery-continue") {
+        if (stateRef.current.status !== "recovery-continue") {
+          enterRecoveryContinue(recoveryErrorFromLocation(location?.search, location?.hash));
+        }
+        return;
+      }
       if (shouldEnterPasswordRecovery(event, location, pending)) {
         enterPasswordRecovery(recoveryErrorFromLocation(location?.search, location?.hash));
         return;
@@ -643,34 +682,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [bootstrapSession, client, enterPasswordRecovery, exitPasswordRecovery]);
-
-  useEffect(() => {
-    if (!client) return;
-    const callback = readAdminAuthCallbackParams(currentAuthLocation());
-    if (callback.type !== "recovery" || !callback.tokenHash) return;
-    if (recoveryTokenHashVerifyStarted) return;
-    recoveryTokenHashVerifyStarted = true;
-    recoveryTokenHashVerifyInFlight = true;
-    const tokenHash = callback.tokenHash;
-    consumeRecoveryTokenHashFromWindow();
-    void verifyAdminRecoveryTokenHash(client, tokenHash)
-      .then(async () => {
-        if (recoveryTokenHashVerifyCancelled) {
-          await client.auth.signOut();
-          return;
-        }
-        writeRecoveryPending(true);
-        enterPasswordRecovery(null);
-      })
-      .catch(() => {
-        if (recoveryTokenHashVerifyCancelled) return;
-        enterPasswordRecovery(AUTH_USER_MESSAGES.recoveryInvalid);
-      })
-      .finally(() => {
-        recoveryTokenHashVerifyInFlight = false;
-      });
-  }, [client, enterPasswordRecovery]);
+  }, [bootstrapSession, client, enterPasswordRecovery, enterRecoveryContinue, exitPasswordRecovery]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!client) return;
@@ -716,6 +728,43 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       ));
     }
   }, [client]);
+
+  const continueRecovery = useCallback(async () => {
+    if (!client) return;
+    const callback = readAdminAuthCallbackParams(currentAuthLocation());
+    const decision = decideRecoveryContinueAction({
+      started: recoveryTokenHashVerifyStarted,
+      inFlight: recoveryTokenHashVerifyInFlight,
+      type: callback.type,
+      tokenHash: callback.tokenHash,
+    });
+    if (decision.kind === "skip") return;
+    if (decision.kind === "invalid") {
+      enterRecoveryContinue(AUTH_USER_MESSAGES.recoveryInvalid);
+      return;
+    }
+    recoveryTokenHashVerifyStarted = true;
+    recoveryTokenHashVerifyInFlight = true;
+    try {
+      await verifyAdminRecoveryTokenHash(client, decision.tokenHash);
+      if (recoveryTokenHashVerifyCancelled) {
+        await client.auth.signOut();
+        return;
+      }
+      consumeRecoveryTokenHashFromWindow();
+      writeRecoveryPending(true);
+      enterPasswordRecovery(null);
+    } catch (error) {
+      if (recoveryTokenHashVerifyCancelled) return;
+      const mapped = mapRecoveryVerifyError(error as { message?: string; code?: string; name?: string; status?: number });
+      if (mapped === AUTH_USER_MESSAGES.network) {
+        recoveryTokenHashVerifyStarted = false;
+      }
+      enterRecoveryContinue(mapped);
+    } finally {
+      recoveryTokenHashVerifyInFlight = false;
+    }
+  }, [client, enterPasswordRecovery, enterRecoveryContinue]);
 
   const updatePassword = useCallback(async (password: string) => {
     if (!client) return;
@@ -1007,6 +1056,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     signIn,
     requestMagicLink,
     requestPasswordReset,
+    continueRecovery,
     updatePassword,
     registerHub,
     updateHub,
@@ -1020,7 +1070,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     callRpc,
     signOut,
     retry,
-  }), [callRpc, config, data, dataSource, discardRemoteCurriculumDraft, ensureModuleData, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refreshModuleData, registerHub, requestMagicLink, requestPasswordReset, retry, reviewResponse, saveCurriculumDraft, setSessionVisibility, signIn, signOut, state, updateHub, updatePassword]);
+  }), [callRpc, config, continueRecovery, data, dataSource, discardRemoteCurriculumDraft, ensureModuleData, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refreshModuleData, registerHub, requestMagicLink, requestPasswordReset, retry, reviewResponse, saveCurriculumDraft, setSessionVisibility, signIn, signOut, state, updateHub, updatePassword]);
 
   return (
     <AdminPortalContext.Provider value={value}>

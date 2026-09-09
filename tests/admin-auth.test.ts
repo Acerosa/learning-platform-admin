@@ -12,7 +12,9 @@ import {
   AUTH_USER_MESSAGES,
   adminAuthPhase,
   consumeAdminRecoveryTokenHashFromUrl,
+  decideRecoveryContinueAction,
   mapPasswordUpdateError,
+  mapRecoveryVerifyError,
   mapSignInError,
   normalizeAdminAuthCallbackUrl,
   readAdminAuthCallbackParams,
@@ -21,6 +23,8 @@ import {
   shouldBootstrapAdminData,
   shouldClearAdminData,
   shouldEnterPasswordRecovery,
+  shouldShowRecoveryContinue,
+  shouldVerifyRecoveryTokenOnLoad,
   stripRecoveryMarkerFromUrl,
 } from "../src/stores/admin-portal-auth.ts";
 import { sessionFromStaffContext } from "../src/stores/admin-session.ts";
@@ -254,7 +258,7 @@ test("GitHub Pages recovery callbacks keep PKCE and token hash on the search str
     shouldEnterPasswordRecovery("INITIAL_SESSION", {
       search: "?token_hash=recovery-hash&type=recovery",
     }, true),
-    true,
+    false,
   );
   assert.equal(
     shouldBootstrapAdminData("SIGNED_IN", { search: "?code=magic-link-code" }),
@@ -325,6 +329,107 @@ test("token_hash recovery is verified by Supabase, not the browser", async () =>
   await assert.rejects(() => verifyAdminRecoveryTokenHash(expired, "expired-hash"));
 });
 
+test("recovery URLs wait for Continue password reset before calling verifyOtp", async () => {
+  const recoveryLocation = { search: "?token_hash=recovery-hash&type=recovery" };
+  const magicLinkLocation = { search: "?code=magic-link-code" };
+  const firstLoad = shouldShowRecoveryContinue(recoveryLocation);
+  const reloadBeforeContinue = shouldShowRecoveryContinue(recoveryLocation);
+
+  assert.equal(shouldVerifyRecoveryTokenOnLoad(), false);
+  assert.equal(firstLoad, true);
+  assert.equal(reloadBeforeContinue, true);
+  assert.equal(shouldEnterPasswordRecovery("INITIAL_SESSION", recoveryLocation), false);
+  assert.equal(shouldBootstrapAdminData("INITIAL_SESSION", recoveryLocation), false);
+  assert.equal(shouldBootstrapAdminData("SIGNED_IN", recoveryLocation), false);
+  assert.deepEqual(
+    decideRecoveryContinueAction({
+      started: false,
+      inFlight: false,
+      type: "recovery",
+      tokenHash: "recovery-hash",
+    }),
+    { kind: "verify", tokenHash: "recovery-hash" },
+  );
+  assert.deepEqual(
+    decideRecoveryContinueAction({
+      started: true,
+      inFlight: false,
+      type: "recovery",
+      tokenHash: "recovery-hash",
+    }),
+    { kind: "skip" },
+  );
+  assert.deepEqual(
+    decideRecoveryContinueAction({
+      started: false,
+      inFlight: true,
+      type: "recovery",
+      tokenHash: "recovery-hash",
+    }),
+    { kind: "skip" },
+  );
+  assert.deepEqual(
+    decideRecoveryContinueAction({
+      started: false,
+      inFlight: false,
+      type: "recovery",
+      tokenHash: null,
+    }),
+    { kind: "invalid" },
+  );
+
+  const verifyCalls: unknown[] = [];
+  const valid = authClient({
+    async verifyOtp(credentials) {
+      verifyCalls.push(credentials);
+      return { error: null };
+    },
+  });
+  const click = decideRecoveryContinueAction({
+    started: false,
+    inFlight: false,
+    type: "recovery",
+    tokenHash: "recovery-hash",
+  });
+  assert.equal(click.kind, "verify");
+  if (click.kind === "verify") {
+    await verifyAdminRecoveryTokenHash(valid, click.tokenHash);
+  }
+  const repeatClick = decideRecoveryContinueAction({
+    started: true,
+    inFlight: false,
+    type: "recovery",
+    tokenHash: "recovery-hash",
+  });
+  assert.equal(repeatClick.kind, "skip");
+  assert.deepEqual(verifyCalls, [{ token_hash: "recovery-hash", type: "recovery" }]);
+  assert.equal(
+    shouldEnterPasswordRecovery("PASSWORD_RECOVERY", { search: "?type=recovery" }, true),
+    true,
+  );
+  assert.equal(
+    consumeAdminRecoveryTokenHashFromUrl(
+      "https://acerosa.github.io/learning-platform-admin/?token_hash=recovery-hash&type=recovery",
+    ),
+    "https://acerosa.github.io/learning-platform-admin/?type=recovery",
+  );
+  assert.equal(
+    stripRecoveryMarkerFromUrl("https://acerosa.github.io/learning-platform-admin/?type=recovery"),
+    "https://acerosa.github.io/learning-platform-admin/",
+  );
+
+  assert.equal(
+    mapRecoveryVerifyError({ code: "otp_expired", message: "Token has expired or is invalid" }),
+    AUTH_USER_MESSAGES.recoveryInvalid,
+  );
+  assert.equal(
+    mapRecoveryVerifyError({ name: "AuthRetryableFetchError", message: "Failed to fetch" }),
+    AUTH_USER_MESSAGES.network,
+  );
+  assert.equal(shouldBootstrapAdminData("SIGNED_IN", magicLinkLocation), true);
+  assert.equal(shouldEnterPasswordRecovery("SIGNED_IN", magicLinkLocation), false);
+});
+
 test("auth redirect URLs keep the GitHub Pages repository path", () => {
   assert.equal(
     resolveAdminAuthRedirectUrl({
@@ -359,17 +464,19 @@ test("portal auth phases distinguish unauthenticated, authenticating, authorisin
   assert.equal(adminAuthPhase("loading", false), "authorising");
   assert.equal(adminAuthPhase("ready", true), "authorised");
   assert.equal(adminAuthPhase("access-denied", false), "forbidden");
+  assert.equal(adminAuthPhase("recovery-continue", false), "recovery");
   assert.equal(adminAuthPhase("recovery", false), "recovery");
   assert.equal(adminAuthPhase("error", false), "error");
 });
 
 test("admin source never treats getSession, query params or localStorage as admin authority", async () => {
   const root = new URL("../", import.meta.url);
-  const [portal, session, accessGate, service] = await Promise.all([
+  const [portal, session, accessGate, service, portalPage] = await Promise.all([
     readFile(new URL("src/stores/admin-portal.tsx", root), "utf8"),
     readFile(new URL("src/stores/admin-session.ts", root), "utf8"),
     readFile(new URL("src/components/admin-access-gate.tsx", root), "utf8"),
     readFile(new URL("src/services/supabase-admin-service.ts", root), "utf8"),
+    readFile(new URL("src/views/admin-portal-page.tsx", root), "utf8"),
   ]);
   assert.match(portal, /getCurrentStaffContext/);
   assert.match(portal, /sessionFromStaffContext/);
@@ -377,21 +484,48 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.doesNotMatch(session, /localStorage|searchParams|email\s*===/);
   assert.match(accessGate, /Forgot password/);
   assert.match(accessGate, /Email me a sign-in link/);
+  assert.match(accessGate, /Reset your Admin Portal password/);
+  assert.match(accessGate, /Continue password reset/);
+  assert.match(accessGate, /Choose a new password/);
+  assert.doesNotMatch(accessGate, /token_hash|tokenHash|\{\{ \.TokenHash \}\}/);
   assert.doesNotMatch(accessGate, /One-time setup code|Create account/);
   assert.match(portal, /applyAdminAuthCallbackLocation/);
   assert.match(portal, /verifyAdminRecoveryTokenHash/);
   assert.match(portal, /let recoveryTokenHashVerifyStarted = false/);
   assert.match(portal, /recoveryTokenHashVerifyCancelled/);
-  assert.match(portal, /callback\.type !== "recovery" \|\| !callback\.tokenHash/);
-  assert.match(portal, /consumeRecoveryTokenHashFromWindow\(\)/);
   assert.match(portal, /recoveryTokenHashVerifyInFlight/);
+  assert.match(portal, /const continueRecovery = useCallback/);
+  assert.match(portal, /status: "recovery-continue"/);
+  assert.match(portalPage, /recovery-continue/);
+  assert.match(portalPage, /AdminRecoveryContinue/);
+  assert.match(portalPage, /portal\.continueRecovery/);
+  assert.doesNotMatch(portal, /void verifyAdminRecoveryTokenHash/);
+  const authEffect = portal.slice(
+    portal.indexOf("useEffect(() => {"),
+    portal.indexOf("const signIn"),
+  );
+  assert.doesNotMatch(authEffect, /verifyAdminRecoveryTokenHash|verifyOtp/);
+  const continueRecovery = portal.slice(
+    portal.indexOf("const continueRecovery"),
+    portal.indexOf("const updatePassword"),
+  );
+  const verifyCall = portal.indexOf("verifyAdminRecoveryTokenHash(");
+  assert.ok(verifyCall > portal.indexOf("const continueRecovery"));
+  assert.equal(portal.indexOf("verifyAdminRecoveryTokenHash(", verifyCall + 1), -1);
+  assert.match(continueRecovery, /decideRecoveryContinueAction/);
+  assert.match(continueRecovery, /await verifyAdminRecoveryTokenHash/);
+  assert.match(
+    continueRecovery,
+    /await verifyAdminRecoveryTokenHash[\s\S]*consumeRecoveryTokenHashFromWindow/,
+  );
+  assert.doesNotMatch(
+    continueRecovery,
+    /consumeRecoveryTokenHashFromWindow[\s\S]*await verifyAdminRecoveryTokenHash/,
+  );
+  assert.match(continueRecovery, /enterPasswordRecovery\(null\)/);
   assert.match(
     portal,
     /if \(recoveryTokenHashVerifyInFlight && !recoveryTokenHashVerifyCancelled\) \{\s*return;/,
-  );
-  assert.doesNotMatch(
-    portal.slice(portal.indexOf("void verifyAdminRecoveryTokenHash"), portal.indexOf("const signIn")),
-    /getSession/,
   );
   assert.match(portal, /redirectUrl\(\{ recovery: true \}\)/);
   assert.match(portal, /emailRedirectTo: redirectUrl\(\)/);
@@ -414,6 +548,10 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(
     portal.slice(portal.indexOf("const updatePassword"), portal.indexOf("const registerHub")),
     /exitPasswordRecovery\(\)/,
+  );
+  assert.match(
+    portal.slice(portal.indexOf("const updatePassword"), portal.indexOf("const registerHub")),
+    /bootstrapSession/,
   );
   assert.match(
     portal.slice(portal.indexOf("const signOut"), portal.indexOf("const data = useMemo")),

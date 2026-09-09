@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   isBrowserSafeSupabaseKey,
@@ -26,6 +27,10 @@ import {
   type AdminSupabaseClient,
 } from "../src/services/supabase-admin-service.ts";
 import { sessionFromStaffContext } from "../src/stores/admin-session.ts";
+import {
+  shouldShowRecoveryContinue,
+  shouldVerifyRecoveryTokenOnLoad,
+} from "../src/stores/admin-portal-auth.ts";
 import { createActivity, createBlock, createWeek, syncCurriculumLists } from "../src/content/factories.ts";
 import {
   approveRecord,
@@ -259,6 +264,35 @@ test("password sign-in and reset use the public client without logging credentia
     token_hash: "recovery-hash",
     type: "recovery",
   });
+});
+
+test("recovery URL load and password update keep public-client authz unchanged", async () => {
+  assert.equal(shouldVerifyRecoveryTokenOnLoad(), false);
+  assert.equal(
+    shouldShowRecoveryContinue({ search: "?token_hash=recovery-hash&type=recovery" }),
+    true,
+  );
+  const portal = await readFile(new URL("../src/stores/admin-portal.tsx", import.meta.url), "utf8");
+  const authEffect = portal.slice(
+    portal.indexOf("useEffect(() => {"),
+    portal.indexOf("const signIn"),
+  );
+  assert.doesNotMatch(authEffect, /verifyAdminRecoveryTokenHash|verifyOtp/);
+  assert.match(
+    portal.slice(portal.indexOf("const updatePassword"), portal.indexOf("const registerHub")),
+    /exitPasswordRecovery\(\)[\s\S]*bootstrapSession/,
+  );
+  assert.match(portal, /getCurrentStaffContext/);
+  assert.equal(
+    sessionFromStaffContext({
+      teacherId: "a",
+      staffReference: "A",
+      displayName: "Admin",
+      active: true,
+      activeRoles: ["platform_admin"],
+    }).state,
+    "authenticated",
+  );
 });
 
 test("live service reads every MVP surface through admin_api and maps safe rows", async () => {

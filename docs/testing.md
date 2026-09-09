@@ -27,8 +27,9 @@ npm run test:unit
   admin-only schema usage, PII-safe selections, hub registration RPC mapping,
   curriculum publication RPC mapping and failed-live-read behaviour.
 - **Admin authentication:** password sign-in, invalid credentials, logout
-  clearing, password reset redirect URLs, `token_hash` recovery via
-  `verifyOtp`, invalid/expired/missing recovery hashes, PKCE `?code=`
+  clearing, password reset redirect URLs, recovery landing that does not
+  call `verifyOtp` on GET/HEAD/render/reload, click-only `token_hash`
+  verification, invalid/expired/missing recovery hashes, PKCE `?code=`
   callbacks, magic-link code without `type=recovery`, recovery-state
   clearing, GitHub Pages callback paths and frontend-only
   role/localStorage denial.
