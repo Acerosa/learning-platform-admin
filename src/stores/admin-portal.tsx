@@ -54,6 +54,7 @@ import {
   requestAdminPasswordReset,
   signInAdminWithPassword,
   updateAdminPassword,
+  verifyAdminRecoveryTokenHash,
   setSessionVisibility as setSessionVisibilityRpc,
   saveCurriculumDraft as saveCurriculumDraftRpc,
   loadCurrentCurriculumPackage as loadCurrentCurriculumPackageRpc,
@@ -97,8 +98,11 @@ import {
   ADMIN_PASSWORD_RECOVERY_STORAGE_KEY,
   AUTH_USER_MESSAGES,
   adminAuthPhase,
+  applyAdminAuthCallbackLocation,
+  consumeAdminRecoveryTokenHashFromUrl,
   mapPasswordUpdateError,
   mapSignInError,
+  readAdminAuthCallbackParams,
   recoveryErrorFromLocation,
   resolveAdminAuthRedirectUrl,
   shouldBootstrapAdminData,
@@ -301,13 +305,26 @@ function createDemoModuleCache(): AdminModuleCacheState {
   };
 }
 
+let recoveryTokenHashVerifyStarted = false;
+let recoveryTokenHashVerifyCancelled = false;
+let recoveryTokenHashVerifyInFlight = false;
+
+function consumeRecoveryTokenHashFromWindow() {
+  if (typeof window === "undefined") return;
+  const next = consumeAdminRecoveryTokenHashFromUrl(window.location.href);
+  if (next !== window.location.href) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
+
 export function AdminPortalProvider({ children }: { children: React.ReactNode }) {
   const config = useMemo(() => getAdminRuntimeConfig(), []);
-  const [client] = useState<AdminSupabaseClient | null>(() =>
-    config.mode === "live" && config.valid
+  const [client] = useState<AdminSupabaseClient | null>(() => {
+    applyAdminAuthCallbackLocation();
+    return config.mode === "live" && config.valid
       ? createSupabaseAdminClient(config)
-      : null,
-  );
+      : null;
+  });
   const [state, setState] = useState<PortalState>(() => {
     if (config.mode === "demo" && config.valid) {
       return {
@@ -603,6 +620,9 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       const location = currentAuthLocation();
       const pending = readRecoveryPending() || stateRef.current.status === "recovery";
       if (shouldClearAdminData(event)) {
+        if (recoveryTokenHashVerifyInFlight && !recoveryTokenHashVerifyCancelled) {
+          return;
+        }
         exitPasswordRecovery();
         bootstrapGeneration.current += 1;
         resetAdminModulePerformance();
@@ -624,6 +644,33 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       subscription.unsubscribe();
     };
   }, [bootstrapSession, client, enterPasswordRecovery, exitPasswordRecovery]);
+
+  useEffect(() => {
+    if (!client) return;
+    const callback = readAdminAuthCallbackParams(currentAuthLocation());
+    if (callback.type !== "recovery" || !callback.tokenHash) return;
+    if (recoveryTokenHashVerifyStarted) return;
+    recoveryTokenHashVerifyStarted = true;
+    recoveryTokenHashVerifyInFlight = true;
+    const tokenHash = callback.tokenHash;
+    consumeRecoveryTokenHashFromWindow();
+    void verifyAdminRecoveryTokenHash(client, tokenHash)
+      .then(async () => {
+        if (recoveryTokenHashVerifyCancelled) {
+          await client.auth.signOut();
+          return;
+        }
+        writeRecoveryPending(true);
+        enterPasswordRecovery(null);
+      })
+      .catch(() => {
+        if (recoveryTokenHashVerifyCancelled) return;
+        enterPasswordRecovery(AUTH_USER_MESSAGES.recoveryInvalid);
+      })
+      .finally(() => {
+        recoveryTokenHashVerifyInFlight = false;
+      });
+  }, [client, enterPasswordRecovery]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!client) return;
@@ -879,6 +926,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const signOut = useCallback(async () => {
     if (!client) return;
+    recoveryTokenHashVerifyCancelled = true;
     exitPasswordRecovery();
     bootstrapGeneration.current += 1;
     await client.auth.signOut();

@@ -4,8 +4,11 @@ import "@learning-platform/core/tokens.css";
 import "@learning-platform/core/theme.css";
 import "../app/globals.css";
 import { AdminPortalProvider } from "../src/stores/admin-portal";
+import { applyAdminAuthCallbackLocation } from "../src/stores/admin-portal-auth";
 import { isAdminModuleId, type AdminModuleId } from "../src/router/modules";
 import { AdminPortalFrame } from "../src/views/admin-portal-page";
+
+applyAdminAuthCallbackLocation();
 
 function readModuleFromHash(): AdminModuleId {
   const moduleId = window.location.hash.replace(/^#\/?/, "").split("/")[0];

@@ -101,11 +101,38 @@ export function mapPasswordUpdateError(error: AuthErrorLike): string {
   return AUTH_USER_MESSAGES.passwordUpdateFailed;
 }
 
+const AUTH_CALLBACK_PARAM_KEYS = [
+  "code",
+  "token_hash",
+  "type",
+  "error",
+  "error_code",
+  "error_description",
+] as const;
+
+function callbackParamsFromQuery(query: string): URLSearchParams {
+  return new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+}
+
+function splitHashPathAndQuery(rawHash: string): { path: string; query: string } {
+  const hash = rawHash.replace(/^#/, "");
+  if (hash.includes("?")) {
+    return {
+      path: hash.slice(0, hash.indexOf("?")),
+      query: hash.slice(hash.indexOf("?") + 1),
+    };
+  }
+  if (hash.includes("=") && !hash.startsWith("/")) {
+    return { path: "", query: hash };
+  }
+  return { path: hash, query: "" };
+}
+
 export function recoveryErrorFromLocation(search = "", hash = ""): string | null {
   const candidates = [search, hash.replace(/^#/, "")];
   for (const candidate of candidates) {
     const query = candidate.includes("?") ? candidate.slice(candidate.indexOf("?") + 1) : candidate;
-    const params = new URLSearchParams(query);
+    const params = callbackParamsFromQuery(query);
     if (params.get("error") || params.get("error_code") || params.get("error_description")) {
       return AUTH_USER_MESSAGES.recoveryInvalid;
     }
@@ -113,11 +140,70 @@ export function recoveryErrorFromLocation(search = "", hash = ""): string | null
   return null;
 }
 
+export function normalizeAdminAuthCallbackUrl(href: string): string {
+  const url = new URL(href);
+  const { path: hashPath, query: hashQuery } = splitHashPathAndQuery(url.hash);
+  const hashParams = callbackParamsFromQuery(hashQuery);
+  let moved = false;
+  for (const key of AUTH_CALLBACK_PARAM_KEYS) {
+    const value = hashParams.get(key);
+    if (!value) continue;
+    if (!url.searchParams.has(key)) url.searchParams.set(key, value);
+    hashParams.delete(key);
+    moved = true;
+  }
+  if (!moved) return url.toString();
+  const nextHashQuery = hashParams.toString();
+  if (!nextHashQuery && (!hashPath || hashPath === "/")) {
+    url.hash = "";
+  } else {
+    url.hash = nextHashQuery ? `${hashPath}?${nextHashQuery}` : hashPath;
+  }
+  return url.toString();
+}
+
+export function consumeAdminRecoveryTokenHashFromUrl(href: string): string {
+  const url = new URL(normalizeAdminAuthCallbackUrl(href));
+  url.searchParams.delete("token_hash");
+  if (url.searchParams.get("type") !== "recovery") {
+    url.searchParams.set("type", "recovery");
+  }
+  return url.toString();
+}
+
+export function applyAdminAuthCallbackLocation(): boolean {
+  if (typeof window === "undefined") return false;
+  const next = normalizeAdminAuthCallbackUrl(window.location.href);
+  if (next === window.location.href) return false;
+  window.history.replaceState(window.history.state, "", next);
+  return true;
+}
+
+export function readAdminAuthCallbackParams(location?: { search?: string; hash?: string }) {
+  const search = callbackParamsFromQuery(location?.search ?? "");
+  const { query: hashQuery } = splitHashPathAndQuery(location?.hash ?? "");
+  const hash = callbackParamsFromQuery(hashQuery);
+  const get = (key: string) => search.get(key) ?? hash.get(key);
+  return {
+    code: get("code"),
+    tokenHash: get("token_hash"),
+    type: get("type"),
+    error: get("error") ?? get("error_code") ?? get("error_description"),
+  };
+}
+
 export const ADMIN_PASSWORD_RECOVERY_STORAGE_KEY = "lp-admin-password-recovery";
 
+export function locationHasUnverifiedRecoveryTokenHash(
+  location?: { search?: string; hash?: string },
+): boolean {
+  const callback = readAdminAuthCallbackParams(location);
+  return callback.type === "recovery" && Boolean(callback.tokenHash);
+}
+
 export function locationHasRecoveryMarker(location?: { search?: string; hash?: string }): boolean {
-  const blob = `${location?.search ?? ""} ${location?.hash ?? ""}`;
-  return /(?:^|[?&#])type=recovery(?:&|$)/.test(blob);
+  const callback = readAdminAuthCallbackParams(location);
+  return callback.type === "recovery" && !callback.tokenHash;
 }
 
 export function shouldEnterPasswordRecovery(
@@ -135,12 +221,14 @@ export function shouldBootstrapAdminData(
   location?: { search?: string; hash?: string },
   pending = false,
 ): boolean {
+  if (locationHasUnverifiedRecoveryTokenHash(location)) return false;
   if (shouldEnterPasswordRecovery(event, location, pending)) return false;
   return event === "INITIAL_SESSION" || event === "SIGNED_IN";
 }
 
 export function stripRecoveryMarkerFromUrl(href: string): string {
   const url = new URL(href);
+  url.searchParams.delete("token_hash");
   if (url.searchParams.get("type") === "recovery") {
     url.searchParams.delete("type");
   }
@@ -148,8 +236,9 @@ export function stripRecoveryMarkerFromUrl(href: string): string {
   if (rawHash) {
     const query = rawHash.includes("?") ? rawHash.slice(rawHash.indexOf("?") + 1) : rawHash;
     const params = new URLSearchParams(query);
-    if (params.get("type") === "recovery") {
+    if (params.has("type") || params.has("token_hash")) {
       params.delete("type");
+      params.delete("token_hash");
       const next = params.toString();
       if (rawHash.includes("?")) {
         const path = rawHash.slice(0, rawHash.indexOf("?"));

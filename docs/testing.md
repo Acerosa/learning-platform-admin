@@ -27,8 +27,11 @@ npm run test:unit
   admin-only schema usage, PII-safe selections, hub registration RPC mapping,
   curriculum publication RPC mapping and failed-live-read behaviour.
 - **Admin authentication:** password sign-in, invalid credentials, logout
-  clearing, password reset redirect URLs, recovery failure, GitHub Pages
-  callback paths and frontend-only role/localStorage denial.
+  clearing, password reset redirect URLs, `token_hash` recovery via
+  `verifyOtp`, invalid/expired/missing recovery hashes, PKCE `?code=`
+  callbacks, magic-link code without `type=recovery`, recovery-state
+  clearing, GitHub Pages callback paths and frontend-only
+  role/localStorage denial.
 - **Database integration:** backend pgTAP covers learner, ordinary-teacher and
   platform-admin access to staff context and aggregates, plus controlled
   first-admin SQL idempotency and denial of public staff elevation.

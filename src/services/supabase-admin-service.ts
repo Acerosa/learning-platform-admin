@@ -385,6 +385,17 @@ export async function requestAdminPasswordReset(
   if (error) throw error;
 }
 
+export async function verifyAdminRecoveryTokenHash(
+  client: AdminSupabaseClient,
+  tokenHash: string,
+) {
+  const { error } = await client.auth.verifyOtp({
+    token_hash: String(tokenHash || "").trim(),
+    type: "recovery",
+  });
+  if (error) throw error;
+}
+
 export async function updateAdminPassword(
   client: AdminSupabaseClient,
   password: string,
