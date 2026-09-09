@@ -12,7 +12,9 @@ This repository is the administration interface for the entire Learning Platform
 - Curriculum authoring consumes `@learning-platform/content` 0.1.3 from [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content) for schemas, validation, import and preview.
 - Results / Markbook consumes `@learning-platform/results` for interpretation and `admin_api.attempts` / `admin_api.responses` for data.
 - The backend `admin_api` contract is version `0.2.0`, draft, with read models and curriculum publication.
-- Explicit live mode uses Supabase Auth and RLS-protected `admin_api` reads with a public browser credential only.
+- Explicit live mode uses Supabase email/password Auth and RLS-protected
+  `admin_api` reads with a public browser credential only. See
+  [Authentication](docs/authentication.md).
 - Explicit demo mode uses reviewed hub metadata and synthetic local fixtures.
 - The portal exposes six primary areas: Dashboard, Hubs & Curriculum, People, Assignments & Results, Analytics and System. Legacy module URLs remain available.
 - Dashboard, hubs, people, assignments, results, analytics and system consume the shared read-service snapshot.
@@ -39,9 +41,9 @@ For live local mode, copy `.env.example` to an ignored `.env.local`, set
 service-role key.
 
 After resetting the sibling backend, sign in as the synthetic local staff
-account `platform.admin@local.invalid`. It has no committed password; use the
-portal’s email-link action and open the message in local Mailpit. This fixture
-exists only in the backend local seed.
+account `platform.admin@local.invalid` with email and password. The password
+is local-only and is not committed. Magic-link sign-in remains available for
+Mailpit testing. This fixture exists only in the backend local seed.
 
 ## Quality checks
 
@@ -89,6 +91,7 @@ learning-platform-admin/
 - [Publication workflow](docs/publication-workflow.md)
 - [Backend and core integration](docs/integration.md)
 - [Permissions](docs/permissions.md)
+- [Authentication](docs/authentication.md)
 - [Deployment](docs/deployment.md)
 - [Testing](docs/testing.md)
 - [Changelog](CHANGELOG.md)

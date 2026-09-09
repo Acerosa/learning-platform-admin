@@ -59,15 +59,26 @@ export class AdminReadError extends Error {
   }
 }
 
-export class AdminAuthError extends Error {
-  readonly code: "registration-failed" | "bootstrap-failed";
+export type AdminAuthErrorCode =
+  | "registration-failed"
+  | "bootstrap-failed"
+  | "sign-in-failed"
+  | "reset-failed"
+  | "password-update-failed";
 
-  constructor(code: AdminAuthError["code"]) {
-    super(
-      code === "registration-failed"
-        ? "The administrator account could not be created."
-        : "Initial administrator setup could not be completed.",
-    );
+const AUTH_ERROR_MESSAGES: Record<AdminAuthErrorCode, string> = {
+  "registration-failed": "The administrator account could not be created.",
+  "bootstrap-failed": "Initial administrator setup could not be completed.",
+  "sign-in-failed": "Email or password is incorrect.",
+  "reset-failed": "We couldn't send a password reset email. Please try again.",
+  "password-update-failed": "The new password could not be saved. Please try again.",
+};
+
+export class AdminAuthError extends Error {
+  readonly code: AdminAuthErrorCode;
+
+  constructor(code: AdminAuthErrorCode, message?: string) {
+    super(message ?? AUTH_ERROR_MESSAGES[code]);
     this.name = "AdminAuthError";
     this.code = code;
   }
@@ -349,6 +360,37 @@ export async function registerAdminAccount(
     confirmationRequired: !data.session,
     sessionAvailable: Boolean(data.session),
   });
+}
+
+export async function signInAdminWithPassword(
+  client: AdminSupabaseClient,
+  email: string,
+  password: string,
+) {
+  const { error } = await client.auth.signInWithPassword({
+    email: String(email || "").trim(),
+    password,
+  });
+  if (error) throw error;
+}
+
+export async function requestAdminPasswordReset(
+  client: AdminSupabaseClient,
+  email: string,
+  redirectTo: string,
+) {
+  const { error } = await client.auth.resetPasswordForEmail(String(email || "").trim(), {
+    redirectTo,
+  });
+  if (error) throw error;
+}
+
+export async function updateAdminPassword(
+  client: AdminSupabaseClient,
+  password: string,
+) {
+  const { error } = await client.auth.updateUser({ password });
+  if (error) throw error;
 }
 
 export async function claimInitialPlatformAdmin(

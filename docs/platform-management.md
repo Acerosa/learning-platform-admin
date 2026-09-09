@@ -51,3 +51,8 @@ checks are labelled informational and do not fail registration.
 
 Course creation, GitHub publication, learner-hub deployment, Unit 3 / T Level
 source changes and curriculum authoring remain separate workflows.
+
+Staff invite and role assignment are also out of scope for this portal
+release. People → Staff is a read of `admin_api.staff_roles`. Additional
+administrators are provisioned through the documented SQL procedure in
+[Authentication](authentication.md).

@@ -17,7 +17,10 @@ import {
   registerAdminAccount,
   registerHub,
   registrationValidationMessage,
+  requestAdminPasswordReset,
   reviewResponse,
+  signInAdminWithPassword,
+  updateAdminPassword,
   updateHub,
   type AdminSupabaseClient,
 } from "../src/services/supabase-admin-service.ts";
@@ -212,6 +215,40 @@ test("learner and non-admin staff contexts are denied while platform admin is au
   const admin = sessionFromStaffContext({ teacherId: "a", staffReference: "A", displayName: "Admin", active: true, activeRoles: ["platform_admin"] });
   assert.equal(admin.state, "authenticated");
   assert.deepEqual(admin.grantedActions, ["*"]);
+});
+
+test("password sign-in and reset use the public client without logging credentials", async () => {
+  const calls: unknown[] = [];
+  const client = {
+    auth: {
+      async signInWithPassword(credentials: unknown) {
+        calls.push({ name: "signInWithPassword", credentials });
+        return { error: null };
+      },
+      async resetPasswordForEmail(email: string, options: unknown) {
+        calls.push({ name: "resetPasswordForEmail", email, options });
+        return { error: null };
+      },
+      async updateUser(attributes: unknown) {
+        calls.push({ name: "updateUser", attributes });
+        return { error: null };
+      },
+    },
+  } as unknown as AdminSupabaseClient;
+
+  await signInAdminWithPassword(client, "admin@example.invalid", "test-password");
+  await requestAdminPasswordReset(
+    client,
+    "admin@example.invalid",
+    "https://acerosa.github.io/learning-platform-admin/",
+  );
+  await updateAdminPassword(client, "test-password");
+  assert.equal(calls.length, 3);
+  assert.equal((calls[0] as { name: string }).name, "signInWithPassword");
+  assert.equal((calls[1] as { name: string }).name, "resetPasswordForEmail");
+  assert.deepEqual((calls[1] as { options: { redirectTo: string } }).options, {
+    redirectTo: "https://acerosa.github.io/learning-platform-admin/",
+  });
 });
 
 test("live service reads every MVP surface through admin_api and maps safe rows", async () => {

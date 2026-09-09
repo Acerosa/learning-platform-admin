@@ -1676,6 +1676,20 @@ tbody tr:hover {
 .access-form label { color: var(--admin-muted); font-size: 0.72rem; font-weight: 720; }
 .access-form input { width: 100%; }
 .access-form .button { width: 100%; }
+.access-form__link {
+  justify-self: start;
+  width: auto;
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--lp-primary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 720;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .button:disabled { cursor: not-allowed; opacity: 0.55; }
 
 .access-setup {

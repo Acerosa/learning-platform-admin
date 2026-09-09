@@ -55,7 +55,9 @@ test("live integration uses Supabase Auth and the admin_api schema only", async 
   assert.match(service, /schema\("admin_api"\)/);
   assert.match(service, /current_staff_context/);
   assert.doesNotMatch(service, /schema\("(?:learning|platform)"\)/);
-  assert.match(portal, /signInWithPassword/);
+  assert.match(service, /signInWithPassword/);
+  assert.match(service, /resetPasswordForEmail/);
+  assert.match(portal, /signInAdminWithPassword/);
   assert.match(portal, /signInWithOtp/);
   assert.match(portal, /onAuthStateChange/);
   assert.match(service, /auth\.signUp/);
@@ -65,9 +67,12 @@ test("live integration uses Supabase Auth and the admin_api schema only", async 
   assert.match(service, /review_response/);
   assert.match(service, /register_hub/);
   assert.match(service, /update_hub/);
-  assert.match(accessGate, /Create account/);
-  assert.match(accessGate, /Confirm password/);
-  assert.match(accessGate, /One-time setup code/);
+  assert.match(accessGate, /Forgot password/);
+  assert.match(accessGate, /Email me a sign-in link/);
+  assert.match(accessGate, /htmlFor="admin-email"/);
+  assert.match(accessGate, /htmlFor="admin-password"/);
+  assert.doesNotMatch(accessGate, /Create account/);
+  assert.doesNotMatch(accessGate, /One-time setup code/);
   assert.match(portal, /No demo data has been substituted/);
   assert.doesNotMatch(`${service}\n${portal}\n${accessGate}`, /service_role|sb_secret_/i);
 });
@@ -90,7 +95,7 @@ test("shared theme service is used instead of a duplicate theme store", async ()
 });
 
 test("required documentation exists", async () => {
-  for (const file of ["README.md", "docs/architecture.md", "docs/modules.md", "docs/integration.md", "docs/permissions.md", "docs/deployment.md", "docs/testing.md", "docs/curriculum-authoring.md", "docs/publication-workflow.md", "docs/backend-publication.md", "docs/hub-registration.md", "docs/platform-management.md"]) {
+  for (const file of ["README.md", "docs/architecture.md", "docs/modules.md", "docs/integration.md", "docs/permissions.md", "docs/deployment.md", "docs/testing.md", "docs/curriculum-authoring.md", "docs/publication-workflow.md", "docs/backend-publication.md", "docs/hub-registration.md", "docs/platform-management.md", "docs/authentication.md"]) {
     const content = await readFile(new URL(file, root), "utf8");
     assert.ok(content.length > 300, `${file} should be substantive`);
   }

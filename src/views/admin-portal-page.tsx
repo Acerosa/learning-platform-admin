@@ -3,6 +3,7 @@
 import {
   AdminAccessDenied,
   AdminLoadingState,
+  AdminPasswordReset,
   AdminSignIn,
   AdminUnavailable,
 } from "../components/admin-access-gate";
@@ -16,14 +17,38 @@ import { ModuleContent } from "./module-content";
 export function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
   const portal = useAdminPortal();
 
-  if (portal.status === "loading" && !portal.bootstrapReady) return <AdminLoadingState />;
+  if (portal.status === "authenticating") {
+    return (
+      <AdminLoadingState
+        title="Signing in"
+        message="Checking your details with Supabase Auth."
+      />
+    );
+  }
+  if (portal.status === "recovery") {
+    return (
+      <AdminPasswordReset
+        message={portal.authMessage}
+        onUpdatePassword={portal.updatePassword}
+        onCancel={portal.signOut}
+      />
+    );
+  }
+  if (portal.status === "loading" && !portal.bootstrapReady) {
+    return (
+      <AdminLoadingState
+        title="Connecting to the live backend"
+        message="Restoring the staff session and checking backend authority."
+      />
+    );
+  }
   if (portal.status === "signed-out") {
     return (
       <AdminSignIn
         message={portal.authMessage}
         onSignIn={portal.signIn}
-        onSignUp={portal.signUp}
         onMagicLink={portal.requestMagicLink}
+        onForgotPassword={portal.requestPasswordReset}
       />
     );
   }
@@ -32,7 +57,6 @@ export function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
       <AdminAccessDenied
         displayName={portal.session.displayName}
         message={portal.authMessage}
-        onClaimInitialAdmin={portal.claimInitialAdmin}
         onSignOut={portal.signOut}
       />
     );
