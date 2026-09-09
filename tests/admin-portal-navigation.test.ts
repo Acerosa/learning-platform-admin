@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  normalizeAdminAuthCallbackUrl,
   shouldBootstrapAdminData,
   shouldClearAdminData,
+  shouldEnterPasswordRecovery,
   shouldPreservePortalDataOnRefresh,
 } from "../src/stores/admin-portal-auth.ts";
 
@@ -49,8 +51,33 @@ test("AdminPortalProvider is mounted once at the app root, not per route page", 
   assert.match(homePage, /AdminPortalFrame/);
   assert.match(modulePage, /AdminPortalFrame/);
   assert.match(pagesMain, /AdminPortalProvider/);
+  assert.match(pagesMain, /applyAdminAuthCallbackLocation/);
   assert.match(pagesMain, /AdminPortalFrame moduleId=\{moduleId\}/);
+  assert.match(pagesMain, /window\.location\.hash/);
+  assert.doesNotMatch(pagesMain, /window\.location\.search/);
   assert.doesNotMatch(pagesMain, /AdminPortalPage/);
+});
+
+test("GitHub Pages recovery token_hash stays on the search string", () => {
+  const pagesRoot = "https://acerosa.github.io/learning-platform-admin/";
+  assert.equal(
+    normalizeAdminAuthCallbackUrl(`${pagesRoot}?token_hash=recovery-hash&type=recovery`),
+    `${pagesRoot}?token_hash=recovery-hash&type=recovery`,
+  );
+  assert.equal(
+    normalizeAdminAuthCallbackUrl(`${pagesRoot}#/?token_hash=recovery-hash&type=recovery`),
+    `${pagesRoot}?token_hash=recovery-hash&type=recovery`,
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("INITIAL_SESSION", {
+      search: "?token_hash=recovery-hash&type=recovery",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("SIGNED_IN", { search: "?code=magic-link-code" }),
+    false,
+  );
 });
 
 test("auth bootstrap uses onAuthStateChange without a separate initial refresh", async () => {

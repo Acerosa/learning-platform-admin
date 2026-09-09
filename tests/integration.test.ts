@@ -21,6 +21,7 @@ import {
   reviewResponse,
   signInAdminWithPassword,
   updateAdminPassword,
+  verifyAdminRecoveryTokenHash,
   updateHub,
   type AdminSupabaseClient,
 } from "../src/services/supabase-admin-service.ts";
@@ -229,6 +230,10 @@ test("password sign-in and reset use the public client without logging credentia
         calls.push({ name: "resetPasswordForEmail", email, options });
         return { error: null };
       },
+      async verifyOtp(credentials: unknown) {
+        calls.push({ name: "verifyOtp", credentials });
+        return { error: null };
+      },
       async updateUser(attributes: unknown) {
         calls.push({ name: "updateUser", attributes });
         return { error: null };
@@ -242,12 +247,17 @@ test("password sign-in and reset use the public client without logging credentia
     "admin@example.invalid",
     "https://acerosa.github.io/learning-platform-admin/",
   );
+  await verifyAdminRecoveryTokenHash(client, "recovery-hash");
   await updateAdminPassword(client, "test-password");
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
   assert.equal((calls[0] as { name: string }).name, "signInWithPassword");
   assert.equal((calls[1] as { name: string }).name, "resetPasswordForEmail");
   assert.deepEqual((calls[1] as { options: { redirectTo: string } }).options, {
     redirectTo: "https://acerosa.github.io/learning-platform-admin/",
+  });
+  assert.deepEqual((calls[2] as { name: string; credentials: unknown }).credentials, {
+    token_hash: "recovery-hash",
+    type: "recovery",
   });
 });
 

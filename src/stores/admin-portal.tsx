@@ -54,6 +54,7 @@ import {
   requestAdminPasswordReset,
   signInAdminWithPassword,
   updateAdminPassword,
+  verifyAdminRecoveryTokenHash,
   setSessionVisibility as setSessionVisibilityRpc,
   saveCurriculumDraft as saveCurriculumDraftRpc,
   loadCurrentCurriculumPackage as loadCurrentCurriculumPackageRpc,
@@ -97,8 +98,11 @@ import {
   ADMIN_PASSWORD_RECOVERY_STORAGE_KEY,
   AUTH_USER_MESSAGES,
   adminAuthPhase,
+  applyAdminAuthCallbackLocation,
+  consumeAdminRecoveryTokenHashFromUrl,
   mapPasswordUpdateError,
   mapSignInError,
+  readAdminAuthCallbackParams,
   recoveryErrorFromLocation,
   resolveAdminAuthRedirectUrl,
   shouldBootstrapAdminData,
@@ -301,13 +305,16 @@ function createDemoModuleCache(): AdminModuleCacheState {
   };
 }
 
+let recoveryTokenHashVerifyStarted = false;
+
 export function AdminPortalProvider({ children }: { children: React.ReactNode }) {
   const config = useMemo(() => getAdminRuntimeConfig(), []);
-  const [client] = useState<AdminSupabaseClient | null>(() =>
-    config.mode === "live" && config.valid
+  const [client] = useState<AdminSupabaseClient | null>(() => {
+    applyAdminAuthCallbackLocation();
+    return config.mode === "live" && config.valid
       ? createSupabaseAdminClient(config)
-      : null,
-  );
+      : null;
+  });
   const [state, setState] = useState<PortalState>(() => {
     if (config.mode === "demo" && config.valid) {
       return {
@@ -624,6 +631,26 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       subscription.unsubscribe();
     };
   }, [bootstrapSession, client, enterPasswordRecovery, exitPasswordRecovery]);
+
+  useEffect(() => {
+    if (!client) return;
+    const callback = readAdminAuthCallbackParams(currentAuthLocation());
+    if (callback.type !== "recovery" || !callback.tokenHash) return;
+    if (recoveryTokenHashVerifyStarted) return;
+    recoveryTokenHashVerifyStarted = true;
+    writeRecoveryPending(true);
+    void verifyAdminRecoveryTokenHash(client, callback.tokenHash)
+      .then(() => {
+        if (typeof window === "undefined") return;
+        const next = consumeAdminRecoveryTokenHashFromUrl(window.location.href);
+        if (next !== window.location.href) {
+          window.history.replaceState(window.history.state, "", next);
+        }
+      })
+      .catch(() => {
+        enterPasswordRecovery(AUTH_USER_MESSAGES.recoveryInvalid);
+      });
+  }, [client, enterPasswordRecovery]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!client) return;

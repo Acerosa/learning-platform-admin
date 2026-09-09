@@ -59,7 +59,9 @@ These are Dashboard settings. This repository cannot change them.
 Do not set Site URL to `https://acerosa.github.io/` without the repository
 path. Password-reset emails use the Site URL / redirect allow list. Magic
 links also need that allow list and must be opened in the same browser that
-requested them (PKCE).
+requested them (PKCE). Reset-password emails should use the Admin
+`token_hash` callback described in [Authentication](authentication.md)
+because Microsoft/college Safe Links consume the default `/verify` link.
 
 **Email / SMTP**
 

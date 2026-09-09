@@ -35,6 +35,8 @@ state and cannot read protected Admin views.
 - Collect email and password and call `supabase.auth.signInWithPassword`.
 - Restore and refresh the Supabase session.
 - Request a password reset through `supabase.auth.resetPasswordForEmail`.
+- Hand a recovery `token_hash` to `supabase.auth.verifyOtp({ type: "recovery" })`.
+  The browser must not inspect or validate the token itself.
 - Update a password during a recovery session with `supabase.auth.updateUser`.
 - Optionally request a magic link through `supabase.auth.signInWithOtp`.
 - Read `admin_api.current_staff_context` after Auth restores a session.
@@ -73,11 +75,37 @@ state and cannot read protected Admin views.
    Admin data before the password form is shown. The marker stays in the
    URL until the password is updated or the user cancels, then it is
    removed so a later sign-in or reload can open the Admin shell.
-3. The user opens the email in the same browser.
-4. Supabase Auth establishes a recovery session.
-5. The portal shows **Choose a new password**.
-6. `updateUser({ password })` updates the Auth credential.
-7. The portal then loads `admin_api.current_staff_context` as usual.
+3. The user opens the **newest** recovery email. A second reset request
+   invalidates the previous email. The `token_hash` callback does not need
+   the PKCE verifier from the browser that clicked Forgot password.
+4. College/Microsoft Safe Links can consume the default Supabase
+   `/auth/v1/verify` link with a GET before the user clicks it. That is why
+   a fresh email can still show “invalid or has expired”. Do not weaken
+   token lifetime to work around scanners. The hosted recovery email
+   template must send the user to the Admin root with `token_hash` so
+   Supabase `verifyOtp({ type: "recovery" })` runs in the Admin app.
+5. Auth callback parameters (`code`, `token_hash`, `type`, errors) are
+   lifted off the hash route onto the query string before the Supabase
+   client starts. The browser never validates the token itself.
+6. After Supabase establishes the recovery session, the portal shows
+   **Choose a new password**.
+7. `updateUser({ password })` updates the Auth credential.
+8. Recovery state is cleared, then the portal loads
+   `admin_api.current_staff_context` as usual.
+
+### Hosted recovery email template
+
+In Supabase Dashboard → Authentication → Email Templates → Reset password,
+the confirmation URL must land on the Admin root, not only on GoTrue
+`/verify`:
+
+```text
+https://acerosa.github.io/learning-platform-admin/?token_hash={{ .TokenHash }}&type=recovery
+```
+
+Keep Site URL and Redirect URLs as
+`https://acerosa.github.io/learning-platform-admin/` plus the `/**`
+wildcard. Magic-link emails can keep the default confirmation URL.
 
 ## First administrator
 

@@ -12,6 +12,9 @@ here.
   The marker remains until the password is updated or the user cancels,
   and in-flight session bootstrap is cancelled if recovery or sign-out
   starts.
+- Auth callback parameters are lifted from a hash route onto the query
+  string before the Supabase client starts. Recovery also accepts
+  `token_hash` so a scanner GET of `/auth/v1/verify` is not required.
 
 ### Changed
 

@@ -5,13 +5,17 @@ import {
   requestAdminPasswordReset,
   signInAdminWithPassword,
   updateAdminPassword,
+  verifyAdminRecoveryTokenHash,
   type AdminSupabaseClient,
 } from "../src/services/supabase-admin-service.ts";
 import {
   AUTH_USER_MESSAGES,
   adminAuthPhase,
+  consumeAdminRecoveryTokenHashFromUrl,
   mapPasswordUpdateError,
   mapSignInError,
+  normalizeAdminAuthCallbackUrl,
+  readAdminAuthCallbackParams,
   recoveryErrorFromLocation,
   resolveAdminAuthRedirectUrl,
   shouldBootstrapAdminData,
@@ -26,6 +30,7 @@ const TEST_PASSWORD = "test-password-not-production";
 function authClient(handlers: {
   signInWithPassword?: (credentials: { email: string; password: string }) => Promise<{ error: unknown }>;
   resetPasswordForEmail?: (email: string, options: { redirectTo: string }) => Promise<{ error: unknown }>;
+  verifyOtp?: (credentials: { token_hash: string; type: string }) => Promise<{ error: unknown }>;
   updateUser?: (attributes: { password: string }) => Promise<{ error: unknown }>;
   signOut?: () => Promise<{ error: unknown }>;
 }) {
@@ -33,6 +38,7 @@ function authClient(handlers: {
     auth: {
       signInWithPassword: handlers.signInWithPassword,
       resetPasswordForEmail: handlers.resetPasswordForEmail,
+      verifyOtp: handlers.verifyOtp,
       updateUser: handlers.updateUser,
       signOut: handlers.signOut,
     },
@@ -210,6 +216,99 @@ test("invalid or expired recovery fails safely", async () => {
   await assert.rejects(() => updateAdminPassword(expired, TEST_PASSWORD));
 });
 
+test("GitHub Pages recovery callbacks keep PKCE and token hash on the search string", () => {
+  const pagesRoot = "https://acerosa.github.io/learning-platform-admin/";
+  assert.equal(
+    normalizeAdminAuthCallbackUrl(`${pagesRoot}?code=pkce-code&type=recovery`),
+    `${pagesRoot}?code=pkce-code&type=recovery`,
+  );
+  assert.equal(
+    normalizeAdminAuthCallbackUrl(`${pagesRoot}#/?code=pkce-code&type=recovery`),
+    `${pagesRoot}?code=pkce-code&type=recovery`,
+  );
+  assert.equal(
+    normalizeAdminAuthCallbackUrl(`${pagesRoot}#/dashboard?code=pkce-code&type=recovery`),
+    `${pagesRoot}?code=pkce-code&type=recovery#/dashboard`,
+  );
+  assert.equal(
+    readAdminAuthCallbackParams({ search: "?token_hash=recovery-hash&type=recovery" }).type,
+    "recovery",
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("INITIAL_SESSION", {
+      search: "?token_hash=recovery-hash&type=recovery",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldBootstrapAdminData("SIGNED_IN", { search: "?code=magic-link-code" }),
+    true,
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("SIGNED_IN", { search: "?code=magic-link-code" }),
+    false,
+  );
+  assert.equal(
+    recoveryErrorFromLocation(
+      "?type=recovery&error=access_denied&error_code=otp_expired",
+      "",
+    ),
+    AUTH_USER_MESSAGES.recoveryInvalid,
+  );
+  assert.equal(
+    consumeAdminRecoveryTokenHashFromUrl(
+      "https://acerosa.github.io/learning-platform-admin/?token_hash=recovery-hash&type=recovery",
+    ),
+    "https://acerosa.github.io/learning-platform-admin/?type=recovery",
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("INITIAL_SESSION", { search: "" }),
+    false,
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("INITIAL_SESSION", { search: "?token_hash=recovery-hash" }),
+    false,
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("INITIAL_SESSION", { search: "?type=recovery" }),
+    true,
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("INITIAL_SESSION", { search: "?type=recovery" }, true),
+    true,
+  );
+  assert.equal(
+    shouldBootstrapAdminData("SIGNED_IN", { search: "?code=pkce-code&type=recovery" }),
+    false,
+  );
+});
+
+test("token_hash recovery is verified by Supabase, not the browser", async () => {
+  const calls: unknown[] = [];
+  const valid = authClient({
+    async verifyOtp(credentials) {
+      calls.push(credentials);
+      return { error: null };
+    },
+  });
+  await verifyAdminRecoveryTokenHash(valid, " recovery-hash ");
+  assert.deepEqual(calls, [{ token_hash: "recovery-hash", type: "recovery" }]);
+
+  const invalid = authClient({
+    async verifyOtp() {
+      return { error: { code: "otp_expired", message: "Token has expired or is invalid" } };
+    },
+  });
+  await assert.rejects(() => verifyAdminRecoveryTokenHash(invalid, "invalid-hash"));
+
+  const expired = authClient({
+    async verifyOtp() {
+      return { error: { code: "otp_expired", message: "Token has expired or is invalid" } };
+    },
+  });
+  await assert.rejects(() => verifyAdminRecoveryTokenHash(expired, "expired-hash"));
+});
+
 test("auth redirect URLs keep the GitHub Pages repository path", () => {
   assert.equal(
     resolveAdminAuthRedirectUrl({
@@ -263,7 +362,16 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(accessGate, /Forgot password/);
   assert.match(accessGate, /Email me a sign-in link/);
   assert.doesNotMatch(accessGate, /One-time setup code|Create account/);
+  assert.match(portal, /applyAdminAuthCallbackLocation/);
+  assert.match(portal, /verifyAdminRecoveryTokenHash/);
+  assert.match(portal, /let recoveryTokenHashVerifyStarted = false/);
+  assert.match(portal, /callback\.type !== "recovery" \|\| !callback\.tokenHash/);
   assert.match(portal, /redirectUrl\(\{ recovery: true \}\)/);
+  assert.match(portal, /emailRedirectTo: redirectUrl\(\)/);
+  assert.match(portal, /signInWithOtp/);
+  assert.match(service, /verifyOtp\(\{\s*token_hash:[\s\S]*type: "recovery"/);
+  assert.match(service, /resetPasswordForEmail/);
+  assert.match(service, /signInWithPassword/);
   assert.match(portal, /bootstrapGeneration/);
   assert.match(portal, /status: "recovery"/);
   assert.match(portal, /stripRecoveryMarkerFromUrl/);
@@ -276,7 +384,18 @@ test("admin source never treats getSession, query params or localStorage as admi
     portal.slice(portal.indexOf("const enterPasswordRecovery"), portal.indexOf("const exitPasswordRecovery")),
     /clearRecoveryMarkerFromLocation/,
   );
+  assert.match(
+    portal.slice(portal.indexOf("const updatePassword"), portal.indexOf("const registerHub")),
+    /exitPasswordRecovery\(\)/,
+  );
+  assert.match(
+    portal.slice(portal.indexOf("const signOut"), portal.indexOf("const data = useMemo")),
+    /exitPasswordRecovery\(\)/,
+  );
   assert.match(service, /current_staff_context/);
   assert.doesNotMatch(`${portal}\n${session}\n${accessGate}\n${service}`, /service_role|sb_secret_/i);
-  assert.doesNotMatch(portal, /console\.log\((?:.*password|.*session|.*jwt)/i);
+  assert.doesNotMatch(
+    `${portal}\n${service}`,
+    /console\.(?:log|debug|info|warn)\([\s\S]*(?:password|token_hash|otp|jwt|service.role|sb_secret_)/i,
+  );
 });
