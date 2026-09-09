@@ -381,9 +381,17 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(portal, /applyAdminAuthCallbackLocation/);
   assert.match(portal, /verifyAdminRecoveryTokenHash/);
   assert.match(portal, /let recoveryTokenHashVerifyStarted = false/);
-  assert.match(portal, /recoveryTokenHashVerifyGeneration/);
+  assert.match(portal, /recoveryTokenHashVerifyCancelled/);
   assert.match(portal, /callback\.type !== "recovery" \|\| !callback\.tokenHash/);
-  assert.match(portal, /client\.auth\.getSession\(\)/);
+  assert.match(portal, /consumeRecoveryTokenHashFromWindow\(\)/);
+  assert.match(
+    portal,
+    /if \(recoveryTokenHashVerifyStarted && !recoveryTokenHashVerifyCancelled\) \{\s*return;/,
+  );
+  assert.doesNotMatch(
+    portal.slice(portal.indexOf("void verifyAdminRecoveryTokenHash"), portal.indexOf("const signIn")),
+    /getSession/,
+  );
   assert.match(portal, /redirectUrl\(\{ recovery: true \}\)/);
   assert.match(portal, /emailRedirectTo: redirectUrl\(\)/);
   assert.match(portal, /signInWithOtp/);
@@ -396,10 +404,6 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(portal, /sessionStorage/);
   assert.match(
     portal.slice(portal.indexOf("const exitPasswordRecovery"), portal.indexOf("const loadModuleData")),
-    /recoveryTokenHashVerifyGeneration \+= 1/,
-  );
-  assert.match(
-    portal.slice(portal.indexOf("const exitPasswordRecovery"), portal.indexOf("const loadModuleData")),
     /clearRecoveryMarkerFromLocation/,
   );
   assert.doesNotMatch(
@@ -409,6 +413,10 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(
     portal.slice(portal.indexOf("const updatePassword"), portal.indexOf("const registerHub")),
     /exitPasswordRecovery\(\)/,
+  );
+  assert.match(
+    portal.slice(portal.indexOf("const signOut"), portal.indexOf("const data = useMemo")),
+    /recoveryTokenHashVerifyCancelled = true/,
   );
   assert.match(
     portal.slice(portal.indexOf("const signOut"), portal.indexOf("const data = useMemo")),

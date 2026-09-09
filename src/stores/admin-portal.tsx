@@ -306,7 +306,7 @@ function createDemoModuleCache(): AdminModuleCacheState {
 }
 
 let recoveryTokenHashVerifyStarted = false;
-let recoveryTokenHashVerifyGeneration = 0;
+let recoveryTokenHashVerifyCancelled = false;
 
 function consumeRecoveryTokenHashFromWindow() {
   if (typeof window === "undefined") return;
@@ -385,7 +385,6 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const exitPasswordRecovery = useCallback(() => {
-    recoveryTokenHashVerifyGeneration += 1;
     writeRecoveryPending(false);
     clearRecoveryMarkerFromLocation();
   }, []);
@@ -620,6 +619,9 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       const location = currentAuthLocation();
       const pending = readRecoveryPending() || stateRef.current.status === "recovery";
       if (shouldClearAdminData(event)) {
+        if (recoveryTokenHashVerifyStarted && !recoveryTokenHashVerifyCancelled) {
+          return;
+        }
         exitPasswordRecovery();
         bootstrapGeneration.current += 1;
         resetAdminModulePerformance();
@@ -648,26 +650,19 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     if (callback.type !== "recovery" || !callback.tokenHash) return;
     if (recoveryTokenHashVerifyStarted) return;
     recoveryTokenHashVerifyStarted = true;
-    const generation = recoveryTokenHashVerifyGeneration;
-    void verifyAdminRecoveryTokenHash(client, callback.tokenHash)
+    const tokenHash = callback.tokenHash;
+    consumeRecoveryTokenHashFromWindow();
+    void verifyAdminRecoveryTokenHash(client, tokenHash)
       .then(async () => {
-        if (generation !== recoveryTokenHashVerifyGeneration) {
+        if (recoveryTokenHashVerifyCancelled) {
           await client.auth.signOut();
           return;
         }
-        consumeRecoveryTokenHashFromWindow();
         writeRecoveryPending(true);
         enterPasswordRecovery(null);
       })
-      .catch(async () => {
-        if (generation !== recoveryTokenHashVerifyGeneration) return;
-        const { data } = await client.auth.getSession();
-        if (data.session) {
-          consumeRecoveryTokenHashFromWindow();
-          writeRecoveryPending(true);
-          enterPasswordRecovery(null);
-          return;
-        }
+      .catch(() => {
+        if (recoveryTokenHashVerifyCancelled) return;
         enterPasswordRecovery(AUTH_USER_MESSAGES.recoveryInvalid);
       });
   }, [client, enterPasswordRecovery]);
@@ -926,6 +921,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const signOut = useCallback(async () => {
     if (!client) return;
+    recoveryTokenHashVerifyCancelled = true;
     exitPasswordRecovery();
     bootstrapGeneration.current += 1;
     await client.auth.signOut();
