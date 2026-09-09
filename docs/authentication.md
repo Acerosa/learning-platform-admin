@@ -53,7 +53,7 @@ state and cannot read protected Admin views.
 | Status | Auth phase | Meaning |
 | --- | --- | --- |
 | `signed-out` | unauthenticated | No Auth session. Sign-in form. |
-| `authenticating` | authenticating | Password, magic-link or reset request in flight. |
+| `authenticating` | authenticating | Password or magic-link request in flight. |
 | `loading` | authorising | Session present; staff context is being loaded. Protected data is not shown. |
 | `ready` | authorised | Backend returned an active `platform_admin` context. |
 | `access-denied` | forbidden | Authenticated, but not an authorised administrator. |
@@ -66,9 +66,11 @@ state and cannot read protected Admin views.
 
 1. Sign-in screen → **Forgot password** → enter email.
 2. The portal calls `resetPasswordForEmail` with redirect
-   `https://acerosa.github.io/learning-platform-admin/` on GitHub Pages
-   (or `/` on local Next). Hash routes are not placed in the redirect URL,
-   so the PKCE `?code=` query remains valid.
+   `https://acerosa.github.io/learning-platform-admin/?type=recovery` on
+   GitHub Pages (or `/?type=recovery` on local Next). Hash routes are not
+   placed in the redirect URL, so the PKCE `?code=` query remains valid.
+   The `type=recovery` marker prevents a recovery session from loading
+   Admin data before the password form is shown.
 3. The user opens the email in the same browser.
 4. Supabase Auth establishes a recovery session.
 5. The portal shows **Choose a new password**.

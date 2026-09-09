@@ -178,7 +178,7 @@ function unavailableSession(): AdminSessionSnapshot {
   };
 }
 
-function redirectUrl() {
+function redirectUrl(options?: { recovery?: boolean }) {
   if (typeof window === "undefined") return undefined;
   const usesHashRouting = Boolean(document.querySelector(
     'meta[name="learning-platform-admin-router"][content="hash"]',
@@ -187,6 +187,7 @@ function redirectUrl() {
     origin: window.location.origin,
     pathname: window.location.pathname,
     usesHashRouting,
+    recovery: options?.recovery,
   });
 }
 
@@ -314,6 +315,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const stateRef = useRef(state);
   stateRef.current = state;
+  const bootstrapGeneration = useRef(0);
 
   const moduleLoadPromises = useRef(new Map<AdminModuleDataKey, Promise<void>>());
 
@@ -421,6 +423,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     options?: { background?: boolean },
   ) => {
     if (!client) return;
+    const generation = ++bootstrapGeneration.current;
 
     setState((current) => {
       if (shouldPreservePortalDataOnRefresh(current, options)) {
@@ -440,6 +443,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     });
 
     if (!session) {
+      if (bootstrapGeneration.current !== generation) return;
       setState(clearedPortalState(
         recoveryErrorFromLocation(
           currentAuthLocation()?.search,
@@ -453,6 +457,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     try {
       markBootstrapStarted();
       const staffContext = await service.getCurrentStaffContext();
+      if (bootstrapGeneration.current !== generation) return;
       const nextSession = sessionFromStaffContext(staffContext);
       if (nextSession.state !== "authenticated") {
         setState({
@@ -469,6 +474,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       }
 
       const bootstrap = await fetchAdminBootstrapData(service);
+      if (bootstrapGeneration.current !== generation) return;
       setState({
         status: "ready",
         session: nextSession,
@@ -481,6 +487,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       });
       markBootstrapCompleted();
     } catch (error) {
+      if (bootstrapGeneration.current !== generation) return;
       const denied = error instanceof AdminReadError && error.code === "access-denied";
       setState((current) => ({
         status: denied ? "access-denied" : "error",
@@ -496,7 +503,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
           : createEmptyModuleCache(),
         demoSnapshot: null,
         message: denied
-          ? "The backend denied access to administrative data."
+          ? AUTH_USER_MESSAGES.forbidden
           : "Live administrative data is currently unavailable. No demo data has been substituted.",
         refreshing: false,
       }));
@@ -520,6 +527,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       return;
     }
     if (shouldEnterPasswordRecovery("INITIAL_SESSION", currentAuthLocation())) {
+      bootstrapGeneration.current += 1;
       setState({
         status: "recovery",
         session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
@@ -546,12 +554,14 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       if (cancelled) return;
       const location = currentAuthLocation();
       if (shouldClearAdminData(event)) {
+        bootstrapGeneration.current += 1;
         resetAdminModulePerformance();
         moduleLoadPromises.current.clear();
         setState(clearedPortalState());
         return;
       }
       if (shouldEnterPasswordRecovery(event, location)) {
+        bootstrapGeneration.current += 1;
         resetAdminModulePerformance();
         moduleLoadPromises.current.clear();
         setState({
@@ -567,6 +577,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         return;
       }
       if (shouldBootstrapAdminData(event, location)) {
+        if (stateRef.current.status === "recovery") return;
         void bootstrapSession(session);
       }
     });
@@ -604,12 +615,12 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const requestPasswordReset = useCallback(async (email: string) => {
     if (!client) return;
-    setState((current) => ({ ...current, status: "authenticating", message: null }));
+    setState((current) => ({ ...current, message: null }));
     try {
       await requestAdminPasswordReset(
         client,
         email,
-        redirectUrl() ?? window.location.origin,
+        redirectUrl({ recovery: true }) ?? window.location.origin,
       );
       setState(clearedPortalState(AUTH_USER_MESSAGES.resetSent));
     } catch (error) {
@@ -624,7 +635,11 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const updatePassword = useCallback(async (password: string) => {
     if (!client) return;
-    setState((current) => ({ ...current, status: "authenticating", message: null }));
+    setState((current) => ({
+      ...current,
+      status: "recovery",
+      message: null,
+    }));
     try {
       await updateAdminPassword(client, password);
       const { data: authData } = await client.auth.getSession();
@@ -826,6 +841,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const signOut = useCallback(async () => {
     if (!client) return;
+    bootstrapGeneration.current += 1;
     await client.auth.signOut();
     resetAdminModulePerformance();
     moduleLoadPromises.current.clear();

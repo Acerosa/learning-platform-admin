@@ -5,6 +5,12 @@ here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Password-reset callbacks now include `?type=recovery` so a PKCE `?code=`
+  return cannot bootstrap Admin access before the recovery form is shown.
+  In-flight session bootstrap is cancelled if recovery or sign-out starts.
+
 ### Changed
 
 - Admin Portal live sign-in is email and password first. Magic links remain a

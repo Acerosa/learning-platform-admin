@@ -165,6 +165,14 @@ test("invalid or expired recovery fails safely", async () => {
     true,
   );
   assert.equal(
+    shouldEnterPasswordRecovery("SIGNED_IN", { search: "?type=recovery&code=pkce-code" }),
+    true,
+  );
+  assert.equal(
+    shouldBootstrapAdminData("SIGNED_IN", { search: "?type=recovery&code=pkce-code" }),
+    false,
+  );
+  assert.equal(
     shouldBootstrapAdminData("SIGNED_IN", { hash: "#type=recovery" }),
     false,
   );
@@ -189,6 +197,15 @@ test("auth redirect URLs keep the GitHub Pages repository path", () => {
       usesHashRouting: true,
     }),
     "https://acerosa.github.io/learning-platform-admin/",
+  );
+  assert.equal(
+    resolveAdminAuthRedirectUrl({
+      origin: "https://acerosa.github.io",
+      pathname: "/learning-platform-admin/",
+      usesHashRouting: true,
+      recovery: true,
+    }),
+    "https://acerosa.github.io/learning-platform-admin/?type=recovery",
   );
   assert.equal(
     resolveAdminAuthRedirectUrl({
@@ -225,6 +242,9 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(accessGate, /Forgot password/);
   assert.match(accessGate, /Email me a sign-in link/);
   assert.doesNotMatch(accessGate, /One-time setup code|Create account/);
+  assert.match(portal, /redirectUrl\(\{ recovery: true \}\)/);
+  assert.match(portal, /bootstrapGeneration/);
+  assert.match(portal, /status: "recovery"/);
   assert.match(service, /current_staff_context/);
   assert.doesNotMatch(`${portal}\n${session}\n${accessGate}\n${service}`, /service_role|sb_secret_/i);
   assert.doesNotMatch(portal, /console\.log\((?:.*password|.*session|.*jwt)/i);

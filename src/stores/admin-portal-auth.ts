@@ -160,7 +160,10 @@ export function resolveAdminAuthRedirectUrl(input: {
   origin: string;
   pathname: string;
   usesHashRouting: boolean;
+  recovery?: boolean;
 }): string {
   const path = input.usesHashRouting ? (input.pathname || "/") : "/";
-  return new URL(path, input.origin).toString();
+  const url = new URL(path, input.origin);
+  if (input.recovery) url.searchParams.set("type", "recovery");
+  return url.toString();
 }
