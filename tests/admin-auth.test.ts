@@ -17,6 +17,7 @@ import {
   shouldBootstrapAdminData,
   shouldClearAdminData,
   shouldEnterPasswordRecovery,
+  stripRecoveryMarkerFromUrl,
 } from "../src/stores/admin-portal-auth.ts";
 import { sessionFromStaffContext } from "../src/stores/admin-session.ts";
 
@@ -177,6 +178,26 @@ test("invalid or expired recovery fails safely", async () => {
     false,
   );
   assert.equal(
+    shouldEnterPasswordRecovery("SIGNED_IN", { search: "" }, true),
+    true,
+  );
+  assert.equal(
+    shouldBootstrapAdminData("SIGNED_IN", { search: "" }, true),
+    false,
+  );
+  assert.equal(
+    shouldBootstrapAdminData("SIGNED_IN", { search: "" }, false),
+    true,
+  );
+  assert.equal(
+    stripRecoveryMarkerFromUrl("https://acerosa.github.io/learning-platform-admin/?type=recovery"),
+    "https://acerosa.github.io/learning-platform-admin/",
+  );
+  assert.equal(
+    stripRecoveryMarkerFromUrl("https://acerosa.github.io/learning-platform-admin/?type=recovery&code=pkce-code"),
+    "https://acerosa.github.io/learning-platform-admin/?code=pkce-code",
+  );
+  assert.equal(
     mapPasswordUpdateError({ message: "Auth session missing" }),
     AUTH_USER_MESSAGES.recoveryInvalid,
   );
@@ -245,6 +266,8 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(portal, /redirectUrl\(\{ recovery: true \}\)/);
   assert.match(portal, /bootstrapGeneration/);
   assert.match(portal, /status: "recovery"/);
+  assert.match(portal, /stripRecoveryMarkerFromUrl/);
+  assert.match(portal, /sessionStorage/);
   assert.match(service, /current_staff_context/);
   assert.doesNotMatch(`${portal}\n${session}\n${accessGate}\n${service}`, /service_role|sb_secret_/i);
   assert.doesNotMatch(portal, /console\.log\((?:.*password|.*session|.*jwt)/i);

@@ -94,6 +94,7 @@ import {
   type AdminSessionSnapshot,
 } from "./admin-session";
 import {
+  ADMIN_PASSWORD_RECOVERY_STORAGE_KEY,
   AUTH_USER_MESSAGES,
   adminAuthPhase,
   mapPasswordUpdateError,
@@ -104,6 +105,7 @@ import {
   shouldClearAdminData,
   shouldEnterPasswordRecovery,
   shouldPreservePortalDataOnRefresh,
+  stripRecoveryMarkerFromUrl,
   type AdminAuthPhase,
   type AdminPortalStatus,
 } from "./admin-portal-auth";
@@ -194,6 +196,36 @@ function redirectUrl(options?: { recovery?: boolean }) {
 function currentAuthLocation() {
   if (typeof window === "undefined") return undefined;
   return { search: window.location.search, hash: window.location.hash };
+}
+
+function readRecoveryPending(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(ADMIN_PASSWORD_RECOVERY_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeRecoveryPending(pending: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    if (pending) {
+      window.sessionStorage.setItem(ADMIN_PASSWORD_RECOVERY_STORAGE_KEY, "1");
+      return;
+    }
+    window.sessionStorage.removeItem(ADMIN_PASSWORD_RECOVERY_STORAGE_KEY);
+  } catch {
+    // Private mode or blocked storage must not break sign-in.
+  }
+}
+
+function clearRecoveryMarkerFromLocation() {
+  if (typeof window === "undefined") return;
+  const next = stripRecoveryMarkerFromUrl(window.location.href);
+  if (next !== window.location.href) {
+    window.history.replaceState(window.history.state, "", next);
+  }
 }
 
 function resultFromDemoHub(registered: {
@@ -318,6 +350,29 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   const bootstrapGeneration = useRef(0);
 
   const moduleLoadPromises = useRef(new Map<AdminModuleDataKey, Promise<void>>());
+
+  const enterPasswordRecovery = useCallback((message: string | null) => {
+    writeRecoveryPending(true);
+    bootstrapGeneration.current += 1;
+    resetAdminModulePerformance();
+    moduleLoadPromises.current.clear();
+    setState({
+      status: "recovery",
+      session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
+      bootstrap: null,
+      bootstrapReady: false,
+      moduleCache: createEmptyModuleCache(),
+      demoSnapshot: null,
+      message,
+      refreshing: false,
+    });
+    clearRecoveryMarkerFromLocation();
+  }, []);
+
+  const exitPasswordRecovery = useCallback(() => {
+    writeRecoveryPending(false);
+    clearRecoveryMarkerFromLocation();
+  }, []);
 
   const loadModuleData = useCallback(async (
     key: AdminModuleDataKey,
@@ -526,25 +581,19 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       });
       return;
     }
-    if (shouldEnterPasswordRecovery("INITIAL_SESSION", currentAuthLocation())) {
-      bootstrapGeneration.current += 1;
-      setState({
-        status: "recovery",
-        session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
-        bootstrap: null,
-        bootstrapReady: false,
-        moduleCache: createEmptyModuleCache(),
-        demoSnapshot: null,
-        message: recoveryErrorFromLocation(
-          currentAuthLocation()?.search,
-          currentAuthLocation()?.hash,
-        ),
-        refreshing: false,
-      });
+    if (shouldEnterPasswordRecovery(
+      "INITIAL_SESSION",
+      currentAuthLocation(),
+      readRecoveryPending(),
+    )) {
+      enterPasswordRecovery(recoveryErrorFromLocation(
+        currentAuthLocation()?.search,
+        currentAuthLocation()?.hash,
+      ));
       return;
     }
     await bootstrapSession(authData.session, options);
-  }, [bootstrapSession, client]);
+  }, [bootstrapSession, client, enterPasswordRecovery]);
 
   useEffect(() => {
     if (!client) return;
@@ -553,31 +602,20 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       const location = currentAuthLocation();
+      const pending = readRecoveryPending() || stateRef.current.status === "recovery";
       if (shouldClearAdminData(event)) {
+        exitPasswordRecovery();
         bootstrapGeneration.current += 1;
         resetAdminModulePerformance();
         moduleLoadPromises.current.clear();
         setState(clearedPortalState());
         return;
       }
-      if (shouldEnterPasswordRecovery(event, location)) {
-        bootstrapGeneration.current += 1;
-        resetAdminModulePerformance();
-        moduleLoadPromises.current.clear();
-        setState({
-          status: "recovery",
-          session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
-          bootstrap: null,
-          bootstrapReady: false,
-          moduleCache: createEmptyModuleCache(),
-          demoSnapshot: null,
-          message: recoveryErrorFromLocation(location?.search, location?.hash),
-          refreshing: false,
-        });
+      if (shouldEnterPasswordRecovery(event, location, pending)) {
+        enterPasswordRecovery(recoveryErrorFromLocation(location?.search, location?.hash));
         return;
       }
-      if (shouldBootstrapAdminData(event, location)) {
-        if (stateRef.current.status === "recovery") return;
+      if (shouldBootstrapAdminData(event, location, pending)) {
         void bootstrapSession(session);
       }
     });
@@ -586,7 +624,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [bootstrapSession, client]);
+  }, [bootstrapSession, client, enterPasswordRecovery, exitPasswordRecovery]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!client) return;
@@ -642,6 +680,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     }));
     try {
       await updateAdminPassword(client, password);
+      exitPasswordRecovery();
       const { data: authData } = await client.auth.getSession();
       await bootstrapSession(authData.session);
     } catch (error) {
@@ -656,7 +695,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         refreshing: false,
       });
     }
-  }, [bootstrapSession, client]);
+  }, [bootstrapSession, client, exitPasswordRecovery]);
 
   const registerHub = useCallback(async (request: HubRegistrationRequest) => {
     if (!client) {
@@ -841,12 +880,13 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const signOut = useCallback(async () => {
     if (!client) return;
+    exitPasswordRecovery();
     bootstrapGeneration.current += 1;
     await client.auth.signOut();
     resetAdminModulePerformance();
     moduleLoadPromises.current.clear();
     setState(clearedPortalState());
-  }, [client]);
+  }, [client, exitPasswordRecovery]);
 
   const data = useMemo(
     () => (state.bootstrapReady ? mergeModuleCacheToSnapshot(state.moduleCache, state.bootstrap) : null),

@@ -113,22 +113,53 @@ export function recoveryErrorFromLocation(search = "", hash = ""): string | null
   return null;
 }
 
+export const ADMIN_PASSWORD_RECOVERY_STORAGE_KEY = "lp-admin-password-recovery";
+
+export function locationHasRecoveryMarker(location?: { search?: string; hash?: string }): boolean {
+  const blob = `${location?.search ?? ""} ${location?.hash ?? ""}`;
+  return /(?:^|[?&#])type=recovery(?:&|$)/.test(blob);
+}
+
 export function shouldEnterPasswordRecovery(
   event: AuthBootstrapEvent,
   location?: { search?: string; hash?: string },
+  pending = false,
 ): boolean {
   if (event === "PASSWORD_RECOVERY") return true;
   if (event !== "INITIAL_SESSION" && event !== "SIGNED_IN") return false;
-  const blob = `${location?.search ?? ""} ${location?.hash ?? ""}`;
-  return /(?:^|[?&#])type=recovery(?:&|$)/.test(blob);
+  return pending || locationHasRecoveryMarker(location);
 }
 
 export function shouldBootstrapAdminData(
   event: AuthBootstrapEvent,
   location?: { search?: string; hash?: string },
+  pending = false,
 ): boolean {
-  if (shouldEnterPasswordRecovery(event, location)) return false;
+  if (shouldEnterPasswordRecovery(event, location, pending)) return false;
   return event === "INITIAL_SESSION" || event === "SIGNED_IN";
+}
+
+export function stripRecoveryMarkerFromUrl(href: string): string {
+  const url = new URL(href);
+  if (url.searchParams.get("type") === "recovery") {
+    url.searchParams.delete("type");
+  }
+  const rawHash = url.hash.replace(/^#/, "");
+  if (rawHash) {
+    const query = rawHash.includes("?") ? rawHash.slice(rawHash.indexOf("?") + 1) : rawHash;
+    const params = new URLSearchParams(query);
+    if (params.get("type") === "recovery") {
+      params.delete("type");
+      const next = params.toString();
+      if (rawHash.includes("?")) {
+        const path = rawHash.slice(0, rawHash.indexOf("?"));
+        url.hash = next ? `${path}?${next}` : path;
+      } else {
+        url.hash = next;
+      }
+    }
+  }
+  return url.toString();
 }
 
 export function shouldClearAdminData(event: AuthBootstrapEvent): boolean {
