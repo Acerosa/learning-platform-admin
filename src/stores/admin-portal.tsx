@@ -307,6 +307,7 @@ function createDemoModuleCache(): AdminModuleCacheState {
 
 let recoveryTokenHashVerifyStarted = false;
 let recoveryTokenHashVerifyCancelled = false;
+let recoveryTokenHashVerifyInFlight = false;
 
 function consumeRecoveryTokenHashFromWindow() {
   if (typeof window === "undefined") return;
@@ -619,7 +620,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       const location = currentAuthLocation();
       const pending = readRecoveryPending() || stateRef.current.status === "recovery";
       if (shouldClearAdminData(event)) {
-        if (recoveryTokenHashVerifyStarted && !recoveryTokenHashVerifyCancelled) {
+        if (recoveryTokenHashVerifyInFlight && !recoveryTokenHashVerifyCancelled) {
           return;
         }
         exitPasswordRecovery();
@@ -650,6 +651,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     if (callback.type !== "recovery" || !callback.tokenHash) return;
     if (recoveryTokenHashVerifyStarted) return;
     recoveryTokenHashVerifyStarted = true;
+    recoveryTokenHashVerifyInFlight = true;
     const tokenHash = callback.tokenHash;
     consumeRecoveryTokenHashFromWindow();
     void verifyAdminRecoveryTokenHash(client, tokenHash)
@@ -664,6 +666,9 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       .catch(() => {
         if (recoveryTokenHashVerifyCancelled) return;
         enterPasswordRecovery(AUTH_USER_MESSAGES.recoveryInvalid);
+      })
+      .finally(() => {
+        recoveryTokenHashVerifyInFlight = false;
       });
   }, [client, enterPasswordRecovery]);
 

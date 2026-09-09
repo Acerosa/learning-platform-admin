@@ -384,9 +384,10 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(portal, /recoveryTokenHashVerifyCancelled/);
   assert.match(portal, /callback\.type !== "recovery" \|\| !callback\.tokenHash/);
   assert.match(portal, /consumeRecoveryTokenHashFromWindow\(\)/);
+  assert.match(portal, /recoveryTokenHashVerifyInFlight/);
   assert.match(
     portal,
-    /if \(recoveryTokenHashVerifyStarted && !recoveryTokenHashVerifyCancelled\) \{\s*return;/,
+    /if \(recoveryTokenHashVerifyInFlight && !recoveryTokenHashVerifyCancelled\) \{\s*return;/,
   );
   assert.doesNotMatch(
     portal.slice(portal.indexOf("void verifyAdminRecoveryTokenHash"), portal.indexOf("const signIn")),
