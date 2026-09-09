@@ -72,7 +72,13 @@ test("GitHub Pages recovery token_hash stays on the search string", () => {
     shouldEnterPasswordRecovery("INITIAL_SESSION", {
       search: "?token_hash=recovery-hash&type=recovery",
     }),
-    true,
+    false,
+  );
+  assert.equal(
+    shouldBootstrapAdminData("SIGNED_IN", {
+      search: "?token_hash=recovery-hash&type=recovery",
+    }),
+    false,
   );
   assert.equal(
     shouldEnterPasswordRecovery("SIGNED_IN", { search: "?code=magic-link-code" }),

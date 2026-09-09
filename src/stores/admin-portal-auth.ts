@@ -194,8 +194,16 @@ export function readAdminAuthCallbackParams(location?: { search?: string; hash?:
 
 export const ADMIN_PASSWORD_RECOVERY_STORAGE_KEY = "lp-admin-password-recovery";
 
+export function locationHasUnverifiedRecoveryTokenHash(
+  location?: { search?: string; hash?: string },
+): boolean {
+  const callback = readAdminAuthCallbackParams(location);
+  return callback.type === "recovery" && Boolean(callback.tokenHash);
+}
+
 export function locationHasRecoveryMarker(location?: { search?: string; hash?: string }): boolean {
-  return readAdminAuthCallbackParams(location).type === "recovery";
+  const callback = readAdminAuthCallbackParams(location);
+  return callback.type === "recovery" && !callback.tokenHash;
 }
 
 export function shouldEnterPasswordRecovery(
@@ -213,12 +221,14 @@ export function shouldBootstrapAdminData(
   location?: { search?: string; hash?: string },
   pending = false,
 ): boolean {
+  if (locationHasUnverifiedRecoveryTokenHash(location)) return false;
   if (shouldEnterPasswordRecovery(event, location, pending)) return false;
   return event === "INITIAL_SESSION" || event === "SIGNED_IN";
 }
 
 export function stripRecoveryMarkerFromUrl(href: string): string {
   const url = new URL(href);
+  url.searchParams.delete("token_hash");
   if (url.searchParams.get("type") === "recovery") {
     url.searchParams.delete("type");
   }
@@ -226,8 +236,9 @@ export function stripRecoveryMarkerFromUrl(href: string): string {
   if (rawHash) {
     const query = rawHash.includes("?") ? rawHash.slice(rawHash.indexOf("?") + 1) : rawHash;
     const params = new URLSearchParams(query);
-    if (params.get("type") === "recovery") {
+    if (params.has("type") || params.has("token_hash")) {
       params.delete("type");
+      params.delete("token_hash");
       const next = params.toString();
       if (rawHash.includes("?")) {
         const path = rawHash.slice(0, rawHash.indexOf("?"));

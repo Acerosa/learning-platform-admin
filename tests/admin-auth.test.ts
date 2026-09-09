@@ -200,6 +200,10 @@ test("invalid or expired recovery fails safely", async () => {
     "https://acerosa.github.io/learning-platform-admin/",
   );
   assert.equal(
+    stripRecoveryMarkerFromUrl("https://acerosa.github.io/learning-platform-admin/?token_hash=recovery-hash&type=recovery"),
+    "https://acerosa.github.io/learning-platform-admin/",
+  );
+  assert.equal(
     stripRecoveryMarkerFromUrl("https://acerosa.github.io/learning-platform-admin/?type=recovery&code=pkce-code"),
     "https://acerosa.github.io/learning-platform-admin/?code=pkce-code",
   );
@@ -238,6 +242,18 @@ test("GitHub Pages recovery callbacks keep PKCE and token hash on the search str
     shouldEnterPasswordRecovery("INITIAL_SESSION", {
       search: "?token_hash=recovery-hash&type=recovery",
     }),
+    false,
+  );
+  assert.equal(
+    shouldBootstrapAdminData("SIGNED_IN", {
+      search: "?token_hash=recovery-hash&type=recovery",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldEnterPasswordRecovery("INITIAL_SESSION", {
+      search: "?token_hash=recovery-hash&type=recovery",
+    }, true),
     true,
   );
   assert.equal(
@@ -365,7 +381,9 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(portal, /applyAdminAuthCallbackLocation/);
   assert.match(portal, /verifyAdminRecoveryTokenHash/);
   assert.match(portal, /let recoveryTokenHashVerifyStarted = false/);
+  assert.match(portal, /recoveryTokenHashVerifyGeneration/);
   assert.match(portal, /callback\.type !== "recovery" \|\| !callback\.tokenHash/);
+  assert.match(portal, /client\.auth\.getSession\(\)/);
   assert.match(portal, /redirectUrl\(\{ recovery: true \}\)/);
   assert.match(portal, /emailRedirectTo: redirectUrl\(\)/);
   assert.match(portal, /signInWithOtp/);
@@ -376,6 +394,10 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(portal, /status: "recovery"/);
   assert.match(portal, /stripRecoveryMarkerFromUrl/);
   assert.match(portal, /sessionStorage/);
+  assert.match(
+    portal.slice(portal.indexOf("const exitPasswordRecovery"), portal.indexOf("const loadModuleData")),
+    /recoveryTokenHashVerifyGeneration \+= 1/,
+  );
   assert.match(
     portal.slice(portal.indexOf("const exitPasswordRecovery"), portal.indexOf("const loadModuleData")),
     /clearRecoveryMarkerFromLocation/,

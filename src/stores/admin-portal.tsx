@@ -306,6 +306,15 @@ function createDemoModuleCache(): AdminModuleCacheState {
 }
 
 let recoveryTokenHashVerifyStarted = false;
+let recoveryTokenHashVerifyGeneration = 0;
+
+function consumeRecoveryTokenHashFromWindow() {
+  if (typeof window === "undefined") return;
+  const next = consumeAdminRecoveryTokenHashFromUrl(window.location.href);
+  if (next !== window.location.href) {
+    window.history.replaceState(window.history.state, "", next);
+  }
+}
 
 export function AdminPortalProvider({ children }: { children: React.ReactNode }) {
   const config = useMemo(() => getAdminRuntimeConfig(), []);
@@ -376,6 +385,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const exitPasswordRecovery = useCallback(() => {
+    recoveryTokenHashVerifyGeneration += 1;
     writeRecoveryPending(false);
     clearRecoveryMarkerFromLocation();
   }, []);
@@ -638,16 +648,26 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     if (callback.type !== "recovery" || !callback.tokenHash) return;
     if (recoveryTokenHashVerifyStarted) return;
     recoveryTokenHashVerifyStarted = true;
-    writeRecoveryPending(true);
+    const generation = recoveryTokenHashVerifyGeneration;
     void verifyAdminRecoveryTokenHash(client, callback.tokenHash)
-      .then(() => {
-        if (typeof window === "undefined") return;
-        const next = consumeAdminRecoveryTokenHashFromUrl(window.location.href);
-        if (next !== window.location.href) {
-          window.history.replaceState(window.history.state, "", next);
+      .then(async () => {
+        if (generation !== recoveryTokenHashVerifyGeneration) {
+          await client.auth.signOut();
+          return;
         }
+        consumeRecoveryTokenHashFromWindow();
+        writeRecoveryPending(true);
+        enterPasswordRecovery(null);
       })
-      .catch(() => {
+      .catch(async () => {
+        if (generation !== recoveryTokenHashVerifyGeneration) return;
+        const { data } = await client.auth.getSession();
+        if (data.session) {
+          consumeRecoveryTokenHashFromWindow();
+          writeRecoveryPending(true);
+          enterPasswordRecovery(null);
+          return;
+        }
         enterPasswordRecovery(AUTH_USER_MESSAGES.recoveryInvalid);
       });
   }, [client, enterPasswordRecovery]);
