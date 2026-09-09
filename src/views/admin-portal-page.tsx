@@ -4,6 +4,7 @@ import {
   AdminAccessDenied,
   AdminLoadingState,
   AdminPasswordReset,
+  AdminRecoveryContinue,
   AdminSignIn,
   AdminUnavailable,
 } from "../components/admin-access-gate";
@@ -17,6 +18,14 @@ import { ModuleContent } from "./module-content";
 export function AdminPortalFrame({ moduleId }: { moduleId: AdminModuleId }) {
   const portal = useAdminPortal();
 
+  if (portal.status === "recovery-continue") {
+    return (
+      <AdminRecoveryContinue
+        message={portal.authMessage}
+        onContinue={portal.continueRecovery}
+      />
+    );
+  }
   if (portal.status === "authenticating") {
     return (
       <AdminLoadingState

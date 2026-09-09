@@ -15,6 +15,9 @@ here.
 - Auth callback parameters are lifted from a hash route onto the query
   string before the Supabase client starts. Recovery also accepts
   `token_hash` so a scanner GET of `/auth/v1/verify` is not required.
+  A GET of the Admin recovery URL no longer auto-calls `verifyOtp`;
+  Microsoft Safe Links can render the landing page without consuming the
+  one-time token. Only **Continue password reset** verifies the hash.
 
 ### Changed
 

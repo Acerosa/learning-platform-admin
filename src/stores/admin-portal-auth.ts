@@ -13,6 +13,7 @@ export type AdminPortalStatus =
   | "ready"
   | "signed-out"
   | "access-denied"
+  | "recovery-continue"
   | "recovery"
   | "error";
 
@@ -201,6 +202,52 @@ export function locationHasUnverifiedRecoveryTokenHash(
   return callback.type === "recovery" && Boolean(callback.tokenHash);
 }
 
+export function shouldShowRecoveryContinue(
+  location?: { search?: string; hash?: string },
+): boolean {
+  return locationHasUnverifiedRecoveryTokenHash(location);
+}
+
+export function shouldVerifyRecoveryTokenOnLoad(): boolean {
+  return false;
+}
+
+export function canStartRecoveryTokenVerification(started: boolean, inFlight: boolean): boolean {
+  return !started && !inFlight;
+}
+
+export function mapRecoveryVerifyError(error: AuthErrorLike): string {
+  if (!error) return AUTH_USER_MESSAGES.recoveryInvalid;
+  const name = normalisedAuthText(error.name);
+  const message = normalisedAuthText(error.message);
+  if (
+    name.includes("retryable")
+    || name.includes("fetcherror")
+    || message.includes("failed to fetch")
+    || message.includes("network")
+    || message.includes("load failed")
+  ) {
+    return AUTH_USER_MESSAGES.network;
+  }
+  return AUTH_USER_MESSAGES.recoveryInvalid;
+}
+
+export function decideRecoveryContinueAction(input: {
+  started: boolean;
+  inFlight: boolean;
+  type: string | null | undefined;
+  tokenHash: string | null | undefined;
+}): { kind: "verify"; tokenHash: string } | { kind: "skip" } | { kind: "invalid" } {
+  if (!canStartRecoveryTokenVerification(input.started, input.inFlight)) {
+    return { kind: "skip" };
+  }
+  const tokenHash = String(input.tokenHash || "").trim();
+  if (input.type !== "recovery" || !tokenHash) {
+    return { kind: "invalid" };
+  }
+  return { kind: "verify", tokenHash };
+}
+
 export function locationHasRecoveryMarker(location?: { search?: string; hash?: string }): boolean {
   const callback = readAdminAuthCallbackParams(location);
   return callback.type === "recovery" && !callback.tokenHash;
@@ -211,6 +258,7 @@ export function shouldEnterPasswordRecovery(
   location?: { search?: string; hash?: string },
   pending = false,
 ): boolean {
+  if (locationHasUnverifiedRecoveryTokenHash(location)) return false;
   if (event === "PASSWORD_RECOVERY") return true;
   if (event !== "INITIAL_SESSION" && event !== "SIGNED_IN") return false;
   return pending || locationHasRecoveryMarker(location);
@@ -272,7 +320,7 @@ export function adminAuthPhase(
   if (status === "loading") return bootstrapReady ? "authorised" : "authorising";
   if (status === "ready") return "authorised";
   if (status === "access-denied") return "forbidden";
-  if (status === "recovery") return "recovery";
+  if (status === "recovery-continue" || status === "recovery") return "recovery";
   return "error";
 }
 

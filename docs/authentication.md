@@ -35,8 +35,9 @@ state and cannot read protected Admin views.
 - Collect email and password and call `supabase.auth.signInWithPassword`.
 - Restore and refresh the Supabase session.
 - Request a password reset through `supabase.auth.resetPasswordForEmail`.
-- Hand a recovery `token_hash` to `supabase.auth.verifyOtp({ type: "recovery" })`.
-  The browser must not inspect or validate the token itself.
+- After an explicit **Continue password reset** click, hand a recovery
+  `token_hash` to `supabase.auth.verifyOtp({ type: "recovery" })`.
+  The browser must not inspect, validate, or consume the token on page load.
 - Update a password during a recovery session with `supabase.auth.updateUser`.
 - Optionally request a magic link through `supabase.auth.signInWithOtp`.
 - Read `admin_api.current_staff_context` after Auth restores a session.
@@ -59,6 +60,7 @@ state and cannot read protected Admin views.
 | `loading` | authorising | Session present; staff context is being loaded. Protected data is not shown. |
 | `ready` | authorised | Backend returned an active `platform_admin` context. |
 | `access-denied` | forbidden | Authenticated, but not an authorised administrator. |
+| `recovery-continue` | recovery | Recovery `token_hash` is present. Landing screen only; `verifyOtp` has not run. |
 | `recovery` | recovery | Password-recovery session. Choose a new password only. |
 | `error` | error | Live backend or Auth is unavailable. Demo data is not substituted. |
 
@@ -82,16 +84,19 @@ state and cannot read protected Admin views.
    `/auth/v1/verify` link with a GET before the user clicks it. That is why
    a fresh email can still show “invalid or has expired”. Do not weaken
    token lifetime to work around scanners. The hosted recovery email
-   template must send the user to the Admin root with `token_hash` so
-   Supabase `verifyOtp({ type: "recovery" })` runs in the Admin app.
+   template must send the user to the Admin root with `token_hash`.
+   A GET, HEAD, render, or JavaScript execution of that Admin URL must not
+   call `verifyOtp`. The portal shows **Continue password reset** until the
+   administrator clicks it.
 5. Auth callback parameters (`code`, `token_hash`, `type`, errors) are
    lifted off the hash route onto the query string before the Supabase
    client starts. The browser never validates the token itself.
-6. After Supabase establishes the recovery session, the portal shows
-   **Choose a new password**.
+6. Only the **Continue password reset** button calls
+   `verifyOtp({ token_hash, type: "recovery" })`. After that succeeds, the
+   portal shows **Choose a new password**.
 7. `updateUser({ password })` updates the Auth credential.
-8. Recovery state is cleared, then the portal loads
-   `admin_api.current_staff_context` as usual.
+8. Recovery state is cleared, `token_hash` / `type` are removed from the
+   URL, then the portal loads `admin_api.current_staff_context` as usual.
 
 ### Hosted recovery email template
 

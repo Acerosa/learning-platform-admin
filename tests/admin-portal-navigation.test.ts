@@ -7,6 +7,8 @@ import {
   shouldClearAdminData,
   shouldEnterPasswordRecovery,
   shouldPreservePortalDataOnRefresh,
+  shouldShowRecoveryContinue,
+  shouldVerifyRecoveryTokenOnLoad,
 } from "../src/stores/admin-portal-auth.ts";
 
 const root = new URL("../", import.meta.url);
@@ -84,6 +86,37 @@ test("GitHub Pages recovery token_hash stays on the search string", () => {
     shouldEnterPasswordRecovery("SIGNED_IN", { search: "?code=magic-link-code" }),
     false,
   );
+  assert.equal(shouldVerifyRecoveryTokenOnLoad(), false);
+  assert.equal(
+    shouldShowRecoveryContinue({ search: "?token_hash=recovery-hash&type=recovery" }),
+    true,
+  );
+  assert.equal(
+    shouldShowRecoveryContinue({ search: "?token_hash=recovery-hash&type=recovery" }),
+    true,
+  );
+});
+
+test("recovery landing does not verify on GitHub Pages render, HEAD, or reload", async () => {
+  const [portal, pagesMain, accessGate, portalPage] = await Promise.all([
+    readFile(new URL("src/stores/admin-portal.tsx", root), "utf8"),
+    readFile(new URL("github-pages/main.tsx", root), "utf8"),
+    readFile(new URL("src/components/admin-access-gate.tsx", root), "utf8"),
+    readFile(new URL("src/views/admin-portal-page.tsx", root), "utf8"),
+  ]);
+  assert.match(pagesMain, /applyAdminAuthCallbackLocation/);
+  assert.doesNotMatch(pagesMain, /verifyOtp|verifyAdminRecoveryTokenHash|token_hash/);
+  assert.match(accessGate, /type="button"/);
+  assert.match(accessGate, /Continue password reset/);
+  assert.doesNotMatch(accessGate, /<a[^>]+Continue password reset/);
+  assert.match(portalPage, /status === "recovery-continue"/);
+  assert.doesNotMatch(portal, /prefetch|preload/);
+  const authEffect = portal.slice(
+    portal.indexOf("useEffect(() => {"),
+    portal.indexOf("const signIn"),
+  );
+  assert.doesNotMatch(authEffect, /verifyAdminRecoveryTokenHash|verifyOtp/);
+  assert.match(portal, /locationHasUnverifiedRecoveryTokenHash/);
 });
 
 test("auth bootstrap uses onAuthStateChange without a separate initial refresh", async () => {

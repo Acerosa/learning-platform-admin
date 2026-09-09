@@ -27,6 +27,7 @@ Backend 0.2.0 currently defines `platform_admin`, `curriculum_admin`, `operation
 - Auth session without an active teacher mapping: access denied.
 - Active teacher without `platform_admin`: access denied.
 - Active teacher with active `platform_admin`: shell and live reads enabled.
+- Password recovery landing: `token_hash` remains unused until **Continue password reset**.
 - Password recovery session: choose a new password; Admin data is not shown.
 - Live read/configuration failure: unavailable state with no demo substitution.
 

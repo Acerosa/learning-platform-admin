@@ -136,6 +136,41 @@ export function AdminSignIn({
   );
 }
 
+export function AdminRecoveryContinue({
+  message,
+  onContinue,
+}: {
+  message: string | null;
+  onContinue: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <main className="access-page" id="admin-main">
+      <section className="access-card" aria-labelledby="staff-recovery-continue-title">
+        <span className="access-card__mark" aria-hidden="true">LP</span>
+        <p className="eyebrow">Learning Platform Administration</p>
+        <h1 id="staff-recovery-continue-title">Reset your Admin Portal password</h1>
+        <p>This link is ready to continue.</p>
+        <p>Only continue if you requested this password reset.</p>
+        {message ? <div className="access-message" role="alert">{message}</div> : null}
+        <button
+          className="button button--primary"
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            if (busy) return;
+            setBusy(true);
+            void onContinue().finally(() => setBusy(false));
+          }}
+        >
+          Continue password reset
+        </button>
+      </section>
+    </main>
+  );
+}
+
 export function AdminPasswordReset({
   message,
   onUpdatePassword,
