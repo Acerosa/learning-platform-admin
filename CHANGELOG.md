@@ -9,8 +9,9 @@ here.
 
 - Password-reset callbacks now include `?type=recovery` so a PKCE `?code=`
   return cannot bootstrap Admin access before the recovery form is shown.
-  The marker is removed once recovery is recognised, and in-flight session
-  bootstrap is cancelled if recovery or sign-out starts.
+  The marker remains until the password is updated or the user cancels,
+  and in-flight session bootstrap is cancelled if recovery or sign-out
+  starts.
 
 ### Changed
 

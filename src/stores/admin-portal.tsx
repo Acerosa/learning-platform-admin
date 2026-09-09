@@ -366,7 +366,6 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       message,
       refreshing: false,
     });
-    clearRecoveryMarkerFromLocation();
   }, []);
 
   const exitPasswordRecovery = useCallback(() => {

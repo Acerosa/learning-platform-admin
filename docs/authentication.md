@@ -70,9 +70,9 @@ state and cannot read protected Admin views.
    GitHub Pages (or `/?type=recovery` on local Next). Hash routes are not
    placed in the redirect URL, so the PKCE `?code=` query remains valid.
    The `type=recovery` marker prevents a recovery session from loading
-   Admin data before the password form is shown. Once recovery is
-   recognised, the marker is removed from the URL so a later sign-in or
-   reload can open the Admin shell.
+   Admin data before the password form is shown. The marker stays in the
+   URL until the password is updated or the user cancels, then it is
+   removed so a later sign-in or reload can open the Admin shell.
 3. The user opens the email in the same browser.
 4. Supabase Auth establishes a recovery session.
 5. The portal shows **Choose a new password**.

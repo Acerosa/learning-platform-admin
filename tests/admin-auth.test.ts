@@ -268,6 +268,14 @@ test("admin source never treats getSession, query params or localStorage as admi
   assert.match(portal, /status: "recovery"/);
   assert.match(portal, /stripRecoveryMarkerFromUrl/);
   assert.match(portal, /sessionStorage/);
+  assert.match(
+    portal.slice(portal.indexOf("const exitPasswordRecovery"), portal.indexOf("const loadModuleData")),
+    /clearRecoveryMarkerFromLocation/,
+  );
+  assert.doesNotMatch(
+    portal.slice(portal.indexOf("const enterPasswordRecovery"), portal.indexOf("const exitPasswordRecovery")),
+    /clearRecoveryMarkerFromLocation/,
+  );
   assert.match(service, /current_staff_context/);
   assert.doesNotMatch(`${portal}\n${session}\n${accessGate}\n${service}`, /service_role|sb_secret_/i);
   assert.doesNotMatch(portal, /console\.log\((?:.*password|.*session|.*jwt)/i);
