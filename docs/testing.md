@@ -26,8 +26,12 @@ npm run test:unit
   learner/non-admin denial, platform-admin access, all MVP view mappings,
   admin-only schema usage, PII-safe selections, hub registration RPC mapping,
   curriculum publication RPC mapping and failed-live-read behaviour.
+- **Admin authentication:** password sign-in, invalid credentials, logout
+  clearing, password reset redirect URLs, recovery failure, GitHub Pages
+  callback paths and frontend-only role/localStorage denial.
 - **Database integration:** backend pgTAP covers learner, ordinary-teacher and
-  platform-admin access to staff context and aggregates.
+  platform-admin access to staff context and aggregates, plus controlled
+  first-admin SQL idempotency and denial of public staff elevation.
 
 ## Deliberate limits
 

@@ -48,16 +48,17 @@ import {
   AdminPublicationError,
   AdminReadError,
   AdminReviewError,
-  claimInitialPlatformAdmin,
   createSupabaseAdminClient,
   createSupabaseAdminReadService,
   publishCurriculum as publishCurriculumRpc,
+  requestAdminPasswordReset,
+  signInAdminWithPassword,
+  updateAdminPassword,
   setSessionVisibility as setSessionVisibilityRpc,
   saveCurriculumDraft as saveCurriculumDraftRpc,
   loadCurrentCurriculumPackage as loadCurrentCurriculumPackageRpc,
   getCurriculumDraft as getCurriculumDraftRpc,
   discardCurriculumDraft as discardCurriculumDraftRpc,
-  registerAdminAccount,
   registerHub as registerHubRpc,
   reviewResponse as reviewResponseRpc,
   updateHub as updateHubRpc,
@@ -93,17 +94,21 @@ import {
   type AdminSessionSnapshot,
 } from "./admin-session";
 import {
+  AUTH_USER_MESSAGES,
+  adminAuthPhase,
+  mapPasswordUpdateError,
+  mapSignInError,
+  recoveryErrorFromLocation,
+  resolveAdminAuthRedirectUrl,
   shouldBootstrapAdminData,
   shouldClearAdminData,
+  shouldEnterPasswordRecovery,
   shouldPreservePortalDataOnRefresh,
+  type AdminAuthPhase,
+  type AdminPortalStatus,
 } from "./admin-portal-auth";
 
-export type AdminPortalStatus =
-  | "loading"
-  | "ready"
-  | "signed-out"
-  | "access-denied"
-  | "error";
+export type { AdminAuthPhase, AdminPortalStatus };
 
 export interface AdminDataSourceStatus {
   mode: "demo" | "live";
@@ -123,12 +128,13 @@ interface AdminPortalContextValue {
   refreshing: boolean;
   dataSource: AdminDataSourceStatus;
   authMessage: string | null;
+  authPhase: AdminAuthPhase;
   ensureModuleData(key: AdminModuleDataKey): Promise<void>;
   refreshModuleData(key: AdminModuleDataKey): Promise<void>;
   signIn(email: string, password: string): Promise<void>;
-  signUp(email: string, password: string): Promise<void>;
   requestMagicLink(email: string): Promise<void>;
-  claimInitialAdmin(bootstrapToken: string): Promise<void>;
+  requestPasswordReset(email: string): Promise<void>;
+  updatePassword(password: string): Promise<void>;
   registerHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   updateHub(request: HubRegistrationRequest): Promise<HubRegistrationResult>;
   publishCurriculum(record: AuthoringDraft): Promise<PlatformPublicationResult>;
@@ -174,11 +180,19 @@ function unavailableSession(): AdminSessionSnapshot {
 
 function redirectUrl() {
   if (typeof window === "undefined") return undefined;
-  const usesHashRouting = document.querySelector(
+  const usesHashRouting = Boolean(document.querySelector(
     'meta[name="learning-platform-admin-router"][content="hash"]',
-  );
-  const path = usesHashRouting ? window.location.pathname : "/";
-  return new URL(path, window.location.origin).toString();
+  ));
+  return resolveAdminAuthRedirectUrl({
+    origin: window.location.origin,
+    pathname: window.location.pathname,
+    usesHashRouting,
+  });
+}
+
+function currentAuthLocation() {
+  if (typeof window === "undefined") return undefined;
+  return { search: window.location.search, hash: window.location.hash };
 }
 
 function resultFromDemoHub(registered: {
@@ -426,7 +440,12 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     });
 
     if (!session) {
-      setState(clearedPortalState());
+      setState(clearedPortalState(
+        recoveryErrorFromLocation(
+          currentAuthLocation()?.search,
+          currentAuthLocation()?.hash,
+        ),
+      ));
       return;
     }
 
@@ -443,8 +462,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
           bootstrapReady: false,
           moduleCache: createEmptyModuleCache(),
           demoSnapshot: null,
-          message:
-            "This authenticated account does not have an active platform administrator role.",
+          message: AUTH_USER_MESSAGES.forbidden,
           refreshing: false,
         });
         return;
@@ -496,7 +514,23 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         bootstrapReady: false,
         moduleCache: createEmptyModuleCache(),
         demoSnapshot: null,
-        message: "The authentication service is currently unavailable.",
+        message: mapSignInError(authError),
+        refreshing: false,
+      });
+      return;
+    }
+    if (shouldEnterPasswordRecovery("INITIAL_SESSION", currentAuthLocation())) {
+      setState({
+        status: "recovery",
+        session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
+        bootstrap: null,
+        bootstrapReady: false,
+        moduleCache: createEmptyModuleCache(),
+        demoSnapshot: null,
+        message: recoveryErrorFromLocation(
+          currentAuthLocation()?.search,
+          currentAuthLocation()?.hash,
+        ),
         refreshing: false,
       });
       return;
@@ -510,13 +544,29 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
+      const location = currentAuthLocation();
       if (shouldClearAdminData(event)) {
         resetAdminModulePerformance();
         moduleLoadPromises.current.clear();
         setState(clearedPortalState());
         return;
       }
-      if (shouldBootstrapAdminData(event)) {
+      if (shouldEnterPasswordRecovery(event, location)) {
+        resetAdminModulePerformance();
+        moduleLoadPromises.current.clear();
+        setState({
+          status: "recovery",
+          session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
+          bootstrap: null,
+          bootstrapReady: false,
+          moduleCache: createEmptyModuleCache(),
+          demoSnapshot: null,
+          message: recoveryErrorFromLocation(location?.search, location?.hash),
+          refreshing: false,
+        });
+        return;
+      }
+      if (shouldBootstrapAdminData(event, location)) {
         void bootstrapSession(session);
       }
     });
@@ -529,38 +579,17 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!client) return;
-    setState((current) => ({ ...current, status: "loading", message: null }));
-    const { error } = await client.auth.signInWithPassword({ email, password });
-    if (error) {
-      setState(clearedPortalState("Sign-in failed. Check the account details and try again."));
-    }
-  }, [client]);
-
-  const signUp = useCallback(async (email: string, password: string) => {
-    if (!client) return;
-    setState((current) => ({ ...current, status: "loading", message: null }));
+    setState((current) => ({ ...current, status: "authenticating", message: null }));
     try {
-      const result = await registerAdminAccount(
-        client,
-        email,
-        password,
-        redirectUrl() ?? window.location.origin,
-      );
-      if (result.confirmationRequired) {
-        setState(clearedPortalState(
-          "Check your email to confirm the account, then sign in. Account creation does not grant administration access by itself.",
-        ));
-      }
-    } catch {
-      setState(clearedPortalState(
-        "The account could not be created. Check the details and try again, or sign in if the account already exists.",
-      ));
+      await signInAdminWithPassword(client, email, password);
+    } catch (error) {
+      setState(clearedPortalState(mapSignInError(error as { message?: string; code?: string; name?: string; status?: number })));
     }
   }, [client]);
 
   const requestMagicLink = useCallback(async (email: string) => {
     if (!client) return;
-    setState((current) => ({ ...current, status: "loading", message: null }));
+    setState((current) => ({ ...current, status: "authenticating", message: null }));
     const { error } = await client.auth.signInWithOtp({
       email,
       options: {
@@ -569,38 +598,48 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
       },
     });
     setState(clearedPortalState(
-      error
-        ? "A sign-in link could not be sent. Check the staff email and try again."
-        : "Check the staff inbox for a time-limited sign-in link.",
+      error ? AUTH_USER_MESSAGES.magicLinkFailed : AUTH_USER_MESSAGES.magicLinkSent,
     ));
   }, [client]);
 
-  const claimInitialAdmin = useCallback(async (bootstrapToken: string) => {
+  const requestPasswordReset = useCallback(async (email: string) => {
     if (!client) return;
-    setState((current) => ({
-      ...current,
-      status: "loading",
-      bootstrap: null,
-      bootstrapReady: false,
-      moduleCache: createEmptyModuleCache(),
-      message: null,
-      refreshing: false,
-    }));
+    setState((current) => ({ ...current, status: "authenticating", message: null }));
     try {
-      await claimInitialPlatformAdmin(client, bootstrapToken);
+      await requestAdminPasswordReset(
+        client,
+        email,
+        redirectUrl() ?? window.location.origin,
+      );
+      setState(clearedPortalState(AUTH_USER_MESSAGES.resetSent));
+    } catch (error) {
+      const mapped = mapSignInError(error as { message?: string; code?: string; name?: string; status?: number });
+      setState(clearedPortalState(
+        mapped === AUTH_USER_MESSAGES.network
+          ? AUTH_USER_MESSAGES.network
+          : AUTH_USER_MESSAGES.resetSent,
+      ));
+    }
+  }, [client]);
+
+  const updatePassword = useCallback(async (password: string) => {
+    if (!client) return;
+    setState((current) => ({ ...current, status: "authenticating", message: null }));
+    try {
+      await updateAdminPassword(client, password);
       const { data: authData } = await client.auth.getSession();
       await bootstrapSession(authData.session);
-    } catch {
-      setState((current) => ({
-        ...current,
-        status: "access-denied",
+    } catch (error) {
+      setState({
+        status: "recovery",
+        session: { ...SIGNED_OUT_ADMIN_SESSION, state: "loading" },
         bootstrap: null,
         bootstrapReady: false,
         moduleCache: createEmptyModuleCache(),
-        message:
-          "Initial administrator setup could not be completed. Check the one-time setup code or contact the platform owner.",
+        demoSnapshot: null,
+        message: mapPasswordUpdateError(error as { message?: string; code?: string; name?: string; status?: number }),
         refreshing: false,
-      }));
+      });
     }
   }, [bootstrapSession, client]);
 
@@ -823,12 +862,14 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
         message: "Authenticated, RLS-protected reads from the admin_api schema.",
       };
     }
-    if (state.status === "loading") {
+    if (state.status === "loading" || state.status === "authenticating") {
       return {
         mode: "live",
         state: "loading",
-        title: "Connecting to live backend",
-        message: "Restoring the staff session and loading authorised admin_api data.",
+        title: state.status === "authenticating" ? "Signing in" : "Connecting to live backend",
+        message: state.status === "authenticating"
+          ? "Checking your email and password with Supabase Auth."
+          : "Restoring the staff session and loading authorised admin_api data.",
       };
     }
     return {
@@ -857,12 +898,13 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     refreshing: state.refreshing,
     dataSource,
     authMessage: state.message,
+    authPhase: adminAuthPhase(state.status, state.bootstrapReady),
     ensureModuleData,
     refreshModuleData,
     signIn,
-    signUp,
     requestMagicLink,
-    claimInitialAdmin,
+    requestPasswordReset,
+    updatePassword,
     registerHub,
     updateHub,
     publishCurriculum,
@@ -875,7 +917,7 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
     callRpc,
     signOut,
     retry,
-  }), [callRpc, claimInitialAdmin, config, data, dataSource, discardRemoteCurriculumDraft, ensureModuleData, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refreshModuleData, registerHub, requestMagicLink, retry, reviewResponse, saveCurriculumDraft, setSessionVisibility, signIn, signOut, signUp, state, updateHub]);
+  }), [callRpc, config, data, dataSource, discardRemoteCurriculumDraft, ensureModuleData, getCurriculumDraft, loadCurrentCurriculumPackage, publishCurriculum, refreshModuleData, registerHub, requestMagicLink, requestPasswordReset, retry, reviewResponse, saveCurriculumDraft, setSessionVisibility, signIn, signOut, state, updateHub, updatePassword]);
 
   return (
     <AdminPortalContext.Provider value={value}>

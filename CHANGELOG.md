@@ -7,6 +7,11 @@ here.
 
 ### Changed
 
+- Admin Portal live sign-in is email and password first. Magic links remain a
+  secondary option. Forgot-password uses Supabase recovery and the GitHub
+  Pages callback `https://acerosa.github.io/learning-platform-admin/`.
+  Administrator access is still decided only by
+  `admin_api.current_staff_context` after `auth.uid()` resolution.
 - Curriculum publication consumes `@learning-platform/content` 0.1.3, which
   treats `drag-drop` as a canonical interactive block type. The Admin
   `publicationGate` still delegates to `validatePackage`; there is no

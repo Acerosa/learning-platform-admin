@@ -14,6 +14,7 @@ test("auth bootstrap runs once for INITIAL_SESSION and SIGNED_IN only", () => {
   assert.equal(shouldBootstrapAdminData("SIGNED_IN"), true);
   assert.equal(shouldBootstrapAdminData("TOKEN_REFRESHED"), false);
   assert.equal(shouldBootstrapAdminData("USER_UPDATED"), false);
+  assert.equal(shouldBootstrapAdminData("PASSWORD_RECOVERY"), false);
   assert.equal(shouldClearAdminData("SIGNED_OUT"), true);
   assert.equal(shouldClearAdminData("SIGNED_IN"), false);
 });

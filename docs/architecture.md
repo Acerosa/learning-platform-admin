@@ -43,12 +43,16 @@ The learner-safe `api` schema and staff-only `admin_api` schema remain separate.
 ## Authentication and authority
 
 Live mode creates one browser Supabase client with the public publishable (or
-legacy anon) key. Supabase Auth owns session persistence and refresh. After a
-session is restored, the existing session store reads
+legacy anon) key. Supabase Auth owns credentials through
+`signInWithPassword`, optional magic links, and password recovery.
+After a session is restored, the existing session store reads
 `admin_api.current_staff_context`; the shell mounts only for an active staff
 profile with an active `platform_admin` role. Routes, browser storage and
 frontend flags do not grant authority, and every data read remains protected by
 backend RLS.
+
+See [Authentication](authentication.md) for the sign-in, password-reset and
+first-administrator procedures.
 
 The shared core theme service remains in use. The core learner platform facade
 is intentionally not used for staff authentication because it is constrained

@@ -97,10 +97,14 @@ checks the active backend role, and loads all MVP views through the extended
 `AdminReadService`. Errors become safe access-denied or unavailable states;
 raw backend errors are not rendered.
 
-For local demonstration, reset/start the sibling backend, use its reported URL
-and publishable key, then request an email sign-in link for
-`platform.admin@local.invalid` and open it in local Mailpit. Hosted Auth must
-separately allow the deployed portal callback URL before live deployment.
+Sign in with email and password. After resetting the sibling backend, use the
+synthetic local staff account `platform.admin@local.invalid` (password is
+local-only; it is not committed here). Magic-link sign-in remains available
+for local Mailpit testing. Hosted Auth must allow
+`https://acerosa.github.io/learning-platform-admin/` as Site URL and a
+redirect URL, plus local development origins if used.
+
+See [Authentication](authentication.md).
 
 ## Pending backend dependencies
 

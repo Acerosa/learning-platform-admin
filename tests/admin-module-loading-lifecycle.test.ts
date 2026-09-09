@@ -204,6 +204,7 @@ test("Test G: auth bootstrap events follow intended policy", () => {
   assert.equal(shouldBootstrapAdminData("INITIAL_SESSION"), true);
   assert.equal(shouldBootstrapAdminData("SIGNED_IN"), true);
   assert.equal(shouldBootstrapAdminData("TOKEN_REFRESHED"), false);
+  assert.equal(shouldBootstrapAdminData("PASSWORD_RECOVERY"), false);
   assert.equal(shouldClearAdminData("SIGNED_OUT"), true);
   assert.equal(shouldClearAdminData("TOKEN_REFRESHED"), false);
   assert.equal(

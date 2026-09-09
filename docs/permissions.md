@@ -23,11 +23,18 @@ Backend 0.2.0 currently defines `platform_admin`, `curriculum_admin`, `operation
 
 ## Portal access states
 
-- No Auth session: staff sign-in surface.
+- No Auth session: email and password sign-in, with forgot-password and an optional magic link.
 - Auth session without an active teacher mapping: access denied.
 - Active teacher without `platform_admin`: access denied.
 - Active teacher with active `platform_admin`: shell and live reads enabled.
+- Password recovery session: choose a new password; Admin data is not shown.
 - Live read/configuration failure: unavailable state with no demo substitution.
+
+The first administrator is established by creating a Supabase Auth user and
+inserting `learning.teachers` plus `platform.staff_roles` (`platform_admin`)
+with a privileged SQL session. See [Authentication](authentication.md). The
+People → Staff “Invite staff” control remains pending until an
+administrator-only mutation exists.
 
 ## UI policy
 
