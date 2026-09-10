@@ -93,6 +93,8 @@ export const ADMIN_API_RPCS = Object.freeze({
   assignLateGroupingParticipant: "admin_api.assign_late_grouping_participant",
   rebalanceGroupingSession: "admin_api.rebalance_grouping_session",
   closeGroupingSession: "admin_api.close_grouping_session",
+  setGroupingSessionSpecialistRole: "admin_api.set_grouping_session_specialist_role",
+  setGroupingParticipantRole: "admin_api.set_grouping_participant_role",
 });
 
 export type HubLifecycle =
