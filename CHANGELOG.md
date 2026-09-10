@@ -7,6 +7,11 @@ here.
 
 ### Added
 
+- Group Generator role configuration: choose a role profile preset (or Custom)
+  and specialist role title when creating a session. Generated groups show
+  automatic roles; staff can override an individual learner’s role without
+  moving them. Requires backend Classroom Group roles migration.
+
 - Group Generator primary area (`/group-generator`) for temporary classroom
   sessions: create join codes, poll participants, generate/edit/publish
   balanced groups, and handle late arrivals via `admin_api` RPCs.
