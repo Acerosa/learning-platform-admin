@@ -8,6 +8,7 @@ const primaryRoutes = [
   ["/people", "People"],
   ["/assessment", "Assignments & Results"],
   ["/analytics", "Analytics"],
+  ["/group-generator", "Group Generator"],
   ["/system", "System"],
 ];
 
@@ -49,9 +50,9 @@ for (const [route, heading] of legacyRoutes) {
   });
 }
 
-test("primary navigation exposes only six destinations", async () => {
+test("primary navigation exposes only seven destinations", async () => {
   const { html } = await renderText("/");
-  for (const label of ["Dashboard", "Hubs &amp; Curriculum", "People", "Assignments &amp; Results", "Analytics", "System"]) {
+  for (const label of ["Dashboard", "Hubs &amp; Curriculum", "People", "Assignments &amp; Results", "Analytics", "Group Generator", "System"]) {
     assert.match(html, new RegExp(label));
   }
   for (const hidden of ["Content Library", "Composition", "Enrolments", "Monitoring", "Certification", "Configuration"]) {

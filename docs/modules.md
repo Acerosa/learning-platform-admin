@@ -1,6 +1,6 @@
 # Modules
 
-Admin Portal Simplification v1 organises the UI into **six primary areas**. Legacy module routes remain reachable for bookmarks and integrations; they map into these areas or retain hidden authoring routes.
+Admin Portal Simplification v1 organises the UI into **seven primary areas**. Legacy module routes remain reachable for bookmarks and integrations; they map into these areas or retain hidden authoring routes.
 
 Primary navigation (from `src/router/modules.ts`):
 
@@ -11,6 +11,7 @@ Primary navigation (from `src/router/modules.ts`):
 | People | `/people` | Learners, groups, staff (platform authority) and enrolment relationships |
 | Assignments & Results | `/assessment` | Assignments and the results markbook (attempts drill down from Results) |
 | Analytics | `/analytics` | Completion, performance and attention signals. Includes **Readiness Diagnostic** (`?pane=readiness-diagnostic`): diagnostic completion and Not-sure indicators, not academic scores. See [Readiness Diagnostic](readiness-diagnostic.md). |
+| Group Generator | `/group-generator` | Temporary classroom grouping sessions: join codes, balanced groups, publish to the student app |
 | System | `/system` | Status, audit, access and advanced configuration |
 
 ## Legacy routes (hidden from primary navigation)
