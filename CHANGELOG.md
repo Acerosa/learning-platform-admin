@@ -5,6 +5,15 @@ here.
 
 ## [Unreleased]
 
+### Added
+
+- Group Generator primary area (`/group-generator`) for temporary classroom
+  sessions: create join codes, poll participants, generate/edit/publish
+  balanced groups, and handle late arrivals via `admin_api` RPCs.
+  Requires live platform connection (`platform_admin`). Student join links
+  point at `classroom-group-generator` (configurable via
+  `NEXT_PUBLIC_GROUP_GENERATOR_URL`).
+
 ### Fixed
 
 - Password-reset callbacks now include `?type=recovery` so a PKCE `?code=`

@@ -5,9 +5,9 @@ import { renderText } from "./helpers/render.mjs";
 
 const root = new URL("../", import.meta.url);
 
-test("sidebar navigation exposes six primary areas without hidden modules", async () => {
+test("sidebar navigation exposes seven primary areas without hidden modules", async () => {
   const { html } = await renderText("/");
-  for (const label of ["Dashboard", "Hubs &amp; Curriculum", "People", "Assignments &amp; Results", "Analytics", "System"]) {
+  for (const label of ["Dashboard", "Hubs &amp; Curriculum", "People", "Assignments &amp; Results", "Analytics", "Group Generator", "System"]) {
     assert.match(html, new RegExp(label));
   }
   assert.doesNotMatch(html, />Content Library<\/span>/);

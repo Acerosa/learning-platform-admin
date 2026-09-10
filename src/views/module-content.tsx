@@ -32,6 +32,7 @@ import { ContentLibraryPage } from "./content-library";
 import { CompositionPage } from "./composition";
 import { PeopleArea } from "./people-area";
 import { SystemArea } from "./system-area";
+import { GroupGeneratorPage } from "./group-generator";
 
 function toneForStatus(status: string): BadgeTone {
   if (["active", "healthy", "certified", "open", "production", "completed", "succeeded", "published", "pass"].includes(status)) return "positive";
@@ -396,6 +397,9 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
       break;
     case "analytics":
       content = <AnalyticsPage data={data} />;
+      break;
+    case "group-generator":
+      content = <GroupGeneratorPage />;
       break;
     case "system":
     case "monitoring":

@@ -24,15 +24,16 @@ test("package is the 0.2.0 administration repository and consumes platform core"
   assert.equal(pkg.dependencies["drizzle-orm"], undefined);
 });
 
-test("module registry has six primary areas and legacy route aliases", async () => {
+test("module registry has seven primary areas and legacy route aliases", async () => {
   const source = await readFile(new URL("src/router/modules.ts", root), "utf8");
   assert.match(source, /PRIMARY_NAVIGATION_IDS/);
   assert.match(source, /LEGACY_MODULE_IDS/);
   const primary = [...source.matchAll(/PRIMARY_NAVIGATION_IDS = \[([\s\S]*?)\] as const/gm)][0][1];
-  assert.equal([...primary.matchAll(/"([a-z-]+)"/g)].length, 6);
+  assert.equal([...primary.matchAll(/"([a-z-]+)"/g)].length, 7);
   const all = [...source.matchAll(/^\s+"([a-z-]+)",$/gm)].map((match) => match[1]);
-  assert.equal(all.length, 22);
-  assert.equal(new Set(all).size, 22);
+  assert.equal(all.length, 23);
+  assert.equal(new Set(all).size, 23);
+  assert.match(source, /"group-generator"/);
 });
 
 test("admin API names match the documented backend surface", async () => {

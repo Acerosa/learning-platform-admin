@@ -45,6 +45,7 @@ export const ADMIN_API_VIEWS = Object.freeze({
   diagnosticSessions: "admin_api.diagnostic_sessions",
   diagnosticResponses: "admin_api.diagnostic_responses",
   diagnosticSummary: "admin_api.diagnostic_summary",
+  groupingSessions: "admin_api.grouping_sessions",
 });
 
 export const ADMIN_API_RPCS = Object.freeze({
@@ -82,6 +83,16 @@ export const ADMIN_API_RPCS = Object.freeze({
   listCurriculumRecipes: "admin_api.list_curriculum_recipes",
   saveCompositionDraftState: "admin_api.save_composition_draft_state",
   getCompositionDraftState: "admin_api.get_composition_draft_state",
+  createGroupingSession: "admin_api.create_grouping_session",
+  getGroupingSession: "admin_api.get_grouping_session",
+  removeGroupingParticipant: "admin_api.remove_grouping_participant",
+  generateGroupingTeams: "admin_api.generate_grouping_teams",
+  moveGroupingParticipant: "admin_api.move_grouping_participant",
+  renameGroupingTeam: "admin_api.rename_grouping_team",
+  publishGroupingSession: "admin_api.publish_grouping_session",
+  assignLateGroupingParticipant: "admin_api.assign_late_grouping_participant",
+  rebalanceGroupingSession: "admin_api.rebalance_grouping_session",
+  closeGroupingSession: "admin_api.close_grouping_session",
 });
 
 export type HubLifecycle =

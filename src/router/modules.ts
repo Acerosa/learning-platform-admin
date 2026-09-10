@@ -4,6 +4,7 @@ export const PRIMARY_NAVIGATION_IDS = [
   "people",
   "assessment",
   "analytics",
+  "group-generator",
   "system",
 ] as const;
 
@@ -43,6 +44,7 @@ export type AdminNavigationGroup =
   | "People"
   | "Assignments & Results"
   | "Analytics"
+  | "Classroom tools"
   | "System";
 
 export interface AdminModuleDefinition {
@@ -109,6 +111,16 @@ export const PRIMARY_NAVIGATION: readonly AdminModuleDefinition[] = [
     eyebrow: "Assessment and insight",
     description: "Review completion, performance, and learners needing attention.",
     capability: "analytics.read",
+    dataState: "available",
+  },
+  {
+    id: "group-generator",
+    label: "Group Generator",
+    shortLabel: "GG",
+    group: "Classroom tools",
+    eyebrow: "Classroom grouping",
+    description: "Create a temporary session, collect names, generate balanced groups and publish them to students.",
+    capability: "grouping.manage",
     dataState: "available",
   },
   {
@@ -329,6 +341,7 @@ export const ADMIN_NAVIGATION_GROUPS: readonly AdminNavigationGroup[] = [
   "People",
   "Assignments & Results",
   "Analytics",
+  "Classroom tools",
   "System",
 ];
 
