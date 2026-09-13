@@ -11,10 +11,10 @@ Live URL: https://acerosa.github.io/learning-platform-admin/
 The matching learner hub is the Level 3 IT Year 1 Readiness Diagnostic. Trial
 instructions for that hub live in the hub repository `docs/staff-trial.md`.
 
-Results is a hub/source shell. Induction / Readiness is the first connected
-diagnostic adapter. Assignment markbook remains available from the same
-Results selector. L2E, L3E, Unit 3, T Level and Unit 14 are listed as not
-available yet.
+Results is a hub/source shell. Induction / Readiness is the diagnostic adapter.
+Assignment markbook remains available from the same Results selector. Unit 3,
+T Level, L2E, and Unit 14 use the shared hub-learning report. L3E stays listed
+as not available yet because no L3E hub is registered.
 
 ## What to expect
 

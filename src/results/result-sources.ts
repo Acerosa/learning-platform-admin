@@ -7,7 +7,7 @@ export type ResultSourceId =
   | "tlevel"
   | "unit-14";
 
-export type ResultSourceKind = "diagnostic" | "assignment-markbook" | "unavailable";
+export type ResultSourceKind = "diagnostic" | "assignment-markbook" | "hub-learning" | "unavailable";
 
 export interface ResultSourceDefinition {
   id: ResultSourceId;
@@ -42,37 +42,41 @@ export const RESULT_SOURCES: readonly ResultSourceDefinition[] = Object.freeze([
   {
     id: "l2e",
     label: "L2E",
-    kind: "unavailable",
-    description: "L2E results will use this Results shell when that hub is connected.",
-    available: false,
+    kind: "hub-learning",
+    description: "Exploring Emerging Digital Technologies current class work.",
+    available: true,
+    hubCode: "l2e-exploring-emerging-digital-technologies",
   },
   {
     id: "l3e",
     label: "L3E",
     kind: "unavailable",
-    description: "L3E results will use this Results shell when that hub is connected.",
+    description: "No L3E hub is registered, so this source stays unavailable.",
     available: false,
   },
   {
     id: "unit-3-cyber-security",
     label: "Unit 3 Cyber Security",
-    kind: "unavailable",
-    description: "Unit 3 results will use this Results shell when that hub is connected.",
-    available: false,
+    kind: "hub-learning",
+    description: "Unit 3 Cyber Security current class work.",
+    available: true,
+    hubCode: "unit-3-cyber-security",
   },
   {
     id: "tlevel",
     label: "T Level",
-    kind: "unavailable",
-    description: "T Level results will use this Results shell when that hub is connected.",
-    available: false,
+    kind: "hub-learning",
+    description: "T Level Digital Software Development current class work.",
+    available: true,
+    hubCode: "tlevel-software-development",
   },
   {
     id: "unit-14",
     label: "Unit 14",
-    kind: "unavailable",
-    description: "Unit 14 results will use this Results shell when that hub is connected.",
-    available: false,
+    kind: "hub-learning",
+    description: "Unit 14 Software Engineering for Business current class work. Production currently has practice and saved progress rather than official attempts.",
+    available: true,
+    hubCode: "unit-14-software-engineering-for-business",
   },
 ]);
 
