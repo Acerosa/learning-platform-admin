@@ -128,6 +128,23 @@ export function shouldStartVisibilityHydration(
   return completedKey !== requestedKey && inFlightKey !== requestedKey;
 }
 
+/**
+ * When Weeks still needs a published workspace but this catalogue key was already
+ * marked hydrated, clear the completed key so auto-hydrate can run again.
+ * Happens when Resume/hub switches displace `draft` away from the Weeks workspace
+ * without clearing hydration state — otherwise Make available / Hide stay hidden
+ * behind a permanent "Loading curriculum context…" gate.
+ */
+export function visibilityHydrateKeyForRetry(
+  completedKey: string,
+  requestedKey: string,
+  workspaceCurrent: boolean,
+): string {
+  if (workspaceCurrent) return completedKey;
+  if (completedKey === requestedKey) return "";
+  return completedKey;
+}
+
 /** A failed hydration deliberately leaves the successful key unchanged so the request can retry. */
 export function visibilityHydrateKeyAfterAttempt(
   completedKey: string,
