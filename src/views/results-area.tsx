@@ -12,6 +12,7 @@ import {
 } from "../results/result-sources";
 import { ResultsMarkbookPage } from "./results-markbook";
 import { ReadinessDiagnosticPage } from "./readiness-diagnostic";
+import { HubLearningResultsPage } from "./hub-learning-results";
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
@@ -51,8 +52,8 @@ export function ResultsArea({
             <p className="eyebrow">Results</p>
             <h2>{source?.label ?? "Select a hub"}</h2>
             <p>
-              Induction diagnostic sittings and assignment markbook share this Results area.
-              Other hubs can be added here without a separate results application.
+              Induction diagnostic sittings, assignment markbook, and hub learning results share this area.
+              A new hub participates through the shared reporting contract rather than a separate results application.
             </p>
           </div>
         </div>
@@ -91,6 +92,10 @@ export function ResultsArea({
 
       {source?.kind === "assignment-markbook" ? (
         <ResultsMarkbookPage data={data} onReviewResponse={onReviewResponse} embedded />
+      ) : null}
+
+      {source?.kind === "hub-learning" && source.hubCode ? (
+        <HubLearningResultsPage hubCode={source.hubCode} label={source.label} />
       ) : null}
 
       {source?.kind === "unavailable" ? (

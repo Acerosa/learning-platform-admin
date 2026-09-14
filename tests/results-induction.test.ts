@@ -14,7 +14,6 @@ import { sliceDemoModuleData } from "../src/api/admin-module-data.ts";
 import {
   ASSIGNMENT_MARKBOOK_SOURCE_ID,
   INDUCTION_READINESS_SOURCE_ID,
-  RESULT_SOURCES,
   resultSourceById,
 } from "../src/results/result-sources.ts";
 import { DEMO_ADMIN_DATA } from "../src/services/demo-admin-service.ts";
@@ -29,8 +28,9 @@ test("Results sources expose Induction / Readiness without a one-off architectur
   assert.equal(induction?.expectedQuestionCount, 25);
   assert.equal(induction?.hubCode, "level-3-it-year-1-readiness");
   assert.equal(resultSourceById(ASSIGNMENT_MARKBOOK_SOURCE_ID)?.kind, "assignment-markbook");
-  assert.ok(RESULT_SOURCES.some((source) => source.id === "unit-3-cyber-security" && !source.available));
-  assert.ok(RESULT_SOURCES.some((source) => source.id === "tlevel" && !source.available));
+  assert.equal(resultSourceById("unit-3-cyber-security")?.kind, "hub-learning");
+  assert.equal(resultSourceById("tlevel")?.kind, "hub-learning");
+  assert.equal(resultSourceById("l3e")?.available, false);
 });
 
 test("assignments-results module data includes diagnostic sittings", () => {
@@ -51,7 +51,6 @@ test("Results area defaults to Induction and reuses the diagnostic page", async 
   assert.match(sources, /Induction \/ Readiness/);
   assert.match(area, /ReadinessDiagnosticPage/);
   assert.match(area, /variant="results"/);
-  assert.match(area, /not available yet/);
   assert.match(area, /INDUCTION_READINESS_SOURCE_ID/);
   assert.match(assessment, /ResultsArea/);
   assert.match(diagnostic, /Results → Induction \/ Readiness/);

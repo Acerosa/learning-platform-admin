@@ -16,6 +16,8 @@ interface GroupingMember {
   id: string;
   displayName: string;
   needsAssignment?: boolean;
+  roleType?: string | null;
+  roleTitle?: string | null;
 }
 
 interface GroupingTeam {
@@ -33,6 +35,8 @@ interface GroupingParticipant {
   joinedAfterPublication: boolean;
   needsAssignment: boolean;
   teamId: string | null;
+  roleType?: string | null;
+  roleTitle?: string | null;
 }
 
 interface GroupingSession {
@@ -40,6 +44,7 @@ interface GroupingSession {
   sessionName: string | null;
   joinCode: string;
   preferredGroupSize: number;
+  specialistRoleTitle: string | null;
   status: "joining" | "proposed" | "published" | "closed";
   createdAt: string;
   publishedAt: string | null;
@@ -49,6 +54,22 @@ interface GroupingSession {
   teams: GroupingTeam[];
   visibleToStudents: boolean;
 }
+
+const ROLE_PRESETS = [
+  { id: "software-development", label: "Software Development", title: "Developer" },
+  { id: "cyber-security", label: "Cyber Security", title: "Cyber Security Analyst" },
+  { id: "networking", label: "Networking", title: "Network Engineer" },
+  { id: "data", label: "Data", title: "Data Analyst" },
+  { id: "research", label: "Research", title: "Researcher" },
+  { id: "general", label: "General Project", title: "Team Member" },
+  { id: "custom", label: "Custom", title: "" },
+] as const;
+
+const ROLE_TYPE_OPTIONS = [
+  { value: "project_manager", label: "Project Manager" },
+  { value: "tester", label: "Tester" },
+  { value: "specialist", label: "Specialist" },
+] as const;
 
 function toneForGroupingStatus(status: string): BadgeTone {
   if (status === "published") return "positive";
@@ -74,6 +95,8 @@ function asSession(value: unknown): GroupingSession | null {
     sessionName: row.sessionName == null ? null : String(row.sessionName),
     joinCode: String(row.joinCode ?? ""),
     preferredGroupSize: Number(row.preferredGroupSize ?? 5),
+    specialistRoleTitle:
+      row.specialistRoleTitle == null ? null : String(row.specialistRoleTitle),
     status: String(row.status ?? "joining") as GroupingSession["status"],
     createdAt: String(row.createdAt ?? ""),
     publishedAt: row.publishedAt == null ? null : String(row.publishedAt),
@@ -87,6 +110,8 @@ function asSession(value: unknown): GroupingSession | null {
           joinedAfterPublication: Boolean(participant.joinedAfterPublication),
           needsAssignment: Boolean(participant.needsAssignment),
           teamId: participant.teamId == null ? null : String(participant.teamId),
+          roleType: participant.roleType == null ? null : String(participant.roleType),
+          roleTitle: participant.roleTitle == null ? null : String(participant.roleTitle),
         }))
       : [],
     teams: Array.isArray(row.teams)
@@ -100,12 +125,23 @@ function asSession(value: unknown): GroupingSession | null {
                 id: String(member.id ?? ""),
                 displayName: String(member.displayName ?? ""),
                 needsAssignment: Boolean(member.needsAssignment),
+                roleType: member.roleType == null ? null : String(member.roleType),
+                roleTitle: member.roleTitle == null ? null : String(member.roleTitle),
               }))
             : [],
         }))
       : [],
     visibleToStudents: Boolean(row.visibleToStudents),
   };
+}
+
+function roleOverrideOptions(specialistTitle: string | null) {
+  const specialistLabel = specialistTitle?.trim() || "Specialist";
+  return ROLE_TYPE_OPTIONS.map((option) =>
+    option.value === "specialist"
+      ? { value: option.value, label: specialistLabel }
+      : option,
+  );
 }
 
 function rpcErrorMessage(error: unknown): string {
@@ -120,6 +156,8 @@ export function GroupGeneratorPage() {
 
   const [sessionName, setSessionName] = useState("");
   const [preferredSize, setPreferredSize] = useState(5);
+  const [roleProfileId, setRoleProfileId] = useState<string>("cyber-security");
+  const [specialistRoleTitle, setSpecialistRoleTitle] = useState("Cyber Security Analyst");
   const [session, setSession] = useState<GroupingSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -147,6 +185,18 @@ export function GroupGeneratorPage() {
     },
     [callRpc],
   );
+
+  useEffect(() => {
+    if (!session) return;
+    setPreferredSize(session.preferredGroupSize);
+    if (session.specialistRoleTitle) {
+      setSpecialistRoleTitle(session.specialistRoleTitle);
+      const matched = ROLE_PRESETS.find(
+        (preset) => preset.id !== "custom" && preset.title === session.specialistRoleTitle,
+      );
+      setRoleProfileId(matched?.id ?? "custom");
+    }
+  }, [session?.id, session?.preferredGroupSize, session?.specialistRoleTitle]);
 
   useEffect(() => {
     if (!live) return;
@@ -184,13 +234,17 @@ export function GroupGeneratorPage() {
 
   const createSession = () =>
     run(async () => {
+      const title = specialistRoleTitle.trim();
+      if (!title) throw new Error("Enter a specialist role title before creating the session.");
       const rows = await callRpc("create_grouping_session", {
         p_session_name: sessionName.trim() || null,
         p_preferred_group_size: preferredSize,
+        p_specialist_role_title: title,
       });
       const created = asSession(rows[0]);
       if (!created) throw new Error("Session was created but could not be loaded.");
       setSession(created);
+      setPreferredSize(created.preferredGroupSize);
       window.sessionStorage.setItem(SESSION_STORAGE_KEY, created.id);
     }, "Session created.");
 
@@ -296,6 +350,41 @@ export function GroupGeneratorPage() {
                 </button>
               </div>
             </label>
+            <label style={{ display: "grid", gap: "0.35rem", minWidth: "14rem" }}>
+              <span>Role profile</span>
+              <select
+                value={roleProfileId}
+                disabled={busy}
+                onChange={(event) => {
+                  const nextId = event.target.value;
+                  setRoleProfileId(nextId);
+                  const preset = ROLE_PRESETS.find((item) => item.id === nextId);
+                  if (preset && preset.id !== "custom") {
+                    setSpecialistRoleTitle(preset.title);
+                  }
+                }}
+              >
+                {ROLE_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem", minWidth: "16rem" }}>
+              <span>Specialist role</span>
+              <input
+                type="text"
+                value={specialistRoleTitle}
+                onChange={(event) => {
+                  setSpecialistRoleTitle(event.target.value);
+                  setRoleProfileId("custom");
+                }}
+                placeholder="e.g. Cyber Security Analyst"
+                maxLength={80}
+                disabled={busy}
+              />
+            </label>
             <button className="button button--primary" type="button" onClick={createSession} disabled={busy}>
               Create session
             </button>
@@ -333,6 +422,10 @@ export function GroupGeneratorPage() {
                 </p>
                 <p>
                   <strong>Students joined:</strong> {session.participantCount}
+                </p>
+                <p>
+                  <strong>Specialist role:</strong>{" "}
+                  {session.specialistRoleTitle ?? "Not set (roles disabled for this session)"}
                 </p>
                 {!session.visibleToStudents && session.status === "proposed" ? (
                   <p role="status">
@@ -538,36 +631,82 @@ export function GroupGeneratorPage() {
                     </div>
                     <ul>
                       {team.members.map((member) => (
-                        <li key={member.id} style={{ marginBottom: "0.35rem" }}>
-                          {member.displayName}{" "}
-                          {session.status !== "closed" && session.teams.length > 1 ? (
-                            <label style={{ marginLeft: "0.5rem" }}>
-                              <span className="sr-only">Move {member.displayName}</span>
-                              <select
-                                aria-label={`Move ${member.displayName}`}
-                                disabled={busy}
-                                value={team.id}
-                                onChange={(event) => {
-                                  const targetTeamId = event.target.value;
-                                  if (targetTeamId === team.id) return;
-                                  void run(async () => {
-                                    const rows = await callRpc("move_grouping_participant", {
-                                      p_participant_id: member.id,
-                                      p_team_id: targetTeamId,
-                                    });
-                                    const next = asSession(rows[0]);
-                                    if (next) setSession(next);
-                                  }, "Student moved.");
-                                }}
-                              >
-                                {session.teams.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.displayName}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ) : null}
+                        <li
+                          key={member.id}
+                          style={{
+                            marginBottom: "0.55rem",
+                            display: "grid",
+                            gap: "0.35rem",
+                          }}
+                        >
+                          <div>
+                            <strong>{member.displayName}</strong>
+                            {member.roleTitle ? (
+                              <span style={{ marginLeft: "0.5rem", opacity: 0.85 }}>
+                                {member.roleTitle}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                            {session.specialistRoleTitle &&
+                            member.roleType &&
+                            session.status !== "closed" ? (
+                              <label>
+                                <span className="sr-only">Role for {member.displayName}</span>
+                                <select
+                                  aria-label={`Role for ${member.displayName}`}
+                                  disabled={busy}
+                                  value={member.roleType}
+                                  onChange={(event) => {
+                                    const nextRole = event.target.value;
+                                    if (nextRole === member.roleType) return;
+                                    void run(async () => {
+                                      const rows = await callRpc("set_grouping_participant_role", {
+                                        p_participant_id: member.id,
+                                        p_role_type: nextRole,
+                                      });
+                                      const next = asSession(rows[0]);
+                                      if (next) setSession(next);
+                                    }, "Role updated.");
+                                  }}
+                                >
+                                  {roleOverrideOptions(session.specialistRoleTitle).map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : null}
+                            {session.status !== "closed" && session.teams.length > 1 ? (
+                              <label>
+                                <span className="sr-only">Move {member.displayName}</span>
+                                <select
+                                  aria-label={`Move ${member.displayName}`}
+                                  disabled={busy}
+                                  value={team.id}
+                                  onChange={(event) => {
+                                    const targetTeamId = event.target.value;
+                                    if (targetTeamId === team.id) return;
+                                    void run(async () => {
+                                      const rows = await callRpc("move_grouping_participant", {
+                                        p_participant_id: member.id,
+                                        p_team_id: targetTeamId,
+                                      });
+                                      const next = asSession(rows[0]);
+                                      if (next) setSession(next);
+                                    }, "Student moved.");
+                                  }}
+                                >
+                                  {session.teams.map((option) => (
+                                    <option key={option.id} value={option.id}>
+                                      {option.displayName}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : null}
+                          </div>
                         </li>
                       ))}
                     </ul>
