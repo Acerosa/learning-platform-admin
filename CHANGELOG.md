@@ -12,6 +12,11 @@ here.
   automatic roles; staff can override an individual learner’s role without
   moving them. Requires backend Classroom Group roles migration.
 
+- Results → Hub / source now loads Unit 3, T Level, L2E, and Unit 14 through
+  one shared hub-learning report (`admin_api.list_hub_learning_*`). Induction
+  and Assignment markbook are unchanged. L3E stays unavailable because no hub
+  is registered. Requires backend hub-learning Results migration.
+
 - Group Generator primary area (`/group-generator`) for temporary classroom
   sessions: create join codes, poll participants, generate/edit/publish
   balanced groups, and handle late arrivals via `admin_api` RPCs.
