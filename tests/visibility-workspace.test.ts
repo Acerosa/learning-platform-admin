@@ -21,11 +21,13 @@ import {
   shouldActivateRemoteDraft,
   shouldStartVisibilityHydration,
   visibilityHydrateKeyAfterAttempt,
+  visibilityHydrateKeyForRetry,
   visibilityWorkspaceKey,
 } from "../src/content/visibility-workspace.ts";
 import {
   applySuccessfulVisibilityPublish,
   prepareSessionVisibilityPublish,
+  prepareWeekVisibilityPublish,
 } from "../src/content/week-visibility-publish.ts";
 import {
   createDraft,
@@ -246,6 +248,54 @@ test("visibility hydrate key is committed only after success and failure remains
   completedKey = visibilityHydrateKeyAfterAttempt(completedKey, key, true);
   assert.equal(completedKey, key);
   assert.equal(shouldStartVisibilityHydration(completedKey, "", key), false);
+});
+
+test("displaced Weeks draft clears a completed hydrate key so Make available can recover", () => {
+  const key = visibilityWorkspaceKey(HUB, COURSE, "0.5.0");
+  const completed = visibilityHydrateKeyAfterAttempt("", key, true);
+  assert.equal(shouldStartVisibilityHydration(completed, "", key), false);
+
+  const retryKey = visibilityHydrateKeyForRetry(completed, key, false);
+  assert.equal(retryKey, "");
+  assert.equal(shouldStartVisibilityHydration(retryKey, "", key), true);
+  assert.equal(visibilityHydrateKeyForRetry(completed, key, true), completed);
+});
+
+test("L2E week post and remove prepare against the same hub and course identifiers", () => {
+  const L2E_HUB = "l2e-exploring-emerging-digital-technologies";
+  const L2E_COURSE = "gateway-level-2-digital-it-skills";
+  const OTHER_HUB = "tlevel-software-development";
+  const seed = createDraft(L2E_HUB, "Exploring New and Emerging Digital Technologies", L2E_COURSE, ACTOR);
+  const pkg = packageWithCounts(3, 1, 2);
+  pkg.hub = seed.package.hub;
+  pkg.curriculum = seed.package.curriculum;
+  const working = createWorkingCopyFromPackage(pkg, ACTOR, "0.3.21");
+  assert.equal(working.hubId, L2E_HUB);
+  assert.equal(working.courseKey, L2E_COURSE);
+
+  const posted = prepareWeekVisibilityPublish([working], working, "week-2", "post", ACTOR, {
+    hostedPublicationVersion: "0.3.21",
+    hostedPackage: pkg,
+  });
+  assert.equal(posted.hubCode, L2E_HUB);
+  assert.equal(posted.courseKey, L2E_COURSE);
+  assert.equal(posted.status, "available");
+  assert.notEqual(posted.hubCode, OTHER_HUB);
+
+  const removed = prepareWeekVisibilityPublish(
+    posted.records,
+    posted.published,
+    "week-2",
+    "remove",
+    ACTOR,
+    {
+      hostedPublicationVersion: posted.published.version,
+      hostedPackage: posted.published.package,
+    },
+  );
+  assert.equal(removed.hubCode, L2E_HUB);
+  assert.equal(removed.courseKey, L2E_COURSE);
+  assert.equal(removed.status, "planned");
 });
 
 test("a concurrent newer catalogue invalidates an older Weeks workspace", () => {

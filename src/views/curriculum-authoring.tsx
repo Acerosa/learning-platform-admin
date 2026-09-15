@@ -107,6 +107,7 @@ import {
   shouldActivateRemoteDraft,
   shouldStartVisibilityHydration,
   visibilityHydrateKeyAfterAttempt,
+  visibilityHydrateKeyForRetry,
   visibilityWorkspaceKey,
   type PublishedWeeksWorkspace,
 } from "../content/visibility-workspace";
@@ -404,9 +405,7 @@ export function CurriculumAuthoringPage({
           hostedPackageVersion: hostedVersion,
         })) {
           if (tabRef.current === "weeks" && hostedVersion) {
-            weeksWorkspaceRef.current = null;
-            setWeeksWorkspace(null);
-            visibilityHydrateKey.current = "";
+            clearWeeksWorkspaceOwnership();
           }
           applySelectionForDraft(next, merged, true);
           setDraft(next);
@@ -640,6 +639,11 @@ export function CurriculumAuthoringPage({
       return;
     }
     const key = `${selectedHubCode}::${selectedCourseKey}::${hostedVersion}`;
+    visibilityHydrateKey.current = visibilityHydrateKeyForRetry(
+      visibilityHydrateKey.current,
+      key,
+      workspaceCurrent,
+    );
     if (!shouldStartVisibilityHydration(
       visibilityHydrateKey.current,
       visibilityHydrateInFlightKey.current,
@@ -1029,9 +1033,17 @@ export function CurriculumAuthoringPage({
     }
   }
 
+  function clearWeeksWorkspaceOwnership() {
+    weeksWorkspaceRef.current = null;
+    setWeeksWorkspace(null);
+    visibilityHydrateKey.current = "";
+    visibilityHydrateInFlightKey.current = "";
+  }
+
   function setHubContext(hubCode: string) {
     const hub = hubs.find((item) => item.hubCode === hubCode);
     const courseKey = courseKeyForHub(hubCode);
+    clearWeeksWorkspaceOwnership();
     setSelectedHubCode(hubCode);
     setSelectedCourseKey(courseKey);
     selectedContextRef.current = { hubCode, courseKey };
@@ -1043,6 +1055,7 @@ export function CurriculumAuthoringPage({
   }
 
   function setCourseContext(courseKey: string) {
+    clearWeeksWorkspaceOwnership();
     setSelectedCourseKey(courseKey);
     selectedContextRef.current = { hubCode: selectedHubCode, courseKey };
     setStorageWarning("");
@@ -1216,7 +1229,27 @@ export function CurriculumAuthoringPage({
           <>
             {!contextReady || !contextMatches || (requiresPublishedWeeksWorkspace && !activePublishedWeeksWorkspace) ? (
               <section className="panel">
-                <p role="status">Loading curriculum context...</p>
+                <h2>Week visibility</h2>
+                <p role="status">
+                  {requiresPublishedWeeksWorkspace && !activePublishedWeeksWorkspace
+                    ? "Loading the published curriculum for week visibility. If this stays here, open the live package below."
+                    : "Loading curriculum context…"}
+                </p>
+                <div className="toolbar week-visibility-toolbar">
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    disabled={!platformAvailable || visibilityPublishBusy || !onLoadPublishedPackage}
+                    onClick={() => void hydratePublishedWorkspace(true)}
+                  >
+                    Open published content
+                  </button>
+                  <span className="field-hint" role="status">
+                    {catalogueVersionLabel
+                      ? `Current published catalogue: ${catalogueVersionLabel}.`
+                      : "Choose the hub above, then open the live published package."}
+                  </span>
+                </div>
               </section>
             ) : (
           <>
@@ -1485,6 +1518,9 @@ export function CurriculumAuthoringPage({
                     <strong>{item.title}</strong>
                     <StatusBadge label={LIFECYCLE_LABELS[item.status]} tone={lifecycleTone(item.status)} />
                     <button className="button button--small button--secondary" type="button" onClick={() => {
+                      if (weeksWorkspaceRef.current?.draft.id !== item.id) {
+                        clearWeeksWorkspaceOwnership();
+                      }
                       setDraft(item);
                       setPreviewId(item.id);
                       setPublishVersionValue(suggestNextVersionForDraft(drafts, item));
