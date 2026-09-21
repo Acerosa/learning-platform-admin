@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAdminModule } from "../router/modules";
 import { useAdminPortal } from "../stores/admin-portal";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
+import { GROUPING_POLL_MS, groupingPollShouldRun } from "./grouping-poll";
 
 const STUDENT_APP_BASE =
   (typeof process !== "undefined" && process.env.NEXT_PUBLIC_GROUP_GENERATOR_URL) ||
   "https://acerosa.github.io/classroom-group-generator/";
 
-const POLL_MS = 2500;
 const SESSION_STORAGE_KEY = "lp-admin-grouping-session-id";
 
 interface GroupingMember {
@@ -208,12 +208,55 @@ export function GroupGeneratorPage() {
   }, [live, refreshSession]);
 
   useEffect(() => {
-    if (!live || !session || session.status === "closed") return;
-    const timer = window.setInterval(() => {
-      void refreshSession(session.id).catch(() => undefined);
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [live, session, refreshSession]);
+    const sessionId = session?.id;
+    const status = session?.status;
+    if (!groupingPollShouldRun({
+      live,
+      hasSession: Boolean(sessionId),
+      status,
+      hidden: false
+    })) {
+      return;
+    }
+
+    let timer: number | null = null;
+    let stopped = false;
+
+    const tick = () => {
+      if (stopped || !sessionId) return;
+      void refreshSession(sessionId).catch(() => undefined);
+    };
+
+    const stopTimer = () => {
+      if (timer != null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const startTimer = () => {
+      stopTimer();
+      if (stopped || document.visibilityState === "hidden") return;
+      timer = window.setInterval(tick, GROUPING_POLL_MS);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        stopTimer();
+        return;
+      }
+      tick();
+      startTimer();
+    };
+
+    startTimer();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopped = true;
+      stopTimer();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [live, session?.id, session?.status, refreshSession]);
 
   const run = useCallback(
     async (action: () => Promise<void>, successNotice?: string) => {
