@@ -5,9 +5,10 @@ export type ResultSourceId =
   | "l3e"
   | "unit-3-cyber-security"
   | "tlevel"
-  | "unit-14";
+  | "unit-14"
+  | "knowledge-reports";
 
-export type ResultSourceKind = "diagnostic" | "assignment-markbook" | "hub-learning" | "unavailable";
+export type ResultSourceKind = "diagnostic" | "assignment-markbook" | "hub-learning" | "knowledge-reports" | "unavailable";
 
 export interface ResultSourceDefinition {
   id: ResultSourceId;
@@ -77,6 +78,14 @@ export const RESULT_SOURCES: readonly ResultSourceDefinition[] = Object.freeze([
     description: "Unit 14 Software Engineering for Business current class work. Production currently has practice and saved progress rather than official attempts.",
     available: true,
     hubCode: "unit-14-software-engineering-for-business",
+  },
+  {
+    id: "knowledge-reports",
+    label: "Knowledge Reports",
+    kind: "knowledge-reports",
+    description: "Timed knowledge reports for the assigned cohort. The report list comes from the hub, not from one fixed activity.",
+    available: true,
+    hubCode: "unit-3-cyber-security",
   },
 ]);
 

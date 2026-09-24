@@ -13,6 +13,7 @@ import {
 import { ResultsMarkbookPage } from "./results-markbook";
 import { ReadinessDiagnosticPage } from "./readiness-diagnostic";
 import { HubLearningResultsPage } from "./hub-learning-results";
+import { KnowledgeReportsPage } from "./knowledge-reports";
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
@@ -96,6 +97,10 @@ export function ResultsArea({
 
       {source?.kind === "hub-learning" && source.hubCode ? (
         <HubLearningResultsPage hubCode={source.hubCode} label={source.label} />
+      ) : null}
+
+      {source?.kind === "knowledge-reports" && source.hubCode ? (
+        <KnowledgeReportsPage key={source.hubCode} hubCode={source.hubCode} />
       ) : null}
 
       {source?.kind === "unavailable" ? (
