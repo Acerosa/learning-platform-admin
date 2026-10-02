@@ -15,11 +15,12 @@ import {
   mapKnowledgeReportRow,
   CONTENT_REVIEW_ADVISORY,
   coverageLabel,
+  extraTimeLabel,
   minimumEvidenceLabel,
   minimumLabel,
   missingLabel,
   relevanceLabel,
-  reportTextFromEvidence,
+  frozenEvidenceFromResponse,
   reviewLabel,
   statusLabel,
   submissionMethodLabel,
@@ -89,6 +90,9 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<KnowledgeReportRow | null>(null);
   const [reportText, setReportText] = useState("");
+  const [standardTimeText, setStandardTimeText] = useState<string | null>(null);
+  const [standardEndedAt, setStandardEndedAt] = useState<string | null>(null);
+  const [additionalTimeStartedAt, setAdditionalTimeStartedAt] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
@@ -123,6 +127,9 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
   const updateFilter = useCallback((patch: Partial<KnowledgeReportFilters>) => {
     setSelected(null);
     setReportText("");
+    setStandardTimeText(null);
+    setStandardEndedAt(null);
+    setAdditionalTimeStartedAt(null);
     setFilters((current) => cascadeKnowledgeReportFilters(rows, { ...current, ...patch }));
   }, [rows]);
 
@@ -168,6 +175,9 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
     try {
       if (!live) {
         setReportText(DEMO_KNOWLEDGE_REPORT_TEXT);
+        setStandardTimeText(null);
+        setStandardEndedAt(null);
+        setAdditionalTimeStartedAt(null);
         setContentReview(row.overallRelevance ? {
           analysisVersion: "1",
           overallRelevance: row.overallRelevance,
@@ -188,7 +198,11 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
           ? callRpc("ensure_knowledge_report_content_review", { p_response_id: row.responseId })
           : Promise.resolve([]),
       ]);
-      setReportText(reportTextFromEvidence(evidence));
+      const frozen = frozenEvidenceFromResponse(evidence);
+      setReportText(frozen.reportText);
+      setStandardTimeText(frozen.standardTimeText);
+      setStandardEndedAt(frozen.standardEndedAt);
+      setAdditionalTimeStartedAt(frozen.additionalTimeStartedAt);
       const feedbackRow = evidence.find((item) => {
         const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
         return typeof record.feedback_summary === "string" && record.feedback_summary.trim();
@@ -197,6 +211,9 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
       setContentReview(review[0] ? mapKnowledgeReportContentReview(review[0]) : null);
     } catch (cause) {
       setReportText("");
+      setStandardTimeText(null);
+      setStandardEndedAt(null);
+      setAdditionalTimeStartedAt(null);
       setDetailError(cause instanceof Error ? cause.message : "Unable to load the submitted report.");
     } finally {
       setDetailLoading(false);
@@ -208,6 +225,9 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
     const bytes = await buildIndividualKnowledgeReportPdf({
       row: selected,
       reportText,
+      standardTimeText,
+      standardEndedAt,
+      additionalTimeStartedAt,
       contentReview,
       teacherFeedback: storedFeedback || feedback || null,
       reviewedBy: null,
@@ -363,6 +383,7 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
                   <th>Report</th>
                   <th>Status</th>
                   <th>Words</th>
+                  <th>Extra time</th>
                   <th>Target</th>
                   <th>Time</th>
                   <th>Submission</th>
@@ -382,6 +403,7 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
                     <td>{row.reportTitle}</td>
                     <td><StatusBadge label={statusLabel(row.completionStatus)} tone={statusTone(row.completionStatus)} /></td>
                     <td>{missingLabel(row.wordCount)}</td>
+                    <td>{extraTimeLabel(row)}</td>
                     <td>{minimumLabel(row.minimumMet)}</td>
                     <td>{formatElapsed(row.elapsedSeconds)}</td>
                     <td>{submissionMethodLabel(row.submissionMethod)}</td>
@@ -412,7 +434,10 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
             </div>
           </div>
           <dl className="detail-list">
-            <div><dt>Words</dt><dd>{missingLabel(selected.wordCount)}</dd></div>
+            <div><dt>Final words</dt><dd>{missingLabel(selected.wordCount)}</dd></div>
+            <div><dt>Words after standard time</dt><dd>{selected.standardTimeWordCount == null ? "Not recorded" : selected.standardTimeWordCount}</dd></div>
+            <div><dt>Additional time</dt><dd>{extraTimeLabel(selected)}</dd></div>
+            <div><dt>Net words added during additional time</dt><dd>{selected.wordsAdded == null ? "Not recorded" : selected.wordsAdded}</dd></div>
             <div><dt>Minimum required</dt><dd>{missingLabel(selected.minimumWords)}</dd></div>
             <div><dt>Minimum</dt><dd>{minimumEvidenceLabel(selected.minimumMet, selected.wordCount)}</dd></div>
             <div><dt>Configured duration</dt><dd>{formatElapsed(selected.durationSeconds)}</dd></div>
