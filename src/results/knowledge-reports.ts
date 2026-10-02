@@ -333,28 +333,184 @@ export interface KnowledgeReportFrozenEvidence {
   standardTimeText: string | null;
   standardEndedAt: string | null;
   additionalTimeStartedAt: string | null;
+  wordCount: number | null;
+  minimumMet: boolean | null;
+  elapsedSeconds: number | null;
+  durationSeconds: number | null;
+  submissionMethod: string | null;
+  standardTimeWordCount: number | null;
+  additionalTimeEligible: boolean | null;
+  additionalTimeOffered: boolean | null;
+  additionalTimeStarted: boolean | null;
+  additionalTimeUsedSeconds: number | null;
+  additionalTimeSeconds: number | null;
+  wordsAddedDuringAdditionalTime: number | null;
+}
+
+function payloadHas(payload: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(payload, key);
+}
+
+function firstNumber(
+  current: number | null,
+  payload: Record<string, unknown>,
+  key: string,
+): number | null {
+  if (current != null || !payloadHas(payload, key)) return current;
+  return nullableNumber(payload[key]);
+}
+
+function firstBoolean(
+  current: boolean | null,
+  payload: Record<string, unknown>,
+  key: string,
+): boolean | null {
+  if (current != null || !payloadHas(payload, key)) return current;
+  return nullableBoolean(payload[key]);
+}
+
+function firstText(
+  current: string | null,
+  payload: Record<string, unknown>,
+  key: string,
+): string | null {
+  if (current || !payloadHas(payload, key)) return current;
+  return nullableText(payload[key]);
 }
 
 export function frozenEvidenceFromResponse(rows: readonly unknown[]): KnowledgeReportFrozenEvidence {
-  let reportText = "";
-  let standardTimeText: string | null = null;
-  let standardEndedAt: string | null = null;
-  let additionalTimeStartedAt: string | null = null;
+  const evidence: KnowledgeReportFrozenEvidence = {
+    reportText: "",
+    standardTimeText: null,
+    standardEndedAt: null,
+    additionalTimeStartedAt: null,
+    wordCount: null,
+    minimumMet: null,
+    elapsedSeconds: null,
+    durationSeconds: null,
+    submissionMethod: null,
+    standardTimeWordCount: null,
+    additionalTimeEligible: null,
+    additionalTimeOffered: null,
+    additionalTimeStarted: null,
+    additionalTimeUsedSeconds: null,
+    additionalTimeSeconds: null,
+    wordsAddedDuringAdditionalTime: null,
+  };
   for (const row of rows) {
     const record = recordOf(row);
     const payload = recordOf(record.response_payload ?? record.responsePayload);
-    if (!reportText && typeof payload.text === "string" && payload.text.trim()) reportText = payload.text;
-    if (standardTimeText == null && typeof payload.standardTimeText === "string" && payload.standardTimeText.trim()) {
-      standardTimeText = payload.standardTimeText;
+    if (!evidence.reportText && typeof payload.text === "string" && payload.text.trim()) evidence.reportText = payload.text;
+    if (evidence.standardTimeText == null && typeof payload.standardTimeText === "string" && payload.standardTimeText.trim()) {
+      evidence.standardTimeText = payload.standardTimeText;
     }
-    if (!standardEndedAt && typeof payload.standardEndedAt === "string" && payload.standardEndedAt.trim()) {
-      standardEndedAt = payload.standardEndedAt;
-    }
-    if (!additionalTimeStartedAt && typeof payload.additionalTimeStartedAt === "string" && payload.additionalTimeStartedAt.trim()) {
-      additionalTimeStartedAt = payload.additionalTimeStartedAt;
-    }
+    evidence.standardEndedAt = firstText(evidence.standardEndedAt, payload, "standardEndedAt");
+    evidence.additionalTimeStartedAt = firstText(evidence.additionalTimeStartedAt, payload, "additionalTimeStartedAt");
+    evidence.wordCount = firstNumber(evidence.wordCount, payload, "wordCount");
+    evidence.minimumMet = firstBoolean(evidence.minimumMet, payload, "minimumMet");
+    evidence.elapsedSeconds = firstNumber(evidence.elapsedSeconds, payload, "elapsedSeconds");
+    evidence.durationSeconds = firstNumber(evidence.durationSeconds, payload, "durationSeconds");
+    evidence.submissionMethod = firstText(evidence.submissionMethod, payload, "submissionMethod");
+    evidence.standardTimeWordCount = firstNumber(evidence.standardTimeWordCount, payload, "standardTimeWordCount");
+    evidence.additionalTimeEligible = firstBoolean(evidence.additionalTimeEligible, payload, "additionalTimeEligible");
+    evidence.additionalTimeOffered = firstBoolean(evidence.additionalTimeOffered, payload, "additionalTimeOffered");
+    evidence.additionalTimeStarted = firstBoolean(evidence.additionalTimeStarted, payload, "additionalTimeStarted");
+    evidence.additionalTimeUsedSeconds = firstNumber(evidence.additionalTimeUsedSeconds, payload, "additionalTimeUsedSeconds");
+    evidence.additionalTimeSeconds = firstNumber(evidence.additionalTimeSeconds, payload, "additionalTimeSeconds");
+    evidence.wordsAddedDuringAdditionalTime = firstNumber(
+      evidence.wordsAddedDuringAdditionalTime,
+      payload,
+      "wordsAddedDuringAdditionalTime",
+    );
   }
-  return { reportText, standardTimeText, standardEndedAt, additionalTimeStartedAt };
+  return evidence;
+}
+
+export function recordedDurationLabel(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "Not recorded";
+  const whole = Math.floor(seconds);
+  if (whole % 60 === 0) {
+    const minutes = whole / 60;
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  return formatElapsed(whole);
+}
+
+export function yesNoRecorded(value: boolean | null | undefined): string {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "Not recorded";
+}
+
+export function targetResultLabel(met: boolean | null | undefined): string {
+  if (met === true) return "Achieved";
+  if (met === false) return "Not reached";
+  return "Not recorded";
+}
+
+export function thresholdResultLabel(eligible: boolean | null | undefined): string {
+  if (eligible === true) return "Not reached";
+  if (eligible === false) return "Achieved";
+  return "Not recorded";
+}
+
+export function netWordChangeLabel(words: number | null | undefined): string {
+  if (words == null || !Number.isFinite(words)) return "Not recorded";
+  if (words > 0) return `+${words}`;
+  return String(words);
+}
+
+export function countLabel(value: number | null | undefined, suffix = ""): string {
+  if (value == null || !Number.isFinite(value)) return "Not recorded";
+  return `${value}${suffix}`;
+}
+
+export function distinctStandardTimeText(standardTimeText: string | null | undefined, reportText: string): string | null {
+  const standard = standardTimeText?.trim() ?? "";
+  if (!standard || standard === reportText.trim()) return null;
+  return standardTimeText ?? null;
+}
+
+export interface KnowledgeReportDetailFact {
+  label: string;
+  value: string;
+}
+
+export function knowledgeReportDetailFacts(
+  row: KnowledgeReportRow,
+  frozen: KnowledgeReportFrozenEvidence | null = null,
+): KnowledgeReportDetailFact[] {
+  const wordCount = frozen?.wordCount ?? row.wordCount;
+  const standardWords = frozen?.standardTimeWordCount ?? row.standardTimeWordCount ?? null;
+  const eligible = frozen?.additionalTimeEligible ?? row.additionalTimeEligible ?? null;
+  const offered = frozen?.additionalTimeOffered ?? eligible;
+  const started = frozen?.additionalTimeStarted ?? row.additionalTimeStarted ?? null;
+  const usedSeconds = frozen?.additionalTimeUsedSeconds ?? row.additionalTimeUsedSeconds ?? null;
+  const wordsAdded = frozen?.wordsAddedDuringAdditionalTime ?? row.wordsAdded ?? null;
+  const minimumMet = frozen?.minimumMet ?? row.minimumMet;
+  const durationSeconds = frozen?.durationSeconds ?? row.durationSeconds;
+  const allowance = frozen?.additionalTimeSeconds ?? row.additionalTimeAllowanceSeconds ?? null;
+  const threshold = row.additionalTimeThresholdWords ?? null;
+  const method = frozen?.submissionMethod ?? row.submissionMethod;
+  return [
+    { label: "Learner", value: row.learnerName || "Not recorded" },
+    { label: "Group", value: row.groupName || "Not recorded" },
+    { label: "Report", value: row.reportTitle || "Not recorded" },
+    { label: "Status", value: statusLabel(row.completionStatus) },
+    { label: "Standard time allowed", value: recordedDurationLabel(durationSeconds) },
+    { label: "Words after standard time", value: countLabel(standardWords) },
+    { label: "Internal evidence threshold", value: threshold == null ? "Not recorded" : `${threshold} words` },
+    { label: "Internal evidence threshold result", value: thresholdResultLabel(eligible) },
+    { label: "Additional time offered", value: yesNoRecorded(offered) },
+    { label: "Additional time used", value: yesNoRecorded(started) },
+    { label: "Additional time allowed", value: recordedDurationLabel(allowance) },
+    { label: "Actual additional-time duration used", value: recordedDurationLabel(usedSeconds) },
+    { label: "Net word-count change during additional time", value: netWordChangeLabel(wordsAdded) },
+    { label: "Final word count", value: countLabel(wordCount) },
+    { label: "500-word student target", value: row.minimumWords == null ? "Not recorded" : `${row.minimumWords} words` },
+    { label: "500-word student target result", value: targetResultLabel(minimumMet) },
+    { label: "Submission method", value: submissionMethodLabel(method) },
+  ];
 }
 
 export function reportTextFromEvidence(rows: readonly unknown[]): string {

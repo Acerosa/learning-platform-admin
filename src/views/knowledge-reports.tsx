@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBadge, type BadgeTone } from "../components/status-badge";
 import {
   DEMO_KNOWLEDGE_REPORTS,
@@ -16,11 +16,12 @@ import {
   CONTENT_REVIEW_ADVISORY,
   coverageLabel,
   extraTimeLabel,
-  minimumEvidenceLabel,
   minimumLabel,
   missingLabel,
   relevanceLabel,
+  distinctStandardTimeText,
   frozenEvidenceFromResponse,
+  knowledgeReportDetailFacts,
   reviewLabel,
   statusLabel,
   submissionMethodLabel,
@@ -36,7 +37,7 @@ import {
   buildIndividualKnowledgeReportPdf,
   downloadPdf,
 } from "../results/knowledge-report-pdf.ts";
-import { useAdminPortal } from "../stores/admin-portal";
+import { useAdminPortal, type AdminDataSourceStatus } from "../stores/admin-portal";
 import { formatDateTime } from "../utils/format";
 
 function EmptyState({ title, body }: { title: string; body: string }) {
@@ -83,12 +84,26 @@ function FilterSelect({
 
 export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
   const { callRpc, dataSource } = useAdminPortal();
+  return <KnowledgeReportsView hubCode={hubCode} callRpc={callRpc} dataSource={dataSource} />;
+}
+
+export function KnowledgeReportsView({
+  hubCode,
+  callRpc,
+  dataSource,
+}: {
+  hubCode: string;
+  callRpc: (name: string, params: Record<string, unknown>) => Promise<unknown[]>;
+  dataSource: Pick<AdminDataSourceStatus, "mode" | "state">;
+}) {
   const live = dataSource.mode === "live" && dataSource.state === "ready";
   const [filters, setFilters] = useState<KnowledgeReportFilters>(EMPTY_KNOWLEDGE_REPORT_FILTERS);
   const [rows, setRows] = useState<KnowledgeReportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<KnowledgeReportRow | null>(null);
+  const [frozen, setFrozen] = useState<ReturnType<typeof frozenEvidenceFromResponse> | null>(null);
+  const detailRef = useRef<HTMLElement | null>(null);
   const [reportText, setReportText] = useState("");
   const [standardTimeText, setStandardTimeText] = useState<string | null>(null);
   const [standardEndedAt, setStandardEndedAt] = useState<string | null>(null);
@@ -126,6 +141,7 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
 
   const updateFilter = useCallback((patch: Partial<KnowledgeReportFilters>) => {
     setSelected(null);
+    setFrozen(null);
     setReportText("");
     setStandardTimeText(null);
     setStandardEndedAt(null);
@@ -163,21 +179,41 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
     void loadRows();
   }, [loadRows]);
 
+  useEffect(() => {
+    if (!selected) return;
+    detailRef.current?.scrollIntoView({ block: "start" });
+  }, [selected]);
+
+  function clearDetailEvidence() {
+    setReportText("");
+    setFrozen(null);
+    setStandardTimeText(null);
+    setStandardEndedAt(null);
+    setAdditionalTimeStartedAt(null);
+    setContentReview(null);
+    setStoredFeedback(null);
+  }
+
+  function closeDetail() {
+    setSelected(null);
+    clearDetailEvidence();
+    setDetailError(null);
+    setDetailLoading(false);
+    setFeedback("");
+    setReviewError(null);
+  }
+
   async function openRow(row: KnowledgeReportRow) {
     if (!canOpenReport(row)) return;
+    clearDetailEvidence();
     setSelected(row);
     setFeedback("");
-    setStoredFeedback(null);
-    setContentReview(null);
     setReviewError(null);
     setDetailError(null);
     setDetailLoading(true);
     try {
       if (!live) {
         setReportText(DEMO_KNOWLEDGE_REPORT_TEXT);
-        setStandardTimeText(null);
-        setStandardEndedAt(null);
-        setAdditionalTimeStartedAt(null);
         setContentReview(row.overallRelevance ? {
           analysisVersion: "1",
           overallRelevance: row.overallRelevance,
@@ -188,32 +224,38 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
         } : null);
         return;
       }
-      const [evidence, review] = await Promise.all([
-        callRpc("list_hub_learning_result_evidence", {
-          p_hub_code: hubCode,
-          p_student_number: row.studentNumber,
-          p_assignment_id: row.assignmentId,
-        }),
-        row.responseId
-          ? callRpc("ensure_knowledge_report_content_review", { p_response_id: row.responseId })
-          : Promise.resolve([]),
-      ]);
-      const frozen = frozenEvidenceFromResponse(evidence);
-      setReportText(frozen.reportText);
-      setStandardTimeText(frozen.standardTimeText);
-      setStandardEndedAt(frozen.standardEndedAt);
-      setAdditionalTimeStartedAt(frozen.additionalTimeStartedAt);
+      const evidence = await callRpc("list_hub_learning_result_evidence", {
+        p_hub_code: hubCode,
+        p_student_number: row.studentNumber,
+        p_assignment_id: row.assignmentId,
+      });
+      const loaded = frozenEvidenceFromResponse(evidence);
+      setFrozen(loaded);
+      setStandardTimeText(loaded.standardTimeText);
+      setStandardEndedAt(loaded.standardEndedAt);
+      setAdditionalTimeStartedAt(loaded.additionalTimeStartedAt);
+      if (!loaded.reportText.trim()) {
+        setReportText("");
+        setDetailError("No submitted report was returned for this learner.");
+      } else {
+        setReportText(loaded.reportText);
+      }
       const feedbackRow = evidence.find((item) => {
         const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
         return typeof record.feedback_summary === "string" && record.feedback_summary.trim();
       }) as Record<string, unknown> | undefined;
       setStoredFeedback(typeof feedbackRow?.feedback_summary === "string" ? feedbackRow.feedback_summary : null);
-      setContentReview(review[0] ? mapKnowledgeReportContentReview(review[0]) : null);
+      if (row.responseId) {
+        try {
+          const review = await callRpc("ensure_knowledge_report_content_review", { p_response_id: row.responseId });
+          setContentReview(review[0] ? mapKnowledgeReportContentReview(review[0]) : null);
+        } catch (cause) {
+          setContentReview(null);
+          setReviewError(cause instanceof Error ? cause.message : "Unable to load the advisory review.");
+        }
+      }
     } catch (cause) {
-      setReportText("");
-      setStandardTimeText(null);
-      setStandardEndedAt(null);
-      setAdditionalTimeStartedAt(null);
+      clearDetailEvidence();
       setDetailError(cause instanceof Error ? cause.message : "Unable to load the submitted report.");
     } finally {
       setDetailLoading(false);
@@ -223,7 +265,20 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
   async function downloadStudent() {
     if (!selected || !reportText) return;
     const bytes = await buildIndividualKnowledgeReportPdf({
-      row: selected,
+      row: {
+        ...selected,
+        wordCount: frozen?.wordCount ?? selected.wordCount,
+        minimumMet: frozen?.minimumMet ?? selected.minimumMet,
+        elapsedSeconds: frozen?.elapsedSeconds ?? selected.elapsedSeconds,
+        durationSeconds: frozen?.durationSeconds ?? selected.durationSeconds,
+        submissionMethod: frozen?.submissionMethod ?? selected.submissionMethod,
+        standardTimeWordCount: frozen?.standardTimeWordCount ?? selected.standardTimeWordCount,
+        additionalTimeEligible: frozen?.additionalTimeEligible ?? selected.additionalTimeEligible,
+        additionalTimeStarted: frozen?.additionalTimeStarted ?? selected.additionalTimeStarted,
+        additionalTimeUsedSeconds: frozen?.additionalTimeUsedSeconds ?? selected.additionalTimeUsedSeconds,
+        wordsAdded: frozen?.wordsAddedDuringAdditionalTime ?? selected.wordsAdded,
+        additionalTimeAllowanceSeconds: frozen?.additionalTimeSeconds ?? selected.additionalTimeAllowanceSeconds,
+      },
       reportText,
       standardTimeText,
       standardEndedAt,
@@ -360,7 +415,7 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
         </section>
       ) : null}
 
-      {!loading && !error && visible.length > 0 ? (
+      {!selected && !loading && !error && visible.length > 0 ? (
         <section className="panel">
           <div className="panel__header">
             <div>
@@ -425,28 +480,25 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
       ) : null}
 
       {selected ? (
-        <section className="panel" data-testid="knowledge-report-detail">
+        <section className="panel" data-testid="knowledge-report-detail" ref={detailRef}>
           <div className="panel__header">
             <div>
               <p className="eyebrow">{selected.groupName}</p>
               <h2>{selected.learnerName}</h2>
               <p>{selected.reportTitle}</p>
             </div>
+            <button className="button button--secondary" type="button" data-testid="knowledge-report-back" onClick={closeDetail}>
+              Back to cohort
+            </button>
           </div>
           <dl className="detail-list">
-            <div><dt>Final words</dt><dd>{missingLabel(selected.wordCount)}</dd></div>
-            <div><dt>Words after standard time</dt><dd>{selected.standardTimeWordCount == null ? "Not recorded" : selected.standardTimeWordCount}</dd></div>
-            <div><dt>Additional time</dt><dd>{extraTimeLabel(selected)}</dd></div>
-            <div><dt>Net words added during additional time</dt><dd>{selected.wordsAdded == null ? "Not recorded" : selected.wordsAdded}</dd></div>
-            <div><dt>Minimum required</dt><dd>{missingLabel(selected.minimumWords)}</dd></div>
-            <div><dt>Minimum</dt><dd>{minimumEvidenceLabel(selected.minimumMet, selected.wordCount)}</dd></div>
-            <div><dt>Configured duration</dt><dd>{formatElapsed(selected.durationSeconds)}</dd></div>
-            <div><dt>Time used</dt><dd>{formatElapsed(selected.elapsedSeconds)}</dd></div>
-            <div><dt>Submission</dt><dd>{submissionMethodLabel(selected.submissionMethod)}</dd></div>
+            {knowledgeReportDetailFacts(selected, frozen).map((fact) => (
+              <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>
+            ))}
             <div><dt>Submitted</dt><dd>{selected.submittedAt ? formatDateTime(selected.submittedAt) : "—"}</dd></div>
             <div><dt>Review</dt><dd>{reviewLabel(selected)}</dd></div>
           </dl>
-          {wordBandNote(selected.wordCount) ? <p>{wordBandNote(selected.wordCount)}</p> : null}
+          {wordBandNote(frozen?.wordCount ?? selected.wordCount) ? <p>{wordBandNote(frozen?.wordCount ?? selected.wordCount)}</p> : null}
           <div>
             <button className="button button--secondary" type="button" onClick={() => void downloadStudent()}>
               Download Student PDF
@@ -467,17 +519,32 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
               <p>{CONTENT_REVIEW_ADVISORY}</p>
             </section>
           ) : null}
-          <h3>Student Report</h3>
+          <h3>Student work</h3>
           {detailLoading ? <p data-testid="knowledge-report-detail-loading">Loading the submitted report…</p> : null}
           {detailError ? <p data-testid="knowledge-report-detail-error">{detailError}</p> : null}
-          {reportText ? (
-            <article
-              data-testid="knowledge-report-text"
-              style={{ maxWidth: "42rem", whiteSpace: "pre-wrap", lineHeight: 1.6 }}
-            >
-              {reportText}
-            </article>
+          {distinctStandardTimeText(standardTimeText, reportText) ? (
+            <section data-testid="knowledge-report-standard-work">
+              <h3>Work Produced During Standard Time</h3>
+              <article
+                data-testid="knowledge-report-standard-text"
+                style={{ maxWidth: "42rem", whiteSpace: "pre-wrap", lineHeight: 1.6 }}
+              >
+                {standardTimeText}
+              </article>
+            </section>
           ) : null}
+          {reportText ? (
+            <section>
+              <h3>Final Submitted Work</h3>
+              <article
+                data-testid="knowledge-report-text"
+                style={{ maxWidth: "42rem", whiteSpace: "pre-wrap", lineHeight: 1.6 }}
+              >
+                {reportText}
+              </article>
+            </section>
+          ) : null}
+          {reviewError ? <p data-testid="knowledge-report-review-error">{reviewError}</p> : null}
           {selected.requiresReview ? (
             <form
               data-testid="knowledge-report-review"
@@ -494,7 +561,6 @@ export function KnowledgeReportsPage({ hubCode }: { hubCode: string }) {
                 onChange={(event) => setFeedback(event.target.value)}
                 rows={5}
               />
-              {reviewError ? <p>{reviewError}</p> : null}
               <button className="button" type="submit" disabled={reviewing}>Mark as reviewed</button>
             </form>
           ) : (
