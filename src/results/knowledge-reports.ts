@@ -37,6 +37,13 @@ export interface KnowledgeReportRow {
   minimumMet: boolean | null;
   elapsedSeconds: number | null;
   submissionMethod: string | null;
+  standardTimeWordCount?: number | null;
+  additionalTimeEligible?: boolean | null;
+  additionalTimeStarted?: boolean | null;
+  additionalTimeUsedSeconds?: number | null;
+  wordsAdded?: number | null;
+  additionalTimeThresholdWords?: number | null;
+  additionalTimeAllowanceSeconds?: number | null;
   requiresReview: boolean | null;
   submittedAt: string | null;
   reviewedAt: string | null;
@@ -111,6 +118,17 @@ export function mapKnowledgeReportRow(row: unknown): KnowledgeReportRow {
     minimumMet: nullableBoolean(record.minimum_met ?? record.minimumMet),
     elapsedSeconds: nullableNumber(record.elapsed_seconds ?? record.elapsedSeconds),
     submissionMethod: nullableText(record.submission_method ?? record.submissionMethod),
+    standardTimeWordCount: nullableNumber(record.standard_time_word_count ?? record.standardTimeWordCount),
+    additionalTimeEligible: nullableBoolean(record.additional_time_eligible ?? record.additionalTimeEligible),
+    additionalTimeStarted: nullableBoolean(record.additional_time_started ?? record.additionalTimeStarted),
+    additionalTimeUsedSeconds: nullableNumber(record.additional_time_used_seconds ?? record.additionalTimeUsedSeconds),
+    wordsAdded: nullableNumber(record.words_added ?? record.wordsAdded),
+    additionalTimeThresholdWords: nullableNumber(
+      record.additional_time_threshold_words ?? record.additionalTimeThresholdWords,
+    ),
+    additionalTimeAllowanceSeconds: nullableNumber(
+      record.additional_time_allowance_seconds ?? record.additionalTimeAllowanceSeconds,
+    ),
     requiresReview: nullableBoolean(record.requires_review ?? record.requiresReview),
     submittedAt: nullableText(record.submitted_at ?? record.submittedAt),
     reviewedAt: nullableText(record.reviewed_at ?? record.reviewedAt),
@@ -217,9 +235,21 @@ export function minimumEvidenceLabel(met: boolean | null | undefined, words: num
   return `${met ? "Met" : "Not reached"} · ${words} words`;
 }
 
+export function extraTimeLabel(row: Pick<KnowledgeReportRow, "additionalTimeEligible" | "additionalTimeStarted" | "additionalTimeUsedSeconds">): string {
+  if (row.additionalTimeStarted == null && row.additionalTimeEligible == null) return "—";
+  if (row.additionalTimeStarted) {
+    const minutes = row.additionalTimeUsedSeconds == null ? null : Math.round(row.additionalTimeUsedSeconds / 60);
+    return minutes == null ? "Used" : `+${minutes} min`;
+  }
+  if (row.additionalTimeEligible) return "Offered";
+  return "Not used";
+}
+
 export function submissionMethodLabel(method: string | null | undefined): string {
   if (method === "manual") return "Manual";
   if (method === "timer_expired") return "Time expired";
+  if (method === "standard_time_complete") return "Standard time complete";
+  if (method === "additional_time_expired") return "Additional time expired";
   if (!method) return "—";
   return method;
 }
@@ -298,13 +328,37 @@ export function missingLabel(value: string | number | null | undefined): string 
   return String(value);
 }
 
-export function reportTextFromEvidence(rows: readonly unknown[]): string {
+export interface KnowledgeReportFrozenEvidence {
+  reportText: string;
+  standardTimeText: string | null;
+  standardEndedAt: string | null;
+  additionalTimeStartedAt: string | null;
+}
+
+export function frozenEvidenceFromResponse(rows: readonly unknown[]): KnowledgeReportFrozenEvidence {
+  let reportText = "";
+  let standardTimeText: string | null = null;
+  let standardEndedAt: string | null = null;
+  let additionalTimeStartedAt: string | null = null;
   for (const row of rows) {
     const record = recordOf(row);
     const payload = recordOf(record.response_payload ?? record.responsePayload);
-    if (typeof payload.text === "string" && payload.text.trim()) return payload.text;
+    if (!reportText && typeof payload.text === "string" && payload.text.trim()) reportText = payload.text;
+    if (standardTimeText == null && typeof payload.standardTimeText === "string" && payload.standardTimeText.trim()) {
+      standardTimeText = payload.standardTimeText;
+    }
+    if (!standardEndedAt && typeof payload.standardEndedAt === "string" && payload.standardEndedAt.trim()) {
+      standardEndedAt = payload.standardEndedAt;
+    }
+    if (!additionalTimeStartedAt && typeof payload.additionalTimeStartedAt === "string" && payload.additionalTimeStartedAt.trim()) {
+      additionalTimeStartedAt = payload.additionalTimeStartedAt;
+    }
   }
-  return "";
+  return { reportText, standardTimeText, standardEndedAt, additionalTimeStartedAt };
+}
+
+export function reportTextFromEvidence(rows: readonly unknown[]): string {
+  return frozenEvidenceFromResponse(rows).reportText;
 }
 
 export function canOpenReport(row: Pick<KnowledgeReportRow, "responseId" | "completionStatus">): boolean {
