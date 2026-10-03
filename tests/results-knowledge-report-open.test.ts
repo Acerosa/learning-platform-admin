@@ -190,7 +190,7 @@ test("Open shows a 1.1.0 learner, then a legacy learner, without stale evidence"
     assert.ok(group);
     await act(async () => {
       group.value = "GROUP-1";
-      group.dispatchEvent(new Event("change", { bubbles: true }));
+      group.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     });
     await settle();
     const first = openButton("Learner A");
@@ -353,7 +353,7 @@ test("Download Student PDF uses the opened learner's frozen report", async () =>
     assert.match(pdfText, /Individual Student Evidence Report/);
     assert.match(pdfText, /Learner A/);
     assert.match(pdfText, new RegExp(ESSAY_A.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    assert.match(pdfText, /Work Produced During Standard Time/);
+    assert.match(pdfText, /Work Produced During Standard Task Time/);
     assert.match(pdfText, new RegExp(STANDARD_A));
     assert.equal(pdfText.includes(ESSAY_B), false);
     const legacyPdf = individualReportText({
