@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -12,7 +15,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: github-pages
+  group: ${{ github.event_name == 'pull_request' && format('github-pages-pr-{0}', github.event.pull_request.number) || 'github-pages' }}
   cancel-in-progress: true
 
 jobs:
@@ -95,6 +98,7 @@ jobs:
 
   build:
     needs: validate
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && success() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out administration portal
@@ -170,6 +174,7 @@ jobs:
     needs:
       - validate
       - build
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && success() }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
