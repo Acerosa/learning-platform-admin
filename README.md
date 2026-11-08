@@ -9,7 +9,7 @@ This repository is the administration interface for the entire Learning Platform
 ## Current state
 
 - The portal consumes the shared theme service and semantic tokens from `@learning-platform/core`.
-- Curriculum authoring consumes `@learning-platform/content` 0.1.3 from [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content) for schemas, validation, import and preview.
+- Curriculum authoring consumes `@learning-platform/content` 0.1.4 from [Acerosa/learning-platform-content](https://github.com/Acerosa/learning-platform-content) for schemas, validation, import and preview.
 - Results / Markbook consumes `@learning-platform/results` for interpretation and `admin_api.attempts` / `admin_api.responses` for data.
 - The backend `admin_api` contract is version `0.2.0`, draft, with read models and curriculum publication.
 - Explicit live mode uses Supabase email/password Auth and RLS-protected
@@ -24,12 +24,24 @@ This repository is the administration interface for the entire Learning Platform
 - Curriculum authoring drafts weeks, sessions and activities locally, validates them with `@learning-platform/content`, publishes immutable local versions, and can publish those snapshots to the backend catalogue. Learner hubs are not updated.
 - No hosted credentials, database migrations or learner-hub source editing live here.
 
-## Local development
+## Setup
 
-Requirements: Node.js 22.13 or later.
+Use Node.js **22.23.2**. The package accepts Node.js 22.13.0 or later. Shared packages stay in their own repositories. `npm run bootstrap` places the validated tags next to this clone. `@learning-platform/ui` is not required.
 
 ```bash
-npm install
+git clone https://github.com/Acerosa/learning-platform-admin.git
+cd learning-platform-admin
+npm run bootstrap
+npm ci
+```
+
+The sibling directories are `../learning-platform-core` (`v0.2.23`), `../learning-platform-content` (`v0.1.4`) and `../learning-platform-results` (`v0.1.2`). Their pins live in `siblings.json`, which the Pages workflow reads as well. Bootstrap clones a missing directory. An existing checkout is reused when its commit, or its tree and package version, already matches that pin. A mismatch is reported and left unchanged, including when the checkout has uncommitted work. Running bootstrap again does not fetch a checkout that already matches.
+
+`npm ci` installs from `package-lock.json`. Use it instead of `npm install` so the lockfile is not rewritten.
+
+### Local development
+
+```bash
 npm run dev
 ```
 
@@ -45,18 +57,34 @@ account `platform.admin@local.invalid` with email and password. The password
 is local-only and is not committed. Magic-link sign-in remains available for
 Mailpit testing. This fixture exists only in the backend local seed.
 
-## Quality checks
+### Testing
 
 ```bash
-npm run lint
 npm run typecheck
 npm run test:integration
-npm test
+npm run build
+node --test tests/*.test.mjs
+npm run test:authoring
+npm run lint
 ```
 
-`npm test` builds the portal and runs route, architecture, accessibility, responsive-contract and curriculum-authoring tests.
+`npm run build` creates `dist/server`, which the route tests load. `npm test` performs that build and then runs the route and authoring suites. Four authoring tests read sibling hub checkouts when those directories are present. They are skipped when the hubs are not installed. Hub repositories are not part of bootstrap.
 
-`npm run build:pages` creates the static GitHub Pages build used by the deployment workflow.
+### Production build
+
+```bash
+npm run build:pages
+```
+
+This creates the static GitHub Pages site written to `dist/pages`. The deployment workflow runs the same validation commands before publishing that build.
+
+### Common installation problems
+
+- Node.js 20 is a frequent machine default. Select 22.23.2 before bootstrap and `npm ci`.
+- `npm ci` cannot resolve `file:../learning-platform-*` until bootstrap has created those directories.
+- `node --test tests/*.test.mjs` fails with a missing `dist/server/index.js` until `npm run build` has run.
+- If bootstrap reports a version mismatch, move that sibling directory aside or check out the tag named in the message. The script does not reset or delete it.
+- Do not commit `.env.local`. Do not put a secret or service-role key in a `NEXT_PUBLIC_` variable.
 
 ## Repository structure
 

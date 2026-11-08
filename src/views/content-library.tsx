@@ -133,7 +133,16 @@ function CreateQuestionDialog({ open, onClose, onSave }: CreateQuestionDialogPro
   if (!open) return null;
 
   return (
-    <div className="dialog-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="dialog-overlay"
+      role="button"
+      tabIndex={0}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") onClose();
+      }}
+    >
       <div className="dialog" role="dialog" aria-labelledby="create-question-title">
         <header className="dialog__header">
           <h2 id="create-question-title">Create Question</h2>
@@ -252,7 +261,16 @@ function CreateActivityDialog({ open, onClose, onSave }: CreateQuestionDialogPro
   if (!open) return null;
 
   return (
-    <div className="dialog-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="dialog-overlay"
+      role="button"
+      tabIndex={0}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") onClose();
+      }}
+    >
       <div className="dialog" role="dialog" aria-labelledby="create-activity-title">
         <header className="dialog__header">
           <h2 id="create-activity-title">Create Activity</h2>
@@ -303,6 +321,23 @@ function CreateActivityDialog({ open, onClose, onSave }: CreateQuestionDialogPro
   );
 }
 
+function libraryItemsFromRows(rows: readonly Record<string, unknown>[]): LibraryItem[] {
+  return rows.map((row) => ({
+    libraryType: String(row.library_type ?? ""),
+    id: String(row.id ?? ""),
+    stableKey: String(row.stable_key ?? ""),
+    title: String(row.title ?? ""),
+    itemType: String(row.item_type ?? ""),
+    status: String(row.status ?? ""),
+    version: String(row.version ?? ""),
+    tags: (row.tags as string[]) ?? [],
+    subject: row.subject ? String(row.subject) : null,
+    author: String(row.author ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+    usedByCount: Number(row.used_by_count ?? 0),
+  }));
+}
+
 export function ContentLibraryPage() {
   const { data, dataSource, callRpc } = useAdminPortal();
   const [activeTab, setActiveTab] = useState<LibraryTab>("all");
@@ -316,6 +351,14 @@ export function ContentLibraryPage() {
   const [createActivityOpen, setCreateActivityOpen] = useState(false);
 
   const isLive = dataSource.mode === "live" && dataSource.state === "ready";
+
+  const searchKey = `${isLive}\0${query}\0${activeTab}\0${statusFilter}`;
+  const [appliedSearchKey, setAppliedSearchKey] = useState<string | null>(null);
+  if (appliedSearchKey !== searchKey) {
+    setAppliedSearchKey(searchKey);
+    setLoading(isLive);
+    if (isLive) setSearchError(null);
+  }
 
   const fetchItems = useCallback(async () => {
     if (!isLive) return;
@@ -331,22 +374,7 @@ export function ContentLibraryPage() {
       if (statusFilter) params.p_status = statusFilter;
 
       const rows = await callRpc("search_library", params);
-      setItems(
-        (rows as Record<string, unknown>[]).map((row) => ({
-          libraryType: String(row.library_type ?? ""),
-          id: String(row.id ?? ""),
-          stableKey: String(row.stable_key ?? ""),
-          title: String(row.title ?? ""),
-          itemType: String(row.item_type ?? ""),
-          status: String(row.status ?? ""),
-          version: String(row.version ?? ""),
-          tags: (row.tags as string[]) ?? [],
-          subject: row.subject ? String(row.subject) : null,
-          author: String(row.author ?? ""),
-          updatedAt: String(row.updated_at ?? ""),
-          usedByCount: Number(row.used_by_count ?? 0),
-        })),
-      );
+      setItems(libraryItemsFromRows(rows as Record<string, unknown>[]));
     } catch (caught) {
       setItems([]);
       setSearchError(caught instanceof Error ? caught.message : "Search failed.");
@@ -356,8 +384,29 @@ export function ContentLibraryPage() {
   }, [isLive, callRpc, query, activeTab, statusFilter]);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    if (!isLive) return;
+    let cancelled = false;
+    const params: Record<string, unknown> = {
+      p_query: query,
+      p_limit: 100,
+      p_offset: 0,
+    };
+    if (activeTab !== "all") params.p_library_types = [activeTab];
+    if (statusFilter) params.p_status = statusFilter;
+    void callRpc("search_library", params).then((rows) => {
+      if (cancelled) return;
+      setItems(libraryItemsFromRows(rows as Record<string, unknown>[]));
+      setLoading(false);
+    }).catch((caught) => {
+      if (cancelled) return;
+      setItems([]);
+      setSearchError(caught instanceof Error ? caught.message : "Search failed.");
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLive, callRpc, query, activeTab, statusFilter]);
 
   const visibleItems = useMemo(() => items, [items]);
 

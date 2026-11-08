@@ -48,14 +48,12 @@ import {
   type CompositionDraft,
   type CompositionReference,
   type CompositionTemplateSessionSpec,
-  type CompositionTemplateSpec,
   type CustomRecipeRecord,
   type CustomTemplateRecord,
   type LibraryActivityInsert,
   type RecipeSpec,
 } from "../content/composition-engine.ts";
 import {
-  buildCompositionDraftFromPackage,
   hydrateCompositionFromDraft,
   loadLocalCompositionState,
   parseCompositionReferences,
@@ -71,7 +69,7 @@ import {
 } from "../content/materialise.ts";
 import { emptyPackage } from "../content/factories.ts";
 import { publicationGate } from "../content/publication-gate.ts";
-import type { AuthoringDraft, ContentActivity, ContentBlock, ContentDocument } from "../content/types.ts";
+import type { AuthoringDraft, ContentActivity, ContentDocument } from "../content/types.ts";
 import type { LibraryQuestion, LibraryResource } from "../content/library-reuse.ts";
 import type { HubCourseLinkRecord, HubRecord } from "../api/admin-api.ts";
 import { useAdminPortal } from "../stores/admin-portal";
@@ -510,8 +508,8 @@ function RecipeEditor({
 export function CompositionPage() {
   const { data, dataSource, callRpc, saveCurriculumDraft } = useAdminPortal();
   const isLive = dataSource.mode === "live" && dataSource.state === "ready";
-  const hubs = data?.hubs ?? [];
-  const links = data?.hubCourseLinks ?? [];
+  const hubs = useMemo(() => data?.hubs ?? [], [data?.hubs]);
+  const links = useMemo(() => data?.hubCourseLinks ?? [], [data?.hubCourseLinks]);
   const productionHubs = useMemo(
     () => hubs.filter((hub) => hub.hubCode !== "composition-preview"),
     [hubs],
@@ -551,13 +549,12 @@ export function CompositionPage() {
 
   const pkg = draft.package;
 
-  useEffect(() => {
-    if (!defaultHub || pkg.hub.id !== "composition-preview") return;
+  if (defaultHub && pkg.hub.id === "composition-preview") {
     setDraft((current) => ({
       ...current,
       package: emptyPackage(defaultHub.hubCode, defaultHub.hubName, defaultLink?.courseKey || "course"),
     }));
-  }, [defaultHub, defaultLink?.courseKey, pkg.hub.id]);
+  }
 
   const setHubContext = useCallback((hubCode: string) => {
     const hub = hubs.find((item) => item.hubCode === hubCode);
@@ -594,8 +591,11 @@ export function CompositionPage() {
     const persistedDraft = readPersistedDraft();
     if (!persistedDraft) return;
     const persistedRefs = loadLocalCompositionState(persistedDraft.id);
-    setSavedDraft(persistedDraft);
-    setDraft(hydrateCompositionFromDraft(persistedDraft, persistedRefs));
+    const next = hydrateCompositionFromDraft(persistedDraft, persistedRefs);
+    queueMicrotask(() => {
+      setSavedDraft(persistedDraft);
+      setDraft(next);
+    });
   }, []);
 
   const fetchCatalog = useCallback(async () => {
@@ -616,9 +616,34 @@ export function CompositionPage() {
     }
   }, [callRpc, includeArchived, isLive]);
 
+  const catalogKey = `${isLive}\0${includeArchived}`;
+  const [appliedCatalogKey, setAppliedCatalogKey] = useState(catalogKey);
+  if (appliedCatalogKey !== catalogKey) {
+    setAppliedCatalogKey(catalogKey);
+    setLoadingCatalog(isLive);
+    if (isLive) setCatalogMessage(null);
+  }
+
   useEffect(() => {
-    void fetchCatalog();
-  }, [fetchCatalog]);
+    if (!isLive) return;
+    let cancelled = false;
+    void Promise.all([
+      callRpc("list_composition_templates", { p_include_archived: includeArchived }),
+      callRpc("list_curriculum_recipes", { p_include_archived: includeArchived }),
+    ]).then(([templateRows, recipeRows]) => {
+      if (cancelled) return;
+      setCustomTemplates((templateRows as Record<string, unknown>[]).map(parseCustomTemplateRecord));
+      setCustomRecipes((recipeRows as Record<string, unknown>[]).map(parseCustomRecipeRecord));
+      setLoadingCatalog(false);
+    }).catch((caught) => {
+      if (cancelled) return;
+      setCatalogMessage(caught instanceof Error ? caught.message : "Unable to load composition catalog");
+      setLoadingCatalog(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [callRpc, includeArchived, isLive]);
 
   const selectedWeekRecord = useMemo(
     () => pkg.weeks.find((week) => week.id === selectedWeek) ?? null,

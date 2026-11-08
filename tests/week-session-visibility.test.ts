@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -37,6 +37,11 @@ function documentsPackage(weeks: ContentDocument[], sessions: ContentDocument[])
 function hubPackage(relative: string): ContentPackage {
   const raw = readJson(join(projects, relative));
   return documentsPackage(raw.weeks, raw.sessions);
+}
+
+function optionalHubTest(name: string, requiredFile: string, body: () => void) {
+  const path = join(projects, requiredFile);
+  test(name, { skip: existsSync(path) ? false : `sibling hub checkout not present: ${requiredFile}` }, body);
 }
 
 function activityWithBlock(id: string, title: string) {
@@ -196,7 +201,7 @@ test("remove session uses entityType session and action remove on the shared pat
   assert.equal(sessionRemoveSuccessMessage("Lesson 2"), "Lesson 2 is hidden from learners.");
 });
 
-test("T Level Week 1 lists four sessions and mixed statuses", () => {
+optionalHubTest("T Level Week 1 lists four sessions and mixed statuses", "tlevel-software-development-hub/content/tlevel-software-development/package.json", () => {
   const pkg = hubPackage("tlevel-software-development-hub/content/tlevel-software-development/package.json");
   const week = pkg.weeks.find((item) => item.id === "week-1");
   assert.ok(week);
@@ -220,7 +225,7 @@ test("T Level Week 1 lists four sessions and mixed statuses", () => {
   assert.equal(rows[1]?.action, "post");
 });
 
-test("Unit 3 selected week lists actual session types without lesson-id assumptions", () => {
+optionalHubTest("Unit 3 selected week lists actual session types without lesson-id assumptions", "unit-3-Cyber-Security-Hub/content/unit-3-cyber-security/package.json", () => {
   const pkg = hubPackage("unit-3-Cyber-Security-Hub/content/unit-3-cyber-security/package.json");
   const week = pkg.weeks.find((item) => item.id === "week-2");
   assert.ok(week);
@@ -233,7 +238,7 @@ test("Unit 3 selected week lists actual session types without lesson-id assumpti
   assert.deepEqual(rows.map((row) => row.id), sessions.map((item) => item.id));
 });
 
-test("Unit 14 selected week resolves related sessions from package relationships", () => {
+optionalHubTest("Unit 14 selected week resolves related sessions from package relationships", "unit-14-software-engineering-for-business-hub/content/unit-14/weeks.json", () => {
   const weeks = readJson(join(projects, "unit-14-software-engineering-for-business-hub/content/unit-14/weeks.json"));
   const sessions = readJson(join(projects, "unit-14-software-engineering-for-business-hub/content/unit-14/sessions.json"));
   const pkg = documentsPackage(weeks, sessions);
@@ -250,7 +255,7 @@ test("Unit 14 selected week resolves related sessions from package relationships
   assert.equal(rows.length, related.length);
 });
 
-test("Emerging Digital Technologies one-session week renders cleanly", () => {
+optionalHubTest("Emerging Digital Technologies one-session week renders cleanly", "Emerging-Digital-Technologies-Hub/content/l2e-exploring-emerging-digital-technologies/package.json", () => {
   const pkg = hubPackage("Emerging-Digital-Technologies-Hub/content/l2e-exploring-emerging-digital-technologies/package.json");
   const week = pkg.weeks.find((item) => item.id === "week-1");
   assert.ok(week);

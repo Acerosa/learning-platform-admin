@@ -186,8 +186,12 @@ export function GroupGeneratorPage() {
     [callRpc],
   );
 
-  useEffect(() => {
-    if (!session) return;
+  const sessionSyncKey = session
+    ? `${session.id}\0${session.preferredGroupSize}\0${session.specialistRoleTitle ?? ""}`
+    : "";
+  const [appliedSessionSyncKey, setAppliedSessionSyncKey] = useState(sessionSyncKey);
+  if (session && appliedSessionSyncKey !== sessionSyncKey) {
+    setAppliedSessionSyncKey(sessionSyncKey);
     setPreferredSize(session.preferredGroupSize);
     if (session.specialistRoleTitle) {
       setSpecialistRoleTitle(session.specialistRoleTitle);
@@ -196,16 +200,26 @@ export function GroupGeneratorPage() {
       );
       setRoleProfileId(matched?.id ?? "custom");
     }
-  }, [session?.id, session?.preferredGroupSize, session?.specialistRoleTitle]);
+  }
 
   useEffect(() => {
     if (!live) return;
     const stored = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (!stored) return;
-    void refreshSession(stored).catch(() => {
-      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    });
-  }, [live, refreshSession]);
+    let cancelled = false;
+    void callRpc("get_grouping_session", { p_session_id: stored })
+      .then((rows) => {
+        if (cancelled) return;
+        const next = asSession(rows[0]);
+        if (next) setSession(next);
+      })
+      .catch(() => {
+        if (!cancelled) window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [live, callRpc]);
 
   useEffect(() => {
     const sessionId = session?.id;
@@ -367,9 +381,9 @@ export function GroupGeneratorPage() {
                 disabled={busy}
               />
             </label>
-            <label style={{ display: "grid", gap: "0.35rem" }}>
-              <span>Preferred group size</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <span id="create-preferred-group-size">Preferred group size</span>
+              <div role="group" aria-labelledby="create-preferred-group-size" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <button
                   className="button button--secondary button--small"
                   type="button"
@@ -392,7 +406,7 @@ export function GroupGeneratorPage() {
                   +
                 </button>
               </div>
-            </label>
+            </div>
             <label style={{ display: "grid", gap: "0.35rem", minWidth: "14rem" }}>
               <span>Role profile</span>
               <select
@@ -477,6 +491,8 @@ export function GroupGeneratorPage() {
                 ) : null}
               </div>
               <figure style={{ margin: 0, textAlign: "center" }}>
+                {/* Generated QR URL. next/image needs the Next optimiser, which the static Pages build does not serve. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={qrImageUrl(joinUrl)}
                   alt={`QR code for join code ${session.joinCode}`}
@@ -557,9 +573,9 @@ export function GroupGeneratorPage() {
                 </div>
               </div>
               <div className="toolbar" style={{ flexWrap: "wrap", gap: "1rem", alignItems: "end" }}>
-                <label style={{ display: "grid", gap: "0.35rem" }}>
-                  <span>Preferred group size</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <div style={{ display: "grid", gap: "0.35rem" }}>
+                  <span id="generate-preferred-group-size">Preferred group size</span>
+                  <div role="group" aria-labelledby="generate-preferred-group-size" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <button
                       className="button button--secondary button--small"
                       type="button"
@@ -582,7 +598,7 @@ export function GroupGeneratorPage() {
                       +
                     </button>
                   </div>
-                </label>
+                </div>
                 <button
                   className="button button--primary"
                   type="button"

@@ -125,12 +125,14 @@ export function HubLearningResultsPage({
     setFilters((current) => cascadeHubLearningFilters(filterRows, { ...current, ...patch }));
   }, [filterRows]);
 
-  useEffect(() => {
+  const [filterHubCode, setFilterHubCode] = useState(hubCode);
+  if (filterHubCode !== hubCode) {
+    setFilterHubCode(hubCode);
     setFilters(EMPTY_HUB_LEARNING_FILTERS);
     setSelected(null);
     setEvidence([]);
     setError(null);
-  }, [hubCode]);
+  }
 
   useEffect(() => {
     let cancelled = false;

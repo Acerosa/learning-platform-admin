@@ -176,7 +176,13 @@ export function KnowledgeReportsView({
   }, [callRpc, hubCode, live]);
 
   useEffect(() => {
-    void loadRows();
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void loadRows();
+    });
+    return () => {
+      active = false;
+    };
   }, [loadRows]);
 
   useEffect(() => {
