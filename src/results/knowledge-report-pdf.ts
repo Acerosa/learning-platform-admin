@@ -85,7 +85,7 @@ async function documentWithLines(sections: readonly string[]): Promise<Uint8Arra
   const bold = await pdf.embedFont(StandardFonts.TimesRomanBold);
   const width = PAGE_WIDTH - MARGIN * 2;
   let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-  let pages: PDFPage[] = [page];
+  const pages: PDFPage[] = [page];
   let y = PAGE_HEIGHT - MARGIN;
 
   function nextPage() {
