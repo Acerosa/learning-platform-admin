@@ -98,11 +98,14 @@ test("hub registry exposes safe view and prepared actions", async () => {
 test("attempt and analytics routes expose summary data without responses", async () => {
   const attempts = await renderText("/attempts");
   const analytics = await renderText("/analytics");
-  assert.match(attempts.html, /Summary evidence only/);
-  assert.match(attempts.html, /SYNTH-0001/);
+  assert.match(attempts.html, /Assignment markbook/);
+  assert.match(attempts.html, /All stored attempts/);
+  assert.match(attempts.html, /foundations-programming-diagnostic/);
+  assert.match(attempts.html, /70\.0%/);
   assert.doesNotMatch(attempts.html, /response_payload/i);
-  assert.match(analytics.html, /Backend-derived aggregates/);
+  assert.match(analytics.html, /Staff assessment analytics from authoritative attempts/);
   assert.match(analytics.html, /Assessment overview/);
-  assert.match(analytics.html, /70\.0%/);
+  assert.match(analytics.html, /Latest-result Average/);
+  assert.match(analytics.html, /81\.0%/);
   assert.doesNotMatch(analytics.html, /response_payload/i);
 });

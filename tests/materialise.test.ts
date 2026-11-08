@@ -23,7 +23,7 @@ import {
   parseCompositionReferences,
   serialiseCompositionReferences,
 } from "../src/content/composition-persistence.ts";
-import { createSession, createWeek, emptyPackage } from "../src/content/factories.ts";
+import { createSession, emptyPackage } from "../src/content/factories.ts";
 import type { ContentActivity } from "../src/content/types.ts";
 
 function makeDraft(): CompositionDraft {

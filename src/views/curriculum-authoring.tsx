@@ -335,14 +335,12 @@ export function CurriculumAuthoringPage({
     if (hydratedFromStorage.current) return;
     hydratedFromStorage.current = true;
     const stored = loadDrafts();
-    /* eslint-disable react-hooks/set-state-in-effect -- restore local drafts after SSR hydration */
     setDrafts(stored);
     const next = resolveActiveDraftForContext(stored, initialHubCode, initialCourseKey, defaultHub?.hubName || initialHubCode, actor);
     setDraft(next);
     applySelectionForDraft(next, stored, true);
     setHydrated(true);
     setContextReady(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [actor, defaultHub?.hubName, initialCourseKey, initialHubCode]);
 
   useEffect(() => {

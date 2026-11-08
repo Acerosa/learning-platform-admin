@@ -85,7 +85,7 @@ test("package variant insert attaches the new activity to the same session", () 
 });
 
 test("editing published content creates a draft working copy", () => {
-  let draft = createDraft("hub-a", "Hub A", "course-a");
+  const draft = createDraft("hub-a", "Hub A", "course-a");
   draft.package.activities = [createActivity({ id: "loops-practice", title: "Loops" })];
   const ready = submitForReview(draft);
   const reviewing = startReview(ready, "Riley");

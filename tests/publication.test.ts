@@ -552,16 +552,17 @@ test("publicationGate still rejects malformed drag-drop", () => {
   assert.ok(gate.issues.some((issue) => issue.code === "INVALID_RELATIONSHIP" || issue.code === "MISSING_FIELD"));
 });
 
-test("publicationGate accepts T Level package 0.4.2 with nine drag-drop blocks", async () => {
-  const { existsSync, readFileSync } = await import("node:fs");
-  const { resolve } = await import("node:path");
-  const tlevelPath = resolve(process.cwd(), "../tlevel-software-development-hub/content/tlevel-software-development/package.json");
-  if (!existsSync(tlevelPath)) {
-    return;
+test("publicationGate accepts a package of nine valid drag-drop blocks", () => {
+  const draft = withContent();
+  const activity = draft.package.activities[0];
+  const blocks: ReturnType<typeof createBlock>[] = [];
+  for (let index = 0; index < 9; index += 1) {
+    blocks.push(createBlock(activity.id, "drag-drop", blocks.map((block) => block.id)));
   }
-  const pkg = JSON.parse(readFileSync(tlevelPath, "utf8"));
-  assert.equal(pkg.version, "0.4.2");
-  const gate = publicationGate(pkg);
+  activity.blocks = blocks;
+  assert.equal(blocks.length, 9);
+  assert.ok(blocks.every((block) => block.type === "drag-drop"));
+  const gate = publicationGate(syncCurriculumLists(draft.package));
   const unsupported = gate.issues.filter((issue) => issue.code === "UNSUPPORTED_BLOCK_TYPE");
   assert.equal(unsupported.length, 0, unsupported.map((issue) => `${issue.path}: ${issue.message}`).join("\n"));
   assert.equal(gate.ok, true, gate.issues.map((issue) => `${issue.code} ${issue.path}: ${issue.message}`).join("\n"));

@@ -417,8 +417,9 @@ export function acceptUpdate(
 
 export function ignoreUpdate(
   draft: CompositionDraft,
-  _instanceId: string,
+  instanceId: string,
 ): CompositionDraft {
+  void instanceId;
   return draft;
 }
 

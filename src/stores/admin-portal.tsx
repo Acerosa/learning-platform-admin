@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -384,7 +385,9 @@ export function AdminPortalProvider({ children }: { children: React.ReactNode })
   });
 
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const bootstrapGeneration = useRef(0);
 
   const moduleLoadPromises = useRef(new Map<AdminModuleDataKey, Promise<void>>());

@@ -16,6 +16,7 @@ export function postWeekAndPublishConfirm(weekTitle: string): string {
 }
 
 export function removeWeekAndPublishConfirm(weekTitle: string): string {
+  void weekTitle;
   return `${REMOVE_WEEK_CONFIRM}. This will publish a new version to the platform. Continue?`;
 }
 export function isContentWeekStatus(value: string): value is ContentWeekStatus {

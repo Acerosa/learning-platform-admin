@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Check out administration portal
@@ -24,30 +24,118 @@ jobs:
         with:
           path: learning-platform-admin
 
+      - name: Read shared dependency pins
+        id: siblings
+        working-directory: learning-platform-admin
+        run: node scripts/bootstrap-siblings.mjs --github-output
+
       - name: Check out shared platform core
         uses: actions/checkout@v7
         with:
-          repository: Acerosa/learning-platform-core
+          repository: ${{ steps.siblings.outputs.core_repository }}
+          ref: ${{ steps.siblings.outputs.core_ref }}
           path: learning-platform-core
 
       - name: Check out shared curriculum content engine
         uses: actions/checkout@v7
         with:
-          repository: Acerosa/learning-platform-content
-          ref: v0.1.3
+          repository: ${{ steps.siblings.outputs.content_repository }}
+          ref: ${{ steps.siblings.outputs.content_ref }}
           path: learning-platform-content
 
       - name: Check out shared results package
         uses: actions/checkout@v7
         with:
-          repository: Acerosa/learning-platform-results
-          ref: v0.1.2
+          repository: ${{ steps.siblings.outputs.results_repository }}
+          ref: ${{ steps.siblings.outputs.results_ref }}
           path: learning-platform-results
+
+      - name: Verify shared dependency pins
+        working-directory: learning-platform-admin
+        run: node scripts/bootstrap-siblings.mjs --check
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: ${{ steps.siblings.outputs.node_version }}
+          cache: npm
+          cache-dependency-path: learning-platform-admin/package-lock.json
+
+      - name: Install dependencies
+        working-directory: learning-platform-admin
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: learning-platform-admin
+        run: npm run typecheck
+
+      - name: Integration tests
+        working-directory: learning-platform-admin
+        run: npm run test:integration
+
+      - name: Build server bundle
+        working-directory: learning-platform-admin
+        run: npm run build
+
+      - name: Route tests
+        working-directory: learning-platform-admin
+        run: node --test tests/*.test.mjs
+
+      - name: Authoring tests
+        working-directory: learning-platform-admin
+        run: npm run test:authoring
+
+      - name: Lint
+        working-directory: learning-platform-admin
+        run: npm run lint
+
+      - name: Build static dashboard
+        working-directory: learning-platform-admin
+        run: npm run build:pages
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out administration portal
+        uses: actions/checkout@v7
+        with:
+          path: learning-platform-admin
+
+      - name: Read shared dependency pins
+        id: siblings
+        working-directory: learning-platform-admin
+        run: node scripts/bootstrap-siblings.mjs --github-output
+
+      - name: Check out shared platform core
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.siblings.outputs.core_repository }}
+          ref: ${{ steps.siblings.outputs.core_ref }}
+          path: learning-platform-core
+
+      - name: Check out shared curriculum content engine
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.siblings.outputs.content_repository }}
+          ref: ${{ steps.siblings.outputs.content_ref }}
+          path: learning-platform-content
+
+      - name: Check out shared results package
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.siblings.outputs.results_repository }}
+          ref: ${{ steps.siblings.outputs.results_ref }}
+          path: learning-platform-results
+
+      - name: Verify shared dependency pins
+        working-directory: learning-platform-admin
+        run: node scripts/bootstrap-siblings.mjs --check
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ steps.siblings.outputs.node_version }}
           cache: npm
           cache-dependency-path: learning-platform-admin/package-lock.json
 
@@ -79,7 +167,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - validate
+      - build
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

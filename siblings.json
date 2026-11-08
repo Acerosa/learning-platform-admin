@@ -1,0 +1,39 @@
+{
+  "node": "22.23.2",
+  "minimumNode": "22.13.0",
+  "repositories": [
+    {
+      "id": "core",
+      "package": "@learning-platform/core",
+      "version": "0.2.23",
+      "directory": "learning-platform-core",
+      "repository": "Acerosa/learning-platform-core",
+      "url": "https://github.com/Acerosa/learning-platform-core.git",
+      "ref": "v0.2.23",
+      "commit": "56649cecfbc14397d0f3330b8562f579818738e4",
+      "tree": "47288605257fec0e04e775961a6dad4277548206"
+    },
+    {
+      "id": "content",
+      "package": "@learning-platform/content",
+      "version": "0.1.4",
+      "directory": "learning-platform-content",
+      "repository": "Acerosa/learning-platform-content",
+      "url": "https://github.com/Acerosa/learning-platform-content.git",
+      "ref": "v0.1.4",
+      "commit": "da9bb11d40241355308fc88577ee02a74672705c",
+      "tree": "71fabad2f488068f446a58019c8ef25cc2cddf2c"
+    },
+    {
+      "id": "results",
+      "package": "@learning-platform/results",
+      "version": "0.1.2",
+      "directory": "learning-platform-results",
+      "repository": "Acerosa/learning-platform-results",
+      "url": "https://github.com/Acerosa/learning-platform-results.git",
+      "ref": "v0.1.2",
+      "commit": "610689eef11cca6821878cc9ecec2eb2cc03dfb1",
+      "tree": "9dfc6caf264c23bc12a1c4ca51bc5bd6e7f7802b"
+    }
+  ]
+}

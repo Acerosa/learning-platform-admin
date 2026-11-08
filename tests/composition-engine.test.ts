@@ -32,8 +32,8 @@ import {
   resolveActivityEstimatedDuration,
   validateEstimatedDurationMinutes,
 } from "../src/content/composition-engine.ts";
-import { createActivity, createSession, createWeek, emptyPackage } from "../src/content/factories.ts";
-import type { ContentActivity, ContentBlock } from "../src/content/types.ts";
+import { createSession, createWeek, emptyPackage } from "../src/content/factories.ts";
+import type { ContentActivity } from "../src/content/types.ts";
 
 function makeDraft(): CompositionDraft {
   const pkg = emptyPackage("test-hub", "Test Hub", "test-course");
