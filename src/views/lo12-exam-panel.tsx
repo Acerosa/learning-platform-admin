@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { LearnerRecord, ResponseRecord, ReviewResponseRequest } from "../api/admin-api";
-import { examCohort, matchClassLearners, paperDurationLabel, type Lo12Record } from "../exam/lo12";
+import { canReleaseMarking, examCohort, markingStateLabel, matchClassLearners, paperDurationLabel, type Lo12Record } from "../exam/lo12";
 
 const GUIDANCE = [
   {
@@ -43,6 +43,8 @@ export function Lo12ExamPanel({
   onRelease,
   onLoadAllowance,
   onSetAllowance,
+  onLoadMarkingStatus,
+  onFinalise,
 }: {
   records?: Lo12Record[];
   enrolled?: string[];
@@ -52,6 +54,8 @@ export function Lo12ExamPanel({
   onRelease?: (attemptId: string) => Promise<unknown>;
   onLoadAllowance?: (studentNumber: string) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
   onSetAllowance?: (studentNumber: string, extraSeconds: number) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
+  onLoadMarkingStatus?: (attemptId: string) => Promise<string | null>;
+  onFinalise?: (attemptId: string) => Promise<string | null>;
 }) {
   const summary = examCohort(records, enrolled);
   const scripts = responses.filter((response) => response.activityKey === PAPER);
@@ -62,7 +66,8 @@ export function Lo12ExamPanel({
   const [allowance, setAllowance] = useState<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>(null);
   const [allowanceMessage, setAllowanceMessage] = useState("");
   const [savedMarks, setSavedMarks] = useState<Record<string, number>>({});
-  const [finalised, setFinalised] = useState<Record<string, boolean>>({});
+  const [markingStatus, setMarkingStatus] = useState<Record<string, string>>({});
+  const [markingMessage, setMarkingMessage] = useState("");
   const matches = useMemo(() => matchClassLearners(learners, query).slice(0, 8), [learners, query]);
 
   useEffect(() => {
@@ -78,11 +83,25 @@ export function Lo12ExamPanel({
     });
     return () => { cancelled = true; };
   }, [onLoadAllowance, studentNumber]);
+
+  const attemptKey = attemptIds.join(",");
+  useEffect(() => {
+    if (!onLoadMarkingStatus || !attemptKey) return;
+    let cancelled = false;
+    for (const attemptId of attemptKey.split(",")) {
+      void onLoadMarkingStatus(attemptId).then((status) => {
+        if (!cancelled && status) setMarkingStatus((current) => ({ ...current, [attemptId]: status }));
+      }).catch(() => {
+        if (!cancelled) setMarkingMessage("Marking status could not be loaded.");
+      });
+    }
+    return () => { cancelled = true; };
+  }, [attemptKey, onLoadMarkingStatus]);
   return (
     <section aria-labelledby="lo12-exam-heading">
       <h2 id="lo12-exam-heading">Unit 3 Exam Practice: LO1 and LO2</h2>
       <p>
-        Written answers are marked here. Keyword matching is not used. Marks stay hidden from the student until you finalise them.
+        Written answers are marked here. Keyword matching is not used. Marks stay hidden from the student until you release the result.
         Pending scripts are not counted as zero.
       </p>
       <ul>
@@ -132,29 +151,53 @@ export function Lo12ExamPanel({
             >
               <p>{response.questionKey} · {response.maxScore} marks</p>
               <p>{String(response.responsePayload.text || response.responsePayload.value || "")}</p>
-              <label>
+              <label style={{ display: "grid", gap: "0.25rem" }}>
                 Awarded marks
-                <input name="score" type="number" min={0} max={response.maxScore} defaultValue={response.score ?? 0} required />
+                <input name="score" type="number" min={0} max={response.maxScore} defaultValue={response.score ?? 0} required style={{ width: "6rem" }} />
               </label>
-              <label>
+              <label style={{ display: "grid", gap: "0.25rem" }}>
                 Feedback
-                <textarea name="feedback" defaultValue={response.feedbackSummary ?? ""} />
+                <textarea name="feedback" defaultValue={response.feedbackSummary ?? ""} style={{ width: "100%", minHeight: "4.5rem" }} />
               </label>
-              <label>
+              <label style={{ display: "grid", gap: "0.25rem" }}>
                 Next step
-                <textarea name="next" defaultValue={response.feedbackNextStep ?? ""} />
+                <textarea name="next" defaultValue={response.feedbackNextStep ?? ""} style={{ width: "100%", minHeight: "3rem" }} />
               </label>
               <button type="submit">Save mark</button>
             </form>
           ))}
+          <p>{markingStateLabel(markingStatus[attemptId])}</p>
           <button
             type="button"
-            onClick={() => setFinalised((current) => ({ ...current, [attemptId]: true }))}
-            disabled={scripts.filter((response) => response.attemptId === attemptId).some((response) => savedMarks[response.responseId] == null && response.requiresReview)}
+            onClick={() => {
+              void onFinalise?.(attemptId).then((status) => {
+                if (status) {
+                  setMarkingStatus((current) => ({ ...current, [attemptId]: status }));
+                  setMarkingMessage(markingStateLabel(status));
+                }
+              }).catch(() => setMarkingMessage("Finalise marking after every question has a saved mark."));
+            }}
+            disabled={
+              markingStatus[attemptId] === "finalised"
+              || markingStatus[attemptId] === "released"
+              || scripts.filter((response) => response.attemptId === attemptId).some((response) => savedMarks[response.responseId] == null && response.requiresReview)
+            }
           >
             Finalise marking
           </button>
-          <button type="button" disabled={!finalised[attemptId]} onClick={() => void onRelease?.(attemptId)}>Release results</button>
+          <button
+            type="button"
+            disabled={!canReleaseMarking(markingStatus[attemptId])}
+            onClick={() => {
+              void onRelease?.(attemptId).then(() => {
+                setMarkingStatus((current) => ({ ...current, [attemptId]: "released" }));
+                setMarkingMessage("Results released");
+              }).catch(() => setMarkingMessage("Results stay hidden until marking is finalised."));
+            }}
+          >
+            Release results
+          </button>
+          {markingMessage ? <p role="status">{markingMessage}</p> : null}
         </article>
       ))}
       <form

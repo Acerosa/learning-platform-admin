@@ -405,6 +405,16 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
               totalSeconds: Number(row.total_seconds || 0),
             } : null;
           }}
+          onLoadExamMarkingStatus={async (attemptId) => {
+            const rows = await callRpc("timed_paper_marking_status", { p_attempt_id: attemptId });
+            const row = rows[0] as { marking_status?: string } | undefined;
+            return row?.marking_status || null;
+          }}
+          onFinaliseExamMarking={async (attemptId) => {
+            const rows = await callRpc("finalise_timed_paper_marking", { p_attempt_id: attemptId });
+            const row = rows[0] as { marking_status?: string } | undefined;
+            return row?.marking_status || null;
+          }}
           onSetExamAllowance={async (studentNumber, extraSeconds) => {
             const rows = await callRpc("set_timed_paper_allowance_for_learner", {
               p_activity_key: "u3-lo12-timed-mini-mock",

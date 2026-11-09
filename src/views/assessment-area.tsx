@@ -54,6 +54,8 @@ export function AssessmentArea({
   onReleaseExamResults,
   onLoadExamAllowance,
   onSetExamAllowance,
+  onLoadExamMarkingStatus,
+  onFinaliseExamMarking,
   includeAttempts = false,
 }: {
   data: AdminDataSnapshot;
@@ -64,6 +66,8 @@ export function AssessmentArea({
   onReleaseExamResults?: (attemptId: string) => Promise<unknown>;
   onLoadExamAllowance?: (studentNumber: string) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
   onSetExamAllowance?: (studentNumber: string, extraSeconds: number) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
+  onLoadExamMarkingStatus?: (attemptId: string) => Promise<string | null>;
+  onFinaliseExamMarking?: (attemptId: string) => Promise<string | null>;
   includeAttempts?: boolean;
 }) {
   const [tab, setTab] = useState<AssessmentTab>(initialTab);
@@ -98,6 +102,8 @@ export function AssessmentArea({
             onRelease={onReleaseExamResults}
             onLoadAllowance={onLoadExamAllowance}
             onSetAllowance={onSetExamAllowance}
+            onLoadMarkingStatus={onLoadExamMarkingStatus}
+            onFinalise={onFinaliseExamMarking}
           />
         ) : null}
       </div>

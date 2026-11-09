@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { examCohort, matchClassLearners, paperDurationLabel } from "../src/exam/lo12.mjs";
+import { canReleaseMarking, examCohort, markingStateLabel, matchClassLearners, paperDurationLabel } from "../src/exam/lo12.mjs";
 
 test("class average ignores unmarked mini-mocks", () => {
   const summary = examCohort([
@@ -33,4 +33,10 @@ test("learner search uses name or student number only", () => {
   assert.equal(matchClassLearners(learners, "student a").length, 1);
   assert.equal(matchClassLearners(learners, "synth-0002")[0].studentNumber, "SYNTH-0002");
   assert.equal(paperDurationLabel(1200, 600), "30 min");
+  assert.equal(markingStateLabel("in_progress"), "Marking in progress");
+  assert.equal(markingStateLabel("finalised"), "Marking finalised");
+  assert.equal(markingStateLabel("released"), "Results released");
+  assert.equal(canReleaseMarking("finalised"), true);
+  assert.equal(canReleaseMarking("in_progress"), false);
+  assert.equal(canReleaseMarking("released"), false);
 });

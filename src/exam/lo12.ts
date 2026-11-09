@@ -1,4 +1,4 @@
-import { examCohort, matchClassLearners, paperDurationLabel } from "./lo12.mjs";
+import { canReleaseMarking, examCohort, markingStateLabel, matchClassLearners, paperDurationLabel } from "./lo12.mjs";
 
 export type Lo12Record = {
   activity_key: string;
@@ -9,4 +9,4 @@ export type Lo12Record = {
   student_id: string;
 };
 
-export { examCohort, matchClassLearners, paperDurationLabel };
+export { canReleaseMarking, examCohort, markingStateLabel, matchClassLearners, paperDurationLabel };

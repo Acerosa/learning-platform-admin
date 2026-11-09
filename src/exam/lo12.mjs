@@ -16,6 +16,16 @@ export function matchClassLearners(learners, query) {
   ));
 }
 
+export function markingStateLabel(status) {
+  if (status === "released") return "Results released";
+  if (status === "finalised") return "Marking finalised";
+  return "Marking in progress";
+}
+
+export function canReleaseMarking(status) {
+  return status === "finalised";
+}
+
 export function paperDurationLabel(standardSeconds, extraSeconds) {
   const total = Math.max(0, Number(standardSeconds) || 0) + Math.max(0, Number(extraSeconds) || 0);
   const minutes = Math.floor(total / 60);
