@@ -274,7 +274,7 @@ function legacyHeading(moduleId: AdminModuleId): string | undefined {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, moduleCache, publishCurriculum, setSessionVisibility, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, bootstrapReady } = useAdminPortal();
+  const { data, session, dataSource, moduleCache, publishCurriculum, setSessionVisibility, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, callRpc, bootstrapReady } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
@@ -391,6 +391,13 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
           openPending={openPending}
           legacyHeading={heading}
           onReviewResponse={reviewResponse}
+          onReleaseExamResults={(attemptId) => callRpc("release_timed_paper_results", { p_attempt_id: attemptId })}
+          onSetExamAllowance={(studentId, extraSeconds) => callRpc("set_timed_paper_allowance", {
+            p_activity_key: "u3-lo12-timed-mini-mock",
+            p_activity_version: "0.1.0",
+            p_student_id: studentId,
+            p_extra_seconds: extraSeconds,
+          })}
           includeAttempts={moduleId === "attempts"}
         />
       );

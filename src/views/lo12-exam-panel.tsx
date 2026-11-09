@@ -1,3 +1,4 @@
+import type { ResponseRecord, ReviewResponseRequest } from "../api/admin-api";
 import { examCohort, type Lo12Record } from "../exam/lo12";
 
 const GUIDANCE = [
@@ -28,8 +29,26 @@ const GUIDANCE = [
   },
 ];
 
-export function Lo12ExamPanel({ records = [], enrolled = [] }: { records?: Lo12Record[]; enrolled?: string[] }) {
+const PAPER = "u3-lo12-timed-mini-mock";
+
+export function Lo12ExamPanel({
+  records = [],
+  enrolled = [],
+  responses = [],
+  onReviewResponse,
+  onRelease,
+  onSetAllowance,
+}: {
+  records?: Lo12Record[];
+  enrolled?: string[];
+  responses?: readonly ResponseRecord[];
+  onReviewResponse?: (request: ReviewResponseRequest) => Promise<unknown>;
+  onRelease?: (attemptId: string) => Promise<unknown>;
+  onSetAllowance?: (studentId: string, extraSeconds: number) => Promise<unknown>;
+}) {
   const summary = examCohort(records, enrolled);
+  const scripts = responses.filter((response) => response.activityKey === PAPER);
+  const attemptIds = [...new Set(scripts.map((response) => response.attemptId))];
   return (
     <section aria-labelledby="lo12-exam-heading">
       <h2 id="lo12-exam-heading">Unit 3 Exam Practice: LO1 and LO2</h2>
@@ -53,10 +72,68 @@ export function Lo12ExamPanel({ records = [], enrolled = [] }: { records?: Lo12R
         </article>
       ))}
       <p>
-        Mark each question with admin_api.review_response. The total is the sum of those five marks.
-        Students do not see marks or comments until you call admin_api.release_timed_paper_results.
-        Extra time for this paper is admin_api.set_timed_paper_allowance. It does not change the knowledge report’s word-count rule.
+        Mark each question with the existing review. The total is the sum of those five marks, out of 20.
+        Students do not see marks or comments until you release the result.
+        Extra time for this paper does not change the knowledge report’s word-count rule.
       </p>
+      <h3>Submitted scripts</h3>
+      {scripts.length === 0 ? <p>No submitted mini-mock is waiting in this view.</p> : null}
+      {attemptIds.map((attemptId) => (
+        <article key={attemptId}>
+          <h4>Attempt {attemptId}</h4>
+          {scripts.filter((response) => response.attemptId === attemptId).map((response) => (
+            <form
+              key={response.responseId}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const data = new FormData(event.currentTarget);
+                void onReviewResponse?.({
+                  responseId: response.responseId,
+                  awardedScore: Number(data.get("score")),
+                  isCorrect: null,
+                  feedbackSummary: String(data.get("feedback") || ""),
+                  feedbackNextStep: String(data.get("next") || ""),
+                });
+              }}
+            >
+              <p>{response.questionKey} · {response.maxScore} marks</p>
+              <p>{String(response.responsePayload.text || response.responsePayload.value || "")}</p>
+              <label>
+                Awarded marks
+                <input name="score" type="number" min={0} max={response.maxScore} defaultValue={response.score ?? 0} required />
+              </label>
+              <label>
+                Feedback
+                <textarea name="feedback" defaultValue={response.feedbackSummary ?? ""} />
+              </label>
+              <label>
+                Next step
+                <textarea name="next" defaultValue={response.feedbackNextStep ?? ""} />
+              </label>
+              <button type="submit">Save mark</button>
+            </form>
+          ))}
+          <button type="button" onClick={() => void onRelease?.(attemptId)}>Release results</button>
+        </article>
+      ))}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          void onSetAllowance?.(String(data.get("student") || ""), Number(data.get("seconds")));
+        }}
+      >
+        <h3>Additional time</h3>
+        <label>
+          Student account id
+          <input name="student" required />
+        </label>
+        <label>
+          Extra seconds
+          <input name="seconds" type="number" min={0} max={3600} defaultValue={0} required />
+        </label>
+        <button type="submit">Save additional time</button>
+      </form>
     </section>
   );
 }

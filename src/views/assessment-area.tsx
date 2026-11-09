@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { AdminDataSnapshot } from "../api/admin-api";
+import type { AdminDataSnapshot, ReviewResponseRequest } from "../api/admin-api";
 import type { PendingAction } from "../components/pending-action-dialog";
 import { getAdminModule } from "../router/modules";
 import type { AssessmentTab } from "../router/legacy-routes";
@@ -50,6 +50,8 @@ export function AssessmentArea({
   openPending,
   legacyHeading,
   onReviewResponse,
+  onReleaseExamResults,
+  onSetExamAllowance,
   includeAttempts = false,
 }: {
   data: AdminDataSnapshot;
@@ -57,6 +59,8 @@ export function AssessmentArea({
   openPending: (action: PendingAction) => void;
   legacyHeading?: string;
   onReviewResponse: Parameters<typeof ResultsArea>[0]["onReviewResponse"];
+  onReleaseExamResults?: (attemptId: string) => Promise<unknown>;
+  onSetExamAllowance?: (studentId: string, extraSeconds: number) => Promise<unknown>;
   includeAttempts?: boolean;
 }) {
   const [tab, setTab] = useState<AssessmentTab>(initialTab);
@@ -81,7 +85,14 @@ export function AssessmentArea({
             includeAttempts={includeAttempts}
           />
         ) : null}
-        {tab === "exam-practice" ? <Lo12ExamPanel /> : null}
+        {tab === "exam-practice" ? (
+          <Lo12ExamPanel
+            responses={data.responses}
+            onReviewResponse={onReviewResponse as (request: ReviewResponseRequest) => Promise<unknown>}
+            onRelease={onReleaseExamResults}
+            onSetAllowance={onSetExamAllowance}
+          />
+        ) : null}
       </div>
     </>
   );
