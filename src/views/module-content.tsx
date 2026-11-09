@@ -410,6 +410,16 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
             const row = rows[0] as { marking_status?: string } | undefined;
             return row?.marking_status || null;
           }}
+          onLoadClassLearners={async () => {
+            const rows = await callRpc("class_learners");
+            return rows.map((row) => {
+              const learner = row as { student_number?: string; display_name?: string };
+              return {
+                studentNumber: String(learner.student_number || ""),
+                displayName: String(learner.display_name || ""),
+              };
+            }).filter((learner) => learner.studentNumber);
+          }}
           onFinaliseExamMarking={async (attemptId) => {
             const rows = await callRpc("finalise_timed_paper_marking", { p_attempt_id: attemptId });
             const row = rows[0] as { marking_status?: string } | undefined;

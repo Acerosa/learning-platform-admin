@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { LearnerRecord, ResponseRecord, ReviewResponseRequest } from "../api/admin-api";
 import { canReleaseMarking, examCohort, markingStateLabel, matchClassLearners, paperDurationLabel, type Lo12Record } from "../exam/lo12";
 
@@ -39,6 +39,7 @@ export function Lo12ExamPanel({
   enrolled = [],
   responses = [],
   learners = [],
+  onLoadClassLearners,
   onReviewResponse,
   onRelease,
   onLoadAllowance,
@@ -50,6 +51,7 @@ export function Lo12ExamPanel({
   enrolled?: string[];
   responses?: readonly ResponseRecord[];
   learners?: readonly Pick<LearnerRecord, "studentNumber" | "displayName">[];
+  onLoadClassLearners?: () => Promise<readonly Pick<LearnerRecord, "studentNumber" | "displayName">[]>;
   onReviewResponse?: (request: ReviewResponseRequest) => Promise<unknown>;
   onRelease?: (attemptId: string) => Promise<unknown>;
   onLoadAllowance?: (studentNumber: string) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
@@ -61,6 +63,7 @@ export function Lo12ExamPanel({
   const scripts = responses.filter((response) => response.activityKey === PAPER);
   const attemptIds = [...new Set(scripts.map((response) => response.attemptId))];
   const [query, setQuery] = useState("");
+  const [classLearners, setClassLearners] = useState(learners);
   const [studentNumber, setStudentNumber] = useState("");
   const [minutes, setMinutes] = useState(0);
   const [allowance, setAllowance] = useState<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>(null);
@@ -68,7 +71,18 @@ export function Lo12ExamPanel({
   const [savedMarks, setSavedMarks] = useState<Record<string, number>>({});
   const [markingStatus, setMarkingStatus] = useState<Record<string, string>>({});
   const [markingMessage, setMarkingMessage] = useState("");
-  const matches = useMemo(() => matchClassLearners(learners, query).slice(0, 8), [learners, query]);
+  const matches = matchClassLearners(classLearners, query).slice(0, 8);
+
+  useEffect(() => {
+    if (!onLoadClassLearners) return;
+    let cancelled = false;
+    void onLoadClassLearners().then((rows) => {
+      if (!cancelled) setClassLearners(rows);
+    }).catch(() => {
+      if (!cancelled) setClassLearners([]);
+    });
+    return () => { cancelled = true; };
+  }, [onLoadClassLearners]);
 
   useEffect(() => {
     if (!studentNumber || !onLoadAllowance) {

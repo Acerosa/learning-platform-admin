@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { AdminDataSnapshot, ReviewResponseRequest } from "../api/admin-api";
+import type { AdminDataSnapshot, LearnerRecord, ReviewResponseRequest } from "../api/admin-api";
 import type { PendingAction } from "../components/pending-action-dialog";
 import { getAdminModule } from "../router/modules";
 import type { AssessmentTab } from "../router/legacy-routes";
-import { useAdminModuleData } from "../stores/use-admin-module-data";
 import { AssignmentsPanel } from "./admin-assessment-panels";
 import { Lo12ExamPanel } from "./lo12-exam-panel";
 import { ResultsArea } from "./results-area";
@@ -56,6 +55,7 @@ export function AssessmentArea({
   onSetExamAllowance,
   onLoadExamMarkingStatus,
   onFinaliseExamMarking,
+  onLoadClassLearners,
   includeAttempts = false,
 }: {
   data: AdminDataSnapshot;
@@ -68,12 +68,11 @@ export function AssessmentArea({
   onSetExamAllowance?: (studentNumber: string, extraSeconds: number) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
   onLoadExamMarkingStatus?: (attemptId: string) => Promise<string | null>;
   onFinaliseExamMarking?: (attemptId: string) => Promise<string | null>;
+  onLoadClassLearners?: () => Promise<readonly Pick<LearnerRecord, "studentNumber" | "displayName">[]>;
   includeAttempts?: boolean;
 }) {
   const [tab, setTab] = useState<AssessmentTab>(initialTab);
   const moduleDef = getAdminModule("assessment");
-  const people = useAdminModuleData("people");
-  const classLearners = data.learners.length ? data.learners : people.data?.learners ?? [];
 
   return (
     <>
@@ -97,7 +96,7 @@ export function AssessmentArea({
         {tab === "exam-practice" ? (
           <Lo12ExamPanel
             responses={data.responses}
-            learners={classLearners}
+            onLoadClassLearners={onLoadClassLearners}
             onReviewResponse={onReviewResponse as (request: ReviewResponseRequest) => Promise<unknown>}
             onRelease={onReleaseExamResults}
             onLoadAllowance={onLoadExamAllowance}
