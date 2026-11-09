@@ -1,7 +1,7 @@
 import type { AdminModuleId } from "./modules";
 
 export type PeopleTab = "learners" | "groups" | "staff";
-export type AssessmentTab = "assignments" | "results";
+export type AssessmentTab = "assignments" | "results" | "exam-practice";
 export type SystemTab = "status" | "audit" | "access" | "advanced";
 
 export type LegacyRouteContext = {

@@ -6,6 +6,7 @@ import type { PendingAction } from "../components/pending-action-dialog";
 import { getAdminModule } from "../router/modules";
 import type { AssessmentTab } from "../router/legacy-routes";
 import { AssignmentsPanel } from "./admin-assessment-panels";
+import { Lo12ExamPanel } from "./lo12-exam-panel";
 import { ResultsArea } from "./results-area";
 
 function AreaTabs<T extends string>({
@@ -40,6 +41,7 @@ function AreaTabs<T extends string>({
 const ASSESSMENT_TABS = [
   { id: "assignments" as const, label: "Assignments" },
   { id: "results" as const, label: "Results" },
+  { id: "exam-practice" as const, label: "Exam Practice" },
 ];
 
 export function AssessmentArea({
@@ -79,6 +81,7 @@ export function AssessmentArea({
             includeAttempts={includeAttempts}
           />
         ) : null}
+        {tab === "exam-practice" ? <Lo12ExamPanel /> : null}
       </div>
     </>
   );
