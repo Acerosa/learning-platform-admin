@@ -53,8 +53,9 @@ export function Lo12ExamPanel({ records = [], enrolled = [] }: { records?: Lo12R
         </article>
       ))}
       <p>
-        Save marks with admin_api.save_lo12_marks, then finalise with admin_api.finalise_lo12_marks.
-        Additional time is set with admin_api.set_lo12_extra_time before the student starts. Students cannot set it themselves.
+        Mark each question with admin_api.review_response. The total is the sum of those five marks.
+        Students do not see marks or comments until you call admin_api.release_timed_paper_results.
+        Extra time for this paper is admin_api.set_timed_paper_allowance. It does not change the knowledge report’s word-count rule.
       </p>
     </section>
   );
