@@ -6,6 +6,23 @@ const QUESTIONS = [
   { id: "mm-5", marks: 6, outcome: "LO2" },
 ];
 
+export function matchClassLearners(learners, query) {
+  const rows = (learners || []).filter((learner) => learner?.studentNumber && learner?.displayName);
+  const needle = String(query || "").trim().toLowerCase();
+  if (!needle) return rows;
+  return rows.filter((learner) => (
+    learner.displayName.toLowerCase().includes(needle)
+    || learner.studentNumber.toLowerCase().includes(needle)
+  ));
+}
+
+export function paperDurationLabel(standardSeconds, extraSeconds) {
+  const total = Math.max(0, Number(standardSeconds) || 0) + Math.max(0, Number(extraSeconds) || 0);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return seconds ? `${minutes} min ${seconds} sec` : `${minutes} min`;
+}
+
 export function examCohort(records, enrolled) {
   const mocks = records.filter((row) => row.activity_key === "mini-mock");
   const byStudent = new Map(mocks.map((row) => [row.student_id, row]));

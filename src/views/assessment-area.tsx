@@ -5,6 +5,7 @@ import type { AdminDataSnapshot, ReviewResponseRequest } from "../api/admin-api"
 import type { PendingAction } from "../components/pending-action-dialog";
 import { getAdminModule } from "../router/modules";
 import type { AssessmentTab } from "../router/legacy-routes";
+import { useAdminModuleData } from "../stores/use-admin-module-data";
 import { AssignmentsPanel } from "./admin-assessment-panels";
 import { Lo12ExamPanel } from "./lo12-exam-panel";
 import { ResultsArea } from "./results-area";
@@ -51,6 +52,7 @@ export function AssessmentArea({
   legacyHeading,
   onReviewResponse,
   onReleaseExamResults,
+  onLoadExamAllowance,
   onSetExamAllowance,
   includeAttempts = false,
 }: {
@@ -60,11 +62,14 @@ export function AssessmentArea({
   legacyHeading?: string;
   onReviewResponse: Parameters<typeof ResultsArea>[0]["onReviewResponse"];
   onReleaseExamResults?: (attemptId: string) => Promise<unknown>;
-  onSetExamAllowance?: (studentId: string, extraSeconds: number) => Promise<unknown>;
+  onLoadExamAllowance?: (studentNumber: string) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
+  onSetExamAllowance?: (studentNumber: string, extraSeconds: number) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
   includeAttempts?: boolean;
 }) {
   const [tab, setTab] = useState<AssessmentTab>(initialTab);
   const moduleDef = getAdminModule("assessment");
+  const people = useAdminModuleData("people");
+  const classLearners = data.learners.length ? data.learners : people.data?.learners ?? [];
 
   return (
     <>
@@ -88,8 +93,10 @@ export function AssessmentArea({
         {tab === "exam-practice" ? (
           <Lo12ExamPanel
             responses={data.responses}
+            learners={classLearners}
             onReviewResponse={onReviewResponse as (request: ReviewResponseRequest) => Promise<unknown>}
             onRelease={onReleaseExamResults}
+            onLoadAllowance={onLoadExamAllowance}
             onSetAllowance={onSetExamAllowance}
           />
         ) : null}

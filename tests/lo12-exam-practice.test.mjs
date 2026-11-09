@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { examCohort } from "../src/exam/lo12.mjs";
+import { examCohort, matchClassLearners, paperDurationLabel } from "../src/exam/lo12.mjs";
 
 test("class average ignores unmarked mini-mocks", () => {
   const summary = examCohort([
@@ -23,4 +23,14 @@ test("class average ignores unmarked mini-mocks", () => {
   assert.equal(summary.awaiting, 1);
   assert.equal(summary.notAttempted, 1);
   assert.equal(summary.complete, 1);
+});
+
+test("learner search uses name or student number only", () => {
+  const learners = [
+    { studentNumber: "SYNTH-0001", displayName: "Synthetic Student A" },
+    { studentNumber: "SYNTH-0002", displayName: "Synthetic Student B" },
+  ];
+  assert.equal(matchClassLearners(learners, "student a").length, 1);
+  assert.equal(matchClassLearners(learners, "synth-0002")[0].studentNumber, "SYNTH-0002");
+  assert.equal(paperDurationLabel(1200, 600), "30 min");
 });

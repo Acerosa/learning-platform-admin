@@ -392,12 +392,33 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
           legacyHeading={heading}
           onReviewResponse={reviewResponse}
           onReleaseExamResults={(attemptId) => callRpc("release_timed_paper_results", { p_attempt_id: attemptId })}
-          onSetExamAllowance={(studentId, extraSeconds) => callRpc("set_timed_paper_allowance", {
-            p_activity_key: "u3-lo12-timed-mini-mock",
-            p_activity_version: "0.1.0",
-            p_student_id: studentId,
-            p_extra_seconds: extraSeconds,
-          })}
+          onLoadExamAllowance={async (studentNumber) => {
+            const rows = await callRpc("timed_paper_allowance", {
+              p_activity_key: "u3-lo12-timed-mini-mock",
+              p_activity_version: "0.1.0",
+              p_student_number: studentNumber,
+            });
+            const row = rows[0] as { extra_seconds?: number; standard_duration_seconds?: number; total_seconds?: number } | undefined;
+            return row ? {
+              extraSeconds: Number(row.extra_seconds || 0),
+              standardDurationSeconds: Number(row.standard_duration_seconds || 0),
+              totalSeconds: Number(row.total_seconds || 0),
+            } : null;
+          }}
+          onSetExamAllowance={async (studentNumber, extraSeconds) => {
+            const rows = await callRpc("set_timed_paper_allowance_for_learner", {
+              p_activity_key: "u3-lo12-timed-mini-mock",
+              p_activity_version: "0.1.0",
+              p_student_number: studentNumber,
+              p_extra_seconds: extraSeconds,
+            });
+            const row = rows[0] as { extra_seconds?: number; standard_duration_seconds?: number; total_seconds?: number } | undefined;
+            return row ? {
+              extraSeconds: Number(row.extra_seconds || 0),
+              standardDurationSeconds: Number(row.standard_duration_seconds || 0),
+              totalSeconds: Number(row.total_seconds || 0),
+            } : null;
+          }}
           includeAttempts={moduleId === "attempts"}
         />
       );
