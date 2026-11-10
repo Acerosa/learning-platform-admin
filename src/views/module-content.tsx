@@ -411,7 +411,7 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
             return row?.marking_status || null;
           }}
           onLoadClassLearners={async () => {
-            const rows = await callRpc("class_learners");
+            const rows = await callRpc("class_learners", {});
             return rows.map((row) => {
               const learner = row as { student_number?: string; display_name?: string };
               return {

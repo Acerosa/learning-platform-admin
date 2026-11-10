@@ -231,7 +231,7 @@ export function Lo12ExamPanel({
           <input value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
         <ul>
-          {matches.map((learner) => (
+          {matches.map((learner: Pick<LearnerRecord, "studentNumber" | "displayName">) => (
             <li key={learner.studentNumber}>
               <button
                 type="button"
