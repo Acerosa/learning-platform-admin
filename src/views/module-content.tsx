@@ -274,7 +274,7 @@ function legacyHeading(moduleId: AdminModuleId): string | undefined {
 }
 
 export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
-  const { data, session, dataSource, moduleCache, publishCurriculum, setSessionVisibility, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, bootstrapReady } = useAdminPortal();
+  const { data, session, dataSource, moduleCache, publishCurriculum, setSessionVisibility, saveCurriculumDraft, loadCurrentCurriculumPackage, getCurriculumDraft, registerHub, updateHub, reviewResponse, callRpc, bootstrapReady } = useAdminPortal();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [editingHub, setEditingHub] = useState<HubRecord | null>(null);
@@ -391,6 +391,54 @@ export function ModuleContent({ moduleId }: { moduleId: AdminModuleId }) {
           openPending={openPending}
           legacyHeading={heading}
           onReviewResponse={reviewResponse}
+          onReleaseExamResults={(attemptId) => callRpc("release_timed_paper_results", { p_attempt_id: attemptId })}
+          onLoadExamAllowance={async (studentNumber) => {
+            const rows = await callRpc("timed_paper_allowance", {
+              p_activity_key: "u3-lo12-timed-mini-mock",
+              p_activity_version: "0.1.0",
+              p_student_number: studentNumber,
+            });
+            const row = rows[0] as { extra_seconds?: number; standard_duration_seconds?: number; total_seconds?: number } | undefined;
+            return row ? {
+              extraSeconds: Number(row.extra_seconds || 0),
+              standardDurationSeconds: Number(row.standard_duration_seconds || 0),
+              totalSeconds: Number(row.total_seconds || 0),
+            } : null;
+          }}
+          onLoadExamMarkingStatus={async (attemptId) => {
+            const rows = await callRpc("timed_paper_marking_status", { p_attempt_id: attemptId });
+            const row = rows[0] as { marking_status?: string } | undefined;
+            return row?.marking_status || null;
+          }}
+          onLoadClassLearners={async () => {
+            const rows = await callRpc("class_learners", {});
+            return rows.map((row) => {
+              const learner = row as { student_number?: string; display_name?: string };
+              return {
+                studentNumber: String(learner.student_number || ""),
+                displayName: String(learner.display_name || ""),
+              };
+            }).filter((learner) => learner.studentNumber);
+          }}
+          onFinaliseExamMarking={async (attemptId) => {
+            const rows = await callRpc("finalise_timed_paper_marking", { p_attempt_id: attemptId });
+            const row = rows[0] as { marking_status?: string } | undefined;
+            return row?.marking_status || null;
+          }}
+          onSetExamAllowance={async (studentNumber, extraSeconds) => {
+            const rows = await callRpc("set_timed_paper_allowance_for_learner", {
+              p_activity_key: "u3-lo12-timed-mini-mock",
+              p_activity_version: "0.1.0",
+              p_student_number: studentNumber,
+              p_extra_seconds: extraSeconds,
+            });
+            const row = rows[0] as { extra_seconds?: number; standard_duration_seconds?: number; total_seconds?: number } | undefined;
+            return row ? {
+              extraSeconds: Number(row.extra_seconds || 0),
+              standardDurationSeconds: Number(row.standard_duration_seconds || 0),
+              totalSeconds: Number(row.total_seconds || 0),
+            } : null;
+          }}
           includeAttempts={moduleId === "attempts"}
         />
       );

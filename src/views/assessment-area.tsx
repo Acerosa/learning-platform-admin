@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import type { AdminDataSnapshot } from "../api/admin-api";
+import type { AdminDataSnapshot, LearnerRecord, ReviewResponseRequest } from "../api/admin-api";
 import type { PendingAction } from "../components/pending-action-dialog";
 import { getAdminModule } from "../router/modules";
 import type { AssessmentTab } from "../router/legacy-routes";
 import { AssignmentsPanel } from "./admin-assessment-panels";
+import { Lo12ExamPanel } from "./lo12-exam-panel";
 import { ResultsArea } from "./results-area";
 
 function AreaTabs<T extends string>({
@@ -40,6 +41,7 @@ function AreaTabs<T extends string>({
 const ASSESSMENT_TABS = [
   { id: "assignments" as const, label: "Assignments" },
   { id: "results" as const, label: "Results" },
+  { id: "exam-practice" as const, label: "Exam Practice" },
 ];
 
 export function AssessmentArea({
@@ -48,6 +50,12 @@ export function AssessmentArea({
   openPending,
   legacyHeading,
   onReviewResponse,
+  onReleaseExamResults,
+  onLoadExamAllowance,
+  onSetExamAllowance,
+  onLoadExamMarkingStatus,
+  onFinaliseExamMarking,
+  onLoadClassLearners,
   includeAttempts = false,
 }: {
   data: AdminDataSnapshot;
@@ -55,6 +63,12 @@ export function AssessmentArea({
   openPending: (action: PendingAction) => void;
   legacyHeading?: string;
   onReviewResponse: Parameters<typeof ResultsArea>[0]["onReviewResponse"];
+  onReleaseExamResults?: (attemptId: string) => Promise<unknown>;
+  onLoadExamAllowance?: (studentNumber: string) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
+  onSetExamAllowance?: (studentNumber: string, extraSeconds: number) => Promise<{ extraSeconds: number; standardDurationSeconds: number; totalSeconds: number } | null>;
+  onLoadExamMarkingStatus?: (attemptId: string) => Promise<string | null>;
+  onFinaliseExamMarking?: (attemptId: string) => Promise<string | null>;
+  onLoadClassLearners?: () => Promise<readonly Pick<LearnerRecord, "studentNumber" | "displayName">[]>;
   includeAttempts?: boolean;
 }) {
   const [tab, setTab] = useState<AssessmentTab>(initialTab);
@@ -77,6 +91,18 @@ export function AssessmentArea({
             data={data}
             onReviewResponse={onReviewResponse}
             includeAttempts={includeAttempts}
+          />
+        ) : null}
+        {tab === "exam-practice" ? (
+          <Lo12ExamPanel
+            responses={data.responses}
+            onLoadClassLearners={onLoadClassLearners}
+            onReviewResponse={onReviewResponse as (request: ReviewResponseRequest) => Promise<unknown>}
+            onRelease={onReleaseExamResults}
+            onLoadAllowance={onLoadExamAllowance}
+            onSetAllowance={onSetExamAllowance}
+            onLoadMarkingStatus={onLoadExamMarkingStatus}
+            onFinalise={onFinaliseExamMarking}
           />
         ) : null}
       </div>
