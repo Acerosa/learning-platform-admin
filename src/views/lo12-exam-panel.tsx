@@ -85,10 +85,7 @@ export function Lo12ExamPanel({
   }, [onLoadClassLearners]);
 
   useEffect(() => {
-    if (!studentNumber || !onLoadAllowance) {
-      setAllowance(null);
-      return;
-    }
+    if (!studentNumber || !onLoadAllowance) return;
     let cancelled = false;
     void onLoadAllowance(studentNumber).then((row) => {
       if (!cancelled) setAllowance(row);
@@ -237,6 +234,7 @@ export function Lo12ExamPanel({
                 type="button"
                 onClick={() => {
                   setStudentNumber(learner.studentNumber);
+                  setAllowance(null);
                   setAllowanceMessage("");
                 }}
               >
