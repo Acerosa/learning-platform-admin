@@ -1,0 +1,21 @@
+{
+  "name": "learning-platform-admin",
+  "kind": "admin-portal",
+  "baseUrl": "https://acerosa.github.io/learning-platform-admin/",
+  "repository": "Acerosa/learning-platform-admin",
+  "pages": {
+    "expectedSource": "workflow",
+    "basePath": "/learning-platform-admin/"
+  },
+  "curriculum": {
+    "enabled": false
+  },
+  "boot": {
+    "rootSelector": "#root",
+    "readySelectors": ["main", "body", "[data-theme]"]
+  },
+  "retries": {
+    "attempts": 8,
+    "delayMs": 15000
+  }
+}

@@ -187,6 +187,71 @@ export function hubHealthReport(
       },
   ];
 
+  const missingPackages = (data.publicationsMissingLearnerPackages ?? []).filter(
+    (row) => row.hubCode === hub.hubCode,
+  );
+  checks.push(
+    missingPackages.length === 0
+      ? {
+        id: "learner-package",
+        label: "Precomputed learner packages",
+        status: "pass",
+        detail: "No missing or outdated learner packages for this hub.",
+      }
+      : {
+        id: "learner-package",
+        label: "Precomputed learner packages",
+        status: "fail",
+        detail: `${missingPackages.length} publication(s) missing current learner_package / sanitisation version.`,
+      },
+  );
+
+  const markingGaps = (data.publishedMarkingCoverageGaps ?? []).filter(
+    (row) => row.hubCode === hub.hubCode,
+  );
+  checks.push(
+    markingGaps.length === 0
+      ? {
+        id: "marking-coverage",
+        label: "Published marking coverage",
+        status: "pass",
+        detail: "No unresolved published marking gaps for this hub.",
+      }
+      : {
+        id: "marking-coverage",
+        label: "Published marking coverage",
+        status: "fail",
+        detail: `${markingGaps.length} published question(s) unresolved (missing specs / fingerprint mismatches).`,
+      },
+  );
+
+  const publishedRows = data.curriculumPublications.filter(
+    (row) => row.hubCode === hub.hubCode && row.status === "published",
+  );
+  const staleSanitisation = publishedRows.filter((row) => (
+    row.hasLearnerPackage === false
+    || (row.learnerPackageSanitisationVersion != null
+      && row.learnerPackageSanitisationVersion !== ""
+      && missingPackages.some((gap) => gap.packageVersion === row.packageVersion))
+  ));
+  if (publishedRows.some((row) => row.hasLearnerPackage != null)) {
+    checks.push(
+      staleSanitisation.length === 0 && publishedRows.every((row) => row.hasLearnerPackage !== false)
+        ? {
+          id: "publication-config",
+          label: "Publication learner-package config",
+          status: "pass",
+          detail: "Published rows report learner packages present.",
+        }
+        : {
+          id: "publication-config",
+          label: "Publication learner-package config",
+          status: "warn",
+          detail: "One or more published rows are missing a current learner package.",
+        },
+    );
+  }
+
   const status = rollup(checks);
   return { status, summary: summaryFor(status), checks };
 }

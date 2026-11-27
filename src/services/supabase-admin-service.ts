@@ -14,6 +14,8 @@ import type {
   CurriculumDraftRecord,
   CurriculumDraftSummary,
   CurriculumPublicationRecord,
+  MissingLearnerPackageRecord,
+  PublishedMarkingCoverageGapRecord,
   DashboardSummaryRecord,
   EnrolmentRecord,
   GroupPerformanceRecord,
@@ -1363,7 +1365,7 @@ export function createSupabaseAdminReadService(
     async listCurriculumPublications() {
       const data = await rows(
         "curriculum_publications",
-        "id,hub_code,course_key,package_version,schema_version,source_package_version,status,author,reviewer,publication_notes,published_by_staff_reference,created_at,published_at,content_hash",
+        "id,hub_code,course_key,package_version,schema_version,source_package_version,status,author,reviewer,publication_notes,published_by_staff_reference,created_at,published_at,content_hash,has_learner_package,learner_package_sanitisation_version",
         { column: "published_at", ascending: false },
       );
       return data.map((row): CurriculumPublicationRecord => ({
@@ -1381,7 +1383,54 @@ export function createSupabaseAdminReadService(
         createdAt: textValue(row.created_at),
         publishedAt: textValue(row.published_at),
         contentHash: textValue(row.content_hash),
+        hasLearnerPackage: booleanValue(row.has_learner_package),
+        learnerPackageSanitisationVersion: nullableText(row.learner_package_sanitisation_version),
       }));
+    },
+
+    async listPublicationsMissingLearnerPackages() {
+      try {
+        const data = await rows(
+          "publications_missing_learner_packages",
+          "id,hub_code,course_key,package_version,status,published_at,learner_package_sanitisation_version,expected_sanitisation_version",
+          { column: "published_at", ascending: false },
+        );
+        return data.map((row): MissingLearnerPackageRecord => ({
+          id: textValue(row.id),
+          hubCode: textValue(row.hub_code),
+          courseKey: textValue(row.course_key),
+          packageVersion: textValue(row.package_version),
+          status: textValue(row.status),
+          publishedAt: nullableText(row.published_at),
+          learnerPackageSanitisationVersion: nullableText(row.learner_package_sanitisation_version),
+          expectedSanitisationVersion: nullableText(row.expected_sanitisation_version),
+        }));
+      } catch {
+        return [];
+      }
+    },
+
+    async listPublishedMarkingCoverageGaps() {
+      try {
+        const data = await rows(
+          "published_marking_coverage_gaps",
+          "hub_code,course_key,package_version,activity_key,activity_version,question_key,question_type,has_own_marking,unresolved",
+          { column: "hub_code" },
+        );
+        return data.map((row): PublishedMarkingCoverageGapRecord => ({
+          hubCode: textValue(row.hub_code),
+          courseKey: textValue(row.course_key),
+          packageVersion: textValue(row.package_version),
+          activityKey: textValue(row.activity_key),
+          activityVersion: textValue(row.activity_version),
+          questionKey: textValue(row.question_key),
+          questionType: textValue(row.question_type),
+          hasOwnMarking: booleanValue(row.has_own_marking),
+          unresolved: booleanValue(row.unresolved),
+        }));
+      } catch {
+        return [];
+      }
     },
 
     async listCurriculumDrafts() {
@@ -1437,6 +1486,8 @@ export async function loadAdminData(
     auditEvents,
     curriculumPublications,
     curriculumDrafts,
+    publicationsMissingLearnerPackages,
+    publishedMarkingCoverageGaps,
   ] = await Promise.all([
     service.listHubs(),
     service.listHubCourseLinks(),
@@ -1467,6 +1518,8 @@ export async function loadAdminData(
     service.listAuditEvents(),
     service.listCurriculumPublications(),
     service.listCurriculumDrafts(),
+    service.listPublicationsMissingLearnerPackages?.() ?? Promise.resolve([]),
+    service.listPublishedMarkingCoverageGaps?.() ?? Promise.resolve([]),
   ]);
 
   return Object.freeze({
@@ -1499,5 +1552,7 @@ export async function loadAdminData(
     auditEvents,
     curriculumPublications,
     curriculumDrafts,
+    publicationsMissingLearnerPackages,
+    publishedMarkingCoverageGaps,
   });
 }

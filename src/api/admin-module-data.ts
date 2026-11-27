@@ -61,6 +61,8 @@ export interface HubsCurriculumData {
   courses: readonly CourseRecord[];
   curriculumPublications: readonly CurriculumPublicationRecord[];
   curriculumDrafts: readonly CurriculumDraftSummary[];
+  publicationsMissingLearnerPackages: readonly import("./admin-api").MissingLearnerPackageRecord[];
+  publishedMarkingCoverageGaps: readonly import("./admin-api").PublishedMarkingCoverageGapRecord[];
   auditEvents: readonly AuditEventRecord[];
 }
 
@@ -254,6 +256,8 @@ export function mergeModuleCacheToSnapshot(
     auditEvents: system?.auditEvents ?? hubs?.auditEvents ?? [],
     curriculumPublications: hubs?.curriculumPublications ?? [],
     curriculumDrafts: hubs?.curriculumDrafts ?? [],
+    publicationsMissingLearnerPackages: hubs?.publicationsMissingLearnerPackages ?? [],
+    publishedMarkingCoverageGaps: hubs?.publishedMarkingCoverageGaps ?? [],
   });
 }
 
@@ -292,6 +296,8 @@ export function sliceDemoModuleData(
         courses: snapshot.courses,
         curriculumPublications: snapshot.curriculumPublications,
         curriculumDrafts: snapshot.curriculumDrafts,
+        publicationsMissingLearnerPackages: snapshot.publicationsMissingLearnerPackages ?? [],
+        publishedMarkingCoverageGaps: snapshot.publishedMarkingCoverageGaps ?? [],
         auditEvents: snapshot.auditEvents,
       };
     case "people":

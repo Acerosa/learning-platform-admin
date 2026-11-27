@@ -203,9 +203,46 @@ function HubRegistryPage({ data, actionError, onRegister, onEdit, onToggleActive
     ? data.auditEvents.filter((event) => event.entityType === "hub" && event.entityKey === selectedHub.hubCode)
     : [];
 
+  const missingPackages = data.publicationsMissingLearnerPackages ?? [];
+  const markingGaps = data.publishedMarkingCoverageGaps ?? [];
+
   return (
     <>
       <PageHeader moduleId="hubs" actionLabel="Register hub" onAction={onRegister} />
+      <section className="panel" aria-labelledby="ops-diagnostics-title">
+        <div className="panel__header">
+          <div>
+            <p className="eyebrow">Staff diagnostics</p>
+            <h2 id="ops-diagnostics-title">Curriculum and marking health</h2>
+          </div>
+        </div>
+        <ul className="health-list" aria-label="Curriculum and marking diagnostics">
+          <li>
+            <span className={`health-dot health-dot--${missingPackages.length ? "degraded" : "healthy"}`} aria-hidden="true" />
+            <span>
+              <strong>Learner packages</strong>
+              <small>
+                {missingPackages.length === 0
+                  ? "No missing or outdated precomputed learner packages."
+                  : `${missingPackages.length} publication(s) missing current learner_package / sanitisation.`}
+              </small>
+            </span>
+            <StatusBadge label={missingPackages.length ? "attention" : "healthy"} tone={missingPackages.length ? "warning" : "positive"} />
+          </li>
+          <li>
+            <span className={`health-dot health-dot--${markingGaps.length ? "degraded" : "healthy"}`} aria-hidden="true" />
+            <span>
+              <strong>Marking coverage</strong>
+              <small>
+                {markingGaps.length === 0
+                  ? "No unresolved published marking gaps."
+                  : `${markingGaps.length} published question(s) unresolved (specs / fingerprints). No answer keys are shown.`}
+              </small>
+            </span>
+            <StatusBadge label={markingGaps.length ? "attention" : "healthy"} tone={markingGaps.length ? "warning" : "positive"} />
+          </li>
+        </ul>
+      </section>
       <section className="panel">
         <div className="toolbar">
           <div className="toolbar__search"><label htmlFor="hub-search">Search hubs</label><input id="hub-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, code or description" /></div>

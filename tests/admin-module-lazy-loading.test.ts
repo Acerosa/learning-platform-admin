@@ -96,6 +96,8 @@ function createTrackingService(): AdminReadService & { calls: string[] } {
     listAuditEvents: async () => track("listAuditEvents"),
     listCurriculumPublications: async () => track("listCurriculumPublications"),
     listCurriculumDrafts: async () => track("listCurriculumDrafts"),
+    listPublicationsMissingLearnerPackages: async () => track("listPublicationsMissingLearnerPackages"),
+    listPublishedMarkingCoverageGaps: async () => track("listPublishedMarkingCoverageGaps"),
     listDiagnosticSessions: async () => track("listDiagnosticSessions"),
     listDiagnosticResponses: async () => track("listDiagnosticResponses"),
     listDiagnosticSummary: async () => track("listDiagnosticSummary"),
@@ -154,6 +156,8 @@ test("hubs curriculum module loads its own datasets", async () => {
       "listCurriculumPublications",
       "listHubCourseLinks",
       "listHubs",
+      "listPublicationsMissingLearnerPackages",
+      "listPublishedMarkingCoverageGaps",
     ].sort(),
   );
 });
