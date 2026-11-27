@@ -33,6 +33,9 @@ export const ADMIN_API_VIEWS = Object.freeze({
   skillPerformance: "admin_api.skill_performance",
   curriculumPublications: "admin_api.curriculum_publications",
   curriculumDrafts: "admin_api.curriculum_drafts",
+  publicationsMissingLearnerPackages: "admin_api.publications_missing_learner_packages",
+  publishedMarkingCoverageGaps: "admin_api.published_marking_coverage_gaps",
+  publishedMarkingCoverageSummary: "admin_api.published_marking_coverage_summary",
   libraryQuestions: "admin_api.library_questions",
   libraryActivities: "admin_api.library_activities",
   libraryTemplates: "admin_api.library_templates",
@@ -496,6 +499,31 @@ export interface CurriculumPublicationRecord {
   createdAt: string;
   publishedAt: string;
   contentHash: string;
+  hasLearnerPackage?: boolean;
+  learnerPackageSanitisationVersion?: string | null;
+}
+
+export interface MissingLearnerPackageRecord {
+  id: string;
+  hubCode: string;
+  courseKey: string;
+  packageVersion: string;
+  status: string;
+  publishedAt: string | null;
+  learnerPackageSanitisationVersion: string | null;
+  expectedSanitisationVersion: string | null;
+}
+
+export interface PublishedMarkingCoverageGapRecord {
+  hubCode: string;
+  courseKey: string;
+  packageVersion: string;
+  activityKey: string;
+  activityVersion: string;
+  questionKey: string;
+  questionType: string;
+  hasOwnMarking: boolean;
+  unresolved: boolean;
 }
 
 export interface CurriculumDraftSaveResult {
@@ -673,6 +701,8 @@ export interface AdminDataSnapshot {
   auditEvents: readonly AuditEventRecord[];
   curriculumPublications: readonly CurriculumPublicationRecord[];
   curriculumDrafts: readonly CurriculumDraftSummary[];
+  publicationsMissingLearnerPackages: readonly MissingLearnerPackageRecord[];
+  publishedMarkingCoverageGaps: readonly PublishedMarkingCoverageGapRecord[];
   diagnosticSessions: readonly DiagnosticSessionRecord[];
   diagnosticResponses: readonly DiagnosticResponseRecord[];
   diagnosticSummary: readonly DiagnosticSummaryRecord[];
@@ -707,6 +737,8 @@ export interface AdminReadService {
   listAuditEvents(): Promise<readonly AuditEventRecord[]>;
   listCurriculumPublications(): Promise<readonly CurriculumPublicationRecord[]>;
   listCurriculumDrafts(): Promise<readonly CurriculumDraftSummary[]>;
+  listPublicationsMissingLearnerPackages(): Promise<readonly MissingLearnerPackageRecord[]>;
+  listPublishedMarkingCoverageGaps(): Promise<readonly PublishedMarkingCoverageGapRecord[]>;
   listDiagnosticSessions(): Promise<readonly DiagnosticSessionRecord[]>;
   listDiagnosticResponses(): Promise<readonly DiagnosticResponseRecord[]>;
   listDiagnosticSummary(): Promise<readonly DiagnosticSummaryRecord[]>;

@@ -69,16 +69,29 @@ export async function loadHubsCurriculumData(
     "courses",
     "curriculumPublications",
     "curriculumDrafts",
+    "publicationsMissingLearnerPackages",
+    "publishedMarkingCoverageGaps",
     "auditEvents",
   ]);
 
-  const [hubs, hubCourseLinks, courses, curriculumPublications, curriculumDrafts, auditEvents] =
+  const [
+    hubs,
+    hubCourseLinks,
+    courses,
+    curriculumPublications,
+    curriculumDrafts,
+    publicationsMissingLearnerPackages,
+    publishedMarkingCoverageGaps,
+    auditEvents,
+  ] =
     await Promise.all([
       service.listHubs(),
       service.listHubCourseLinks(),
       service.listCourses(),
       service.listCurriculumPublications(),
       service.listCurriculumDrafts(),
+      service.listPublicationsMissingLearnerPackages?.() ?? Promise.resolve([]),
+      service.listPublishedMarkingCoverageGaps?.() ?? Promise.resolve([]),
       service.listAuditEvents(),
     ]);
   assertHubListMatchesSummary(hubs, bootstrap?.dashboardSummary?.activeHubs);
@@ -89,6 +102,8 @@ export async function loadHubsCurriculumData(
     courses,
     curriculumPublications,
     curriculumDrafts,
+    publicationsMissingLearnerPackages,
+    publishedMarkingCoverageGaps,
     auditEvents,
   });
 }
