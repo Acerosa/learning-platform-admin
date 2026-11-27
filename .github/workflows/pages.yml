@@ -183,7 +183,7 @@ jobs:
   smoke:
     if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && success() }}
     needs: deploy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out administration portal
         uses: actions/checkout@v7
@@ -204,7 +204,7 @@ jobs:
         working-directory: learning-platform-core
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
 
       - name: Post-deploy Pages health check
         env:
